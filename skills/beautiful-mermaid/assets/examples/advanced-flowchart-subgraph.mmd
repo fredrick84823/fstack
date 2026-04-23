@@ -1,0 +1,96 @@
+flowchart TB
+    %% Advanced Flowchart with Subgraphs and Color Coding
+    %% 展示 Beautiful-Mermaid 的進階功能
+
+    start(("🚀 開始"))
+
+    subgraph prep["📋 資料準備階段"]
+        direction LR
+        input[/"📥 讀取 project.yaml"/]
+        validate{{🔍 驗證配置}}
+        parse["⚙️ 解析參數"]
+    end
+
+    subgraph sql["🔧 SQL 生成階段"]
+        direction TB
+        template["📝 載入 SQL 模板"]
+        replace["🔄 參數替換"]
+        optimize["⚡ 查詢優化"]
+    end
+
+    subgraph exec["💾 執行階段"]
+        direction LR
+        bq[("📊 BigQuery<br/><small>資料倉儲</small>")]
+        cache{{"🗄️ 快取檢查"}}
+        execute["▶️ 執行查詢"]
+    end
+
+    subgraph output["📈 輸出階段"]
+        direction TB
+        format["📋 格式化結果"]
+        save[\"💾 儲存 JSON"/]
+        convert["📊 轉換 CSV"]
+        report["📄 生成報告"]
+    end
+
+    decision{{"❓ 配置有效?"}}
+    error1[["⚠️ 錯誤處理"]]
+    cached{{"✅ 快取存在?"}}
+    success((("✨ 完成")))
+
+    %% Main Flow
+    start --> input
+    input --> validate
+    validate --> decision
+
+    decision -->|"是"| parse
+    decision -->|"否"| error1
+    error1 --> start
+
+    parse --> prep
+    prep --> template
+    template --> replace
+    replace --> optimize
+    optimize --> sql
+
+    sql --> cache
+    cache --> cached
+    cached -->|"是"| format
+    cached -->|"否"| execute
+
+    execute --> bq
+    bq --> format
+    format --> save
+    save --> convert
+    convert --> report
+    report --> success
+
+    %% Styling - Color Coding by Stage
+    style start fill:#dcfce7,stroke:#22c55e,stroke-width:3px
+    style success fill:#fecaca,stroke:#ef4444,stroke-width:3px
+
+    style prep fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+    style sql fill:#fef3c7,stroke:#fbbf24,stroke-width:2px
+    style exec fill:#e9d5ff,stroke:#a855f7,stroke-width:2px
+    style output fill:#d1fae5,stroke:#10b981,stroke-width:2px
+
+    style input fill:#bfdbfe,stroke:#3b82f6
+    style validate fill:#bfdbfe,stroke:#3b82f6
+    style parse fill:#bfdbfe,stroke:#3b82f6
+
+    style template fill:#fde68a,stroke:#fbbf24
+    style replace fill:#fde68a,stroke:#fbbf24
+    style optimize fill:#fde68a,stroke:#fbbf24
+
+    style bq fill:#ddd6fe,stroke:#a855f7
+    style cache fill:#ddd6fe,stroke:#a855f7
+    style execute fill:#ddd6fe,stroke:#a855f7
+
+    style format fill:#a7f3d0,stroke:#10b981
+    style save fill:#a7f3d0,stroke:#10b981
+    style convert fill:#a7f3d0,stroke:#10b981
+    style report fill:#a7f3d0,stroke:#10b981
+
+    style decision fill:#fed7aa,stroke:#f97316
+    style cached fill:#fed7aa,stroke:#f97316
+    style error1 fill:#fecaca,stroke:#ef4444

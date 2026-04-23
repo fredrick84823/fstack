@@ -1,0 +1,326 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1126.8568333333333 2916.8999999999996" width="1126.8568333333333" height="2916.8999999999996" style="--bg:#1e1e2e;--fg:#cdd6f4;--line:#585b70;--accent:#cba6f7;--muted:#6c7086;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+</defs>
+<g class="subgraph" data-id="DETECT" data-label="🔍 Signal Detection — 任何對話中（無需 opt-in）">
+  <rect x="412.9274166666668" y="1274.3999999999999" width="441.6669999999999" height="300.5" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="412.9274166666668" y="1274.3999999999999" width="441.6669999999999" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="424.9274166666668" y="1288.3999999999999" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">🔍 Signal Detection — 任何對話中（無需 opt-in）</text>
+</g>
+<g class="subgraph" data-id="CC" data-label="🖥️  Claude Code 環境">
+  <rect x="441.4991666666667" y="1634.8999999999999" width="255.49499999999995" height="215.60000000000002" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="441.4991666666667" y="1634.8999999999999" width="255.49499999999995" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="453.4991666666667" y="1648.8999999999999" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">🖥️  Claude Code 環境</text>
+</g>
+<g class="subgraph" data-id="CW" data-label="☁️  Cowork / Subagent 環境">
+  <rect x="724.9941666666666" y="1634.8999999999999" width="249.56699999999998" height="215.60000000000002" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="724.9941666666666" y="1634.8999999999999" width="249.56699999999998" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="736.9941666666666" y="1648.8999999999999" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">☁️  Cowork / Subagent 環境</text>
+</g>
+<g class="subgraph" data-id="NCC" data-label="🖥️  Claude Code — 下次啟動時">
+  <rect x="441.6844166666667" y="1995.3999999999999" width="230.301" height="215.60000000000002" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="441.6844166666667" y="1995.3999999999999" width="230.301" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="453.6844166666667" y="2009.3999999999999" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">🖥️  Claude Code — 下次啟動時</text>
+</g>
+<g class="subgraph" data-id="NCW" data-label="☁️  Cowork — 無自動通知">
+  <rect x="699.9854166666667" y="1995.3999999999999" width="324.40799999999996" height="215.60000000000002" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="699.9854166666667" y="1995.3999999999999" width="324.40799999999996" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="711.9854166666667" y="2009.3999999999999" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">☁️  Cowork — 無自動通知</text>
+</g>
+<g class="subgraph" data-id="WF" data-label="🔄  /improve 7-Step Workflow">
+  <rect x="40" y="2355.8999999999996" width="959.9361666666666" height="521" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="40" y="2355.8999999999996" width="959.9361666666666" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="52" y="2369.8999999999996" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">🔄  /improve 7-Step Workflow</text>
+</g>
+<g class="subgraph" data-id="INIT" data-label="🚀  /improve init — 一次性批量初始化">
+  <rect x="711.6175833333333" y="147.8" width="375.23924999999997" height="742.1999999999999" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="711.6175833333333" y="147.8" width="375.23924999999997" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="723.6175833333333" y="161.8" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">🚀  /improve init — 一次性批量初始化</text>
+</g>
+<g class="subgraph" data-id="SC" data-label="📋  Signal Collection 區塊（可選 opt-in，安裝在個別 SKILL.md 末尾）">
+  <rect x="611.4579166666667" y="949.9999999999999" width="243.13649999999998" height="181.8" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="611.4579166666667" y="949.9999999999999" width="243.13649999999998" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="623.4579166666667" y="963.9999999999999" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">📋  Signal Collection 區塊（可選 opt-in，安裝在個別 SKILL.md 末尾）</text>
+</g>
+<polyline class="edge" data-from="MAN" data-to="TR" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="314.1634166666667,2240.9999999999995 314.1634166666667,2252.9999999999995 702.0121666666666,2252.9999999999995 702.0121666666666,2264.9999999999995" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="D3" data-to="CC1" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="709.5121666666666,1558.9 709.5121666666666,1618.9 569.2466666666667,1618.9 569.2466666666667,1678.8999999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="D3" data-to="CW1" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="709.5121666666666,1558.9 709.5121666666666,1618.9 849.7776666666666,1618.9 849.7776666666666,1678.8999999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="CC2" data-to="Q" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="569.2466666666667,1834.4999999999998 569.2466666666667,1869.4999999999998 709.5121666666666,1869.4999999999998 709.5121666666666,1904.4999999999998" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="CW2" data-to="Q" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="849.7776666666666,1834.4999999999998 849.7776666666666,1869.4999999999998 709.5121666666666,1869.4999999999998 709.5121666666666,1904.4999999999998" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="Q" data-to="N1" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="709.5121666666666,1941.3999999999999 709.5121666666666,1990.3999999999999 556.8349166666667,1990.3999999999999 556.8349166666667,2039.3999999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="Q" data-to="N3" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="709.5121666666666,1941.3999999999999 709.5121666666666,1990.3999999999999 862.1894166666667,1990.3999999999999 862.1894166666667,2039.3999999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="N2" data-to="TR" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="556.8349166666667,2195 556.8349166666667,2252.9999999999995 702.0121666666666,2252.9999999999995 702.0121666666666,2264.9999999999995" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="N4" data-to="TR" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="862.1894166666666,2195 862.1894166666666,2252.9999999999995 702.0121666666666,2252.9999999999995 702.0121666666666,2264.9999999999995" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="TR" data-to="W0" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="702.0121666666666,2301.8999999999996 702.0121666666666,2404.1249999999995" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="UINIT" data-to="I1" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="896.9043333333333,102.25000000000001 896.9043333333333,191.8" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="I6" data-to="SC1" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="837.1420833333333,789.0999999999999 837.1420833333333,813.0999999999999 800.6339166666668,813.0999999999999 800.6339166666668,993.9999999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="SC1" data-to="D2" data-style="dotted" data-arrow-start="false" data-arrow-end="true" data-label="偵測到條件時
+輸出 IMPROVE_SIGNAL" points="816.3084166666667,1030.8999999999999 816.3084166666667,1042.8999999999999 837.5944166666667,1042.8999999999999 837.5944166666667,1384.1999999999998 744.1678333333334,1384.1999999999998 744.1678333333334,1420.1999999999998" fill="none" stroke="var(--_line)" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="D1" data-to="D2" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="581.4299166666667,1376.425 581.4299166666667,1384.1999999999998 674.8565000000001,1384.1999999999998 674.8565000000001,1420.1999999999998" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="D2" data-to="D3" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="709.5121666666666,1474 709.5121666666666,1522" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="CC1" data-to="CC2" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="569.2466666666667,1732.6999999999998 569.2466666666667,1780.6999999999998" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="CW1" data-to="CW2" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="849.7776666666666,1732.6999999999998 849.7776666666666,1780.6999999999998" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="N1" data-to="N2" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="556.8349166666667,2093.2 556.8349166666667,2141.2" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="N3" data-to="N4" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="862.1894166666666,2093.2 862.1894166666666,2141.2" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="W0" data-to="W1" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="702.0121666666666,2457.9249999999997 702.0121666666666,2508.0374999999995" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="W1" data-to="W2" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="702.0121666666666,2561.837499999999 702.0121666666666,2603.4999999999995" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="W2" data-to="W3" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="702.0121666666666,2657.2999999999997 702.0121666666666,2669.2999999999997 657.1728333333333,2669.2999999999997 657.1728333333333,2708.1166666666663" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="W3" data-to="W4" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="624.6166666666667,2745.0166666666664 624.6166666666667,2771.0999999999995 442.9608333333334,2771.0999999999995 442.9608333333334,2807.0999999999995" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="W4" data-to="W5" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="358.3355000000001,2807.0999999999995 358.3355000000001,2771.0999999999995 176.67966666666666,2771.0999999999995 176.67966666666666,2465.7 297.3593333333333,2465.7 297.3593333333333,2457.9249999999997" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="W5" data-to="W6" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="362.71866666666665,2457.9249999999997 362.71866666666665,2465.7 363.91025,2465.7 363.91025,2508.0374999999995" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="W6" data-to="W7" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="✅ Approve" points="348.7915,2544.9374999999995 348.7915,2567.4999999999995 220.17966666666666,2567.4999999999995 220.17966666666666,2708.1166666666663" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="W6" data-to="WE" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="❌ Reject" points="363.91025,2544.9374999999995 363.91025,2579.4999999999995 388.68266666666665,2579.4999999999995 388.6826666666667,2708.1166666666663" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="W6" data-to="W3" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="✏️ Modify" points="379.029,2544.9374999999995 379.029,2567.4999999999995 547.2211666666666,2567.4999999999995 547.2211666666666,2669.2999999999997 592.0605,2669.2999999999997 592.0605,2708.1166666666663" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="I1" data-to="I2" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="896.9043333333333,228.70000000000002 896.9043333333333,276.70000000000005" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="I2" data-to="I3" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="896.9043333333333,330.5 896.9043333333333,378.5" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="I3" data-to="I4" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="936.5,432.3 936.5,444.3 974.2998333333333,444.3 974.2998333333333,480.3" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="I4" data-to="I5" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="974.2998333333333,534.1 974.2998333333333,546.1 906.9043333333333,546.1 906.9043333333333,582.1" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="I5" data-to="I6" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="✅ Approve" points="886.9043333333333,619 886.9043333333333,631 837.1420833333333,631 837.1420833333333,735.3" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="I5" data-to="I7" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="⏭️ Skip" points="906.9043333333333,619 906.9043333333333,631 956.6665833333333,631 956.6665833333333,837.0999999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="I5" data-to="I3" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="✏️ Modify" points="886.9043333333333,582.1 886.9043333333333,546.1 819.5088333333333,546.1 819.5088333333333,444.3 857.3086666666666,444.3 857.3086666666666,432.3" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="I6" data-to="I7" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="837.1420833333333,789.0999999999999 837.1420833333333,813.0999999999999 931.5204166666665,813.0999999999999 931.5204166666665,837.0999999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="SC1" data-to="SC2" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="800.6339166666667,1030.8999999999999 800.6339166666667,1042.8999999999999 794.0224166666667,1042.8999999999999 794.0224166666667,1078.8999999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="SC1" data-to="SC3" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="784.9594166666667,1030.8999999999999 784.9594166666667,1042.8999999999999 698.8784166666667,1042.8999999999999 698.8784166666667,1078.8999999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<g class="edge-label" data-from="SC1" data-to="D2" data-label="偵測到條件時
+輸出 IMPROVE_SIGNAL">
+  <rect x="770.0944166666667" y="1180.8" width="134.07399999999998" height="44.6" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="837.1314166666667" y="1203.1" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)"><tspan x="837.1314166666667" dy="-3.3000000000000007">偵測到條件時</tspan><tspan x="837.1314166666667" dy="14.3">輸出 IMPROVE_SIGNAL</tspan></text>
+</g>
+<g class="edge-label" data-from="W6" data-to="W7" data-label="✅ Approve">
+  <rect x="183.67966666666666" y="2615.2499999999995" width="72.89200000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="220.12566666666666" y="2630.3999999999996" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">✅ Approve</text>
+</g>
+<g class="edge-label" data-from="W6" data-to="WE" data-label="❌ Reject">
+  <rect x="357.68266666666665" y="2615.2499999999995" width="61.01200000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="388.1886666666667" y="2630.3999999999996" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">❌ Reject</text>
+</g>
+<g class="edge-label" data-from="W6" data-to="W3" data-label="✏️ Modify">
+  <rect x="512.7211666666667" y="2615.2499999999995" width="68.73400000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="547.0881666666667" y="2630.3999999999996" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">✏️ Modify</text>
+</g>
+<g class="edge-label" data-from="I5" data-to="I6" data-label="✅ Approve">
+  <rect x="800.6420833333333" y="662.0000000000001" width="72.89200000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="837.0880833333333" y="677.1500000000001" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">✅ Approve</text>
+</g>
+<g class="edge-label" data-from="I5" data-to="I7" data-label="⏭️ Skip">
+  <rect x="927.1665833333333" y="662.0000000000001" width="58.636" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="956.4845833333333" y="677.1500000000001" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">⏭️ Skip</text>
+</g>
+<g class="edge-label" data-from="I5" data-to="I3" data-label="✏️ Modify">
+  <rect x="785.0088333333333" y="492.05" width="68.73400000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="819.3758333333333" y="507.2" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">✏️ Modify</text>
+</g>
+<g class="node" data-id="Q" data-label="Q" data-shape="rectangle">
+  <rect x="679.5121666666666" y="1904.4999999999998" width="60" height="36.900000000000006" rx="0" ry="0" fill="#0a2a18" stroke="#40c070" stroke-width="0.75" />
+  <text x="709.5121666666666" y="1922.9499999999998" text-anchor="middle" font-size="13" font-weight="500" fill="#b0f0d0" dy="4.55">Q</text>
+</g>
+<g class="node" data-id="-" data-label="-" data-shape="rectangle">
+  <rect x="750.8793333333333" y="48.45" width="60" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="780.8793333333333" y="66.9" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">-</text>
+</g>
+<g class="node" data-id="TR" data-label="TR" data-shape="rectangle">
+  <rect x="672.0121666666666" y="2264.9999999999995" width="60" height="36.900000000000006" rx="0" ry="0" fill="#2a1040" stroke="#a050e0" stroke-width="0.75" />
+  <text x="702.0121666666666" y="2283.4499999999994" text-anchor="middle" font-size="13" font-weight="500" fill="#e8c8ff" dy="4.55">TR</text>
+</g>
+<g class="node" data-id="MAN" data-label="使用者主動輸入 /improve" data-shape="rectangle">
+  <rect x="214.6424166666667" y="2204.0999999999995" width="199.042" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="314.1634166666667" y="2222.5499999999993" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">使用者主動輸入 /improve</text>
+</g>
+<g class="node" data-id="UINIT" data-label="使用者輸入
+/improve init" data-shape="rectangle">
+  <rect x="838.8793333333333" y="48.45" width="116.05" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="896.9043333333333" y="75.35000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="896.9043333333333" dy="-3.9000000000000012">使用者輸入</tspan><tspan x="896.9043333333333" dy="16.900000000000002">/improve init</tspan></text>
+</g>
+<g class="node" data-id="D1" data-label="使用者說「不對」「少了 X」「漏掉了」
+或執行後發現缺口" data-shape="rectangle">
+  <rect x="428.9274166666668" y="1322.625" width="305.00499999999994" height="53.800000000000004" rx="0" ry="0" fill="#12124a" stroke="#6666ff" stroke-width="0.75" />
+  <text x="581.4299166666667" y="1349.525" text-anchor="middle" font-size="13" font-weight="500" fill="#d0d0ff"><tspan x="581.4299166666667" dy="-3.9000000000000012">使用者說「不對」「少了 X」「漏掉了」</tspan><tspan x="581.4299166666667" dy="16.900000000000002">或執行後發現缺口</tspan></text>
+</g>
+<g class="node" data-id="D2" data-label="Claude 偵測缺口
+在 response 末尾輸出標記" data-shape="rectangle">
+  <rect x="605.5451666666668" y="1420.1999999999998" width="207.93399999999997" height="53.800000000000004" rx="0" ry="0" fill="#12124a" stroke="#6666ff" stroke-width="0.75" />
+  <text x="709.5121666666668" y="1447.1" text-anchor="middle" font-size="13" font-weight="500" fill="#d0d0ff"><tspan x="709.5121666666668" dy="-3.9000000000000012">Claude 偵測缺口</tspan><tspan x="709.5121666666668" dy="16.900000000000002">在 response 末尾輸出標記</tspan></text>
+</g>
+<g class="node" data-id="D3" data-label="D3" data-shape="rectangle">
+  <rect x="679.5121666666666" y="1522" width="60" height="36.900000000000006" rx="0" ry="0" fill="#12124a" stroke="#6666ff" stroke-width="0.75" />
+  <text x="709.5121666666666" y="1540.45" text-anchor="middle" font-size="13" font-weight="500" fill="#d0d0ff" dy="4.55">D3</text>
+</g>
+<g class="node" data-id="skill" data-label="skill" data-shape="rectangle">
+  <rect x="761.9324166666668" y="1322.625" width="65.66199999999999" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="794.7634166666668" y="1341.075" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">skill</text>
+</g>
+<g class="node" data-id="CC1" data-label="Stop hook 自動觸發
+（每次 Claude 回應結束）" data-shape="rectangle">
+  <rect x="466.02066666666667" y="1678.8999999999999" width="206.452" height="53.800000000000004" rx="0" ry="0" fill="#0a2240" stroke="#4a9ede" stroke-width="0.75" />
+  <text x="569.2466666666667" y="1705.8" text-anchor="middle" font-size="13" font-weight="500" fill="#b8d8f8"><tspan x="569.2466666666667" dy="-3.9000000000000012">Stop hook 自動觸發</tspan><tspan x="569.2466666666667" dy="16.900000000000002">（每次 Claude 回應結束）</tspan></text>
+</g>
+<g class="node" data-id="CC2" data-label="capture-signal.sh
+解析標記 → 提取 skill/type/gap" data-shape="rectangle">
+  <rect x="457.4991666666667" y="1780.6999999999998" width="223.49499999999995" height="53.800000000000004" rx="0" ry="0" fill="#0a2240" stroke="#4a9ede" stroke-width="0.75" />
+  <text x="569.2466666666667" y="1807.6" text-anchor="middle" font-size="13" font-weight="500" fill="#b8d8f8"><tspan x="569.2466666666667" dy="-3.9000000000000012">capture-signal.sh</tspan><tspan x="569.2466666666667" dy="16.900000000000002">解析標記 → 提取 skill/type/gap</tspan></text>
+</g>
+<g class="node" data-id="CW1" data-label="無 Stop hook
+Agent 直接用 Bash 工具寫入" data-shape="rectangle">
+  <rect x="740.9941666666666" y="1678.8999999999999" width="217.56699999999998" height="53.800000000000004" rx="0" ry="0" fill="#402010" stroke="#e08030" stroke-width="0.75" />
+  <text x="849.7776666666666" y="1705.8" text-anchor="middle" font-size="13" font-weight="500" fill="#f8d8b8"><tspan x="849.7776666666666" dy="-3.9000000000000012">無 Stop hook</tspan><tspan x="849.7776666666666" dy="16.900000000000002">Agent 直接用 Bash 工具寫入</tspan></text>
+</g>
+<g class="node" data-id="CW2" data-label="printf 'N pending signal'
+直接 append signal-queue.md" data-shape="rectangle">
+  <rect x="741.7351666666666" y="1780.6999999999998" width="216.08499999999998" height="53.800000000000004" rx="0" ry="0" fill="#402010" stroke="#e08030" stroke-width="0.75" />
+  <text x="849.7776666666666" y="1807.6" text-anchor="middle" font-size="13" font-weight="500" fill="#f8d8b8"><tspan x="849.7776666666666" dy="-3.9000000000000012">printf &#39;N pending signal&#39;</tspan><tspan x="849.7776666666666" dy="16.900000000000002">直接 append signal-queue.md</tspan></text>
+</g>
+<g class="node" data-id="N1" data-label="SessionStart hook
+check-signal-queue.sh" data-shape="rectangle">
+  <rect x="468.42891666666674" y="2039.3999999999999" width="176.81199999999998" height="53.800000000000004" rx="0" ry="0" fill="#0a2240" stroke="#4a9ede" stroke-width="0.75" />
+  <text x="556.8349166666667" y="2066.2999999999997" text-anchor="middle" font-size="13" font-weight="500" fill="#b8d8f8"><tspan x="556.8349166666667" dy="-3.9000000000000012">SessionStart hook</tspan><tspan x="556.8349166666667" dy="16.900000000000002">check-signal-queue.sh</tspan></text>
+</g>
+<g class="node" data-id="N2" data-label="⚠️ 有 N 個 pending signal
+注入 session 啟動 context" data-shape="rectangle">
+  <rect x="457.6844166666667" y="2141.2" width="198.301" height="53.800000000000004" rx="0" ry="0" fill="#0a2240" stroke="#4a9ede" stroke-width="0.75" />
+  <text x="556.8349166666667" y="2168.1" text-anchor="middle" font-size="13" font-weight="500" fill="#b8d8f8"><tspan x="556.8349166666667" dy="-3.9000000000000012">⚠️ 有 N 個 pending signal</tspan><tspan x="556.8349166666667" dy="16.900000000000002">注入 session 啟動 context</tspan></text>
+</g>
+<g class="node" data-id="N3" data-label="無 SessionStart hook
+無自動提示" data-shape="rectangle">
+  <rect x="778.2294166666667" y="2039.3999999999999" width="167.92" height="53.800000000000004" rx="0" ry="0" fill="#402010" stroke="#e08030" stroke-width="0.75" />
+  <text x="862.1894166666667" y="2066.2999999999997" text-anchor="middle" font-size="13" font-weight="500" fill="#f8d8b8"><tspan x="862.1894166666667" dy="-3.9000000000000012">無 SessionStart hook</tspan><tspan x="862.1894166666667" dy="16.900000000000002">無自動提示</tspan></text>
+</g>
+<g class="node" data-id="N4" data-label="Coordinator 看到 IMPROVE_SIGNAL 輸出
+或人工輸入 /improve" data-shape="rectangle">
+  <rect x="715.9854166666667" y="2141.2" width="292.40799999999996" height="53.800000000000004" rx="0" ry="0" fill="#402010" stroke="#e08030" stroke-width="0.75" />
+  <text x="862.1894166666666" y="2168.1" text-anchor="middle" font-size="13" font-weight="500" fill="#f8d8b8"><tspan x="862.1894166666666" dy="-3.9000000000000012">Coordinator 看到 IMPROVE_SIGNAL 輸出</tspan><tspan x="862.1894166666666" dy="16.900000000000002">或人工輸入 /improve</tspan></text>
+</g>
+<g class="node" data-id="W0" data-label="Step 0  Scope 偵測
+user / project / repo" data-shape="rectangle">
+  <rect x="623.9801666666666" y="2404.1249999999995" width="156.06400000000002" height="53.800000000000004" rx="0" ry="0" fill="#141e14" stroke="#507850" stroke-width="0.75" />
+  <text x="702.0121666666666" y="2431.0249999999996" text-anchor="middle" font-size="13" font-weight="500" fill="#c8e8c8"><tspan x="702.0121666666666" dy="-3.9000000000000012">Step 0  Scope 偵測</tspan><tspan x="702.0121666666666" dy="16.900000000000002">user / project / repo</tspan></text>
+</g>
+<g class="node" data-id="W1" data-label="Step 1  讀取 signal-queue
+取出 pending 項目" data-shape="rectangle">
+  <rect x="608.7896666666667" y="2508.0374999999995" width="186.44499999999996" height="53.800000000000004" rx="0" ry="0" fill="#141e14" stroke="#507850" stroke-width="0.75" />
+  <text x="702.0121666666666" y="2534.9374999999995" text-anchor="middle" font-size="13" font-weight="500" fill="#c8e8c8"><tspan x="702.0121666666666" dy="-3.9000000000000012">Step 1  讀取 signal-queue</tspan><tspan x="702.0121666666666" dy="16.900000000000002">取出 pending 項目</tspan></text>
+</g>
+<g class="node" data-id="W2" data-label="Step 2  歸因分析
+定位 SKILL.md 缺口段落" data-shape="rectangle">
+  <rect x="605.4551666666666" y="2603.4999999999995" width="193.11399999999998" height="53.800000000000004" rx="0" ry="0" fill="#141e14" stroke="#507850" stroke-width="0.75" />
+  <text x="702.0121666666666" y="2630.3999999999996" text-anchor="middle" font-size="13" font-weight="500" fill="#c8e8c8"><tspan x="702.0121666666666" dy="-3.9000000000000012">Step 2  歸因分析</tspan><tspan x="702.0121666666666" dy="16.900000000000002">定位 SKILL.md 缺口段落</tspan></text>
+</g>
+<g class="node" data-id="W3" data-label="Step 3  IF/THEN 規則萃取" data-shape="rectangle">
+  <rect x="526.9481666666667" y="2708.1166666666663" width="195.33699999999996" height="36.900000000000006" rx="0" ry="0" fill="#141e14" stroke="#507850" stroke-width="0.75" />
+  <text x="624.6166666666667" y="2726.566666666666" text-anchor="middle" font-size="13" font-weight="500" fill="#c8e8c8" dy="4.55">Step 3  IF/THEN 規則萃取</text>
+</g>
+<g class="node" data-id="W4" data-label="Step 4  建立候選版本
+（working memory only，不寫檔）" data-shape="rectangle">
+  <rect x="273.71016666666674" y="2807.0999999999995" width="253.87599999999998" height="53.800000000000004" rx="0" ry="0" fill="#141e14" stroke="#507850" stroke-width="0.75" />
+  <text x="400.6481666666667" y="2833.9999999999995" text-anchor="middle" font-size="13" font-weight="500" fill="#c8e8c8"><tspan x="400.6481666666667" dy="-3.9000000000000012">Step 4  建立候選版本</tspan><tspan x="400.6481666666667" dy="16.900000000000002">（working memory only，不寫檔）</tspan></text>
+</g>
+<g class="node" data-id="W5" data-label="Step 5  skill-creator eval
+（無 evals.json 時跳過）" data-shape="rectangle">
+  <rect x="232" y="2404.1249999999995" width="196.078" height="53.800000000000004" rx="0" ry="0" fill="#141e14" stroke="#507850" stroke-width="0.75" />
+  <text x="330.039" y="2431.0249999999996" text-anchor="middle" font-size="13" font-weight="500" fill="#c8e8c8"><tspan x="330.039" dy="-3.9000000000000012">Step 5  skill-creator eval</tspan><tspan x="330.039" dy="16.900000000000002">（無 evals.json 時跳過）</tspan></text>
+</g>
+<g class="node" data-id="W6" data-label="W6" data-shape="rectangle">
+  <rect x="333.67275" y="2508.0374999999995" width="60.474999999999994" height="36.900000000000006" rx="0" ry="0" fill="#3a0a3a" stroke="#c050c0" stroke-width="0.75" />
+  <text x="363.91025" y="2526.4874999999993" text-anchor="middle" font-size="13" font-weight="500" fill="#f8b8f8" dy="4.55">W6</text>
+</g>
+<g class="node" data-id="A" data-label="A" data-shape="rectangle">
+  <rect x="923.9361666666666" y="2404.1249999999995" width="60" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="953.9361666666666" y="2422.5749999999994" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">A</text>
+</g>
+<g class="node" data-id="R" data-label="R" data-shape="rectangle">
+  <rect x="144" y="2404.1249999999995" width="60" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="174" y="2422.5749999999994" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">R</text>
+</g>
+<g class="node" data-id="M" data-label="M" data-shape="rectangle">
+  <rect x="56" y="2404.1249999999995" width="60" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="86" y="2422.5749999999994" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">M</text>
+</g>
+<g class="node" data-id="W7" data-label="W7" data-shape="rectangle">
+  <rect x="189.9421666666667" y="2708.1166666666663" width="60.474999999999994" height="36.900000000000006" rx="0" ry="0" fill="#141e14" stroke="#507850" stroke-width="0.75" />
+  <text x="220.17966666666672" y="2726.566666666666" text-anchor="middle" font-size="13" font-weight="500" fill="#c8e8c8" dy="4.55">W7</text>
+</g>
+<g class="node" data-id="Append" data-label="Append" data-shape="rectangle">
+  <rect x="808.0441666666667" y="2404.1249999999995" width="87.892" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="851.9901666666667" y="2422.5749999999994" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Append</text>
+</g>
+<g class="node" data-id="WE" data-label="結束
+signal 標記 rejected / deferred" data-shape="rectangle">
+  <rect x="278.4171666666667" y="2708.1166666666663" width="220.531" height="53.800000000000004" rx="0" ry="0" fill="#141e14" stroke="#507850" stroke-width="0.75" />
+  <text x="388.6826666666667" y="2735.0166666666664" text-anchor="middle" font-size="13" font-weight="500" fill="#c8e8c8"><tspan x="388.6826666666667" dy="-3.9000000000000012">結束</tspan><tspan x="388.6826666666667" dy="16.900000000000002">signal 標記 rejected / deferred</tspan></text>
+</g>
+<g class="node" data-id="I1" data-label="I1" data-shape="rectangle">
+  <rect x="866.9043333333333" y="191.8" width="60" height="36.900000000000006" rx="0" ry="0" fill="#101e10" stroke="#60aa60" stroke-width="0.75" />
+  <text x="896.9043333333333" y="210.25" text-anchor="middle" font-size="13" font-weight="500" fill="#c0f0c0" dy="4.55">I1</text>
+</g>
+<g class="node" data-id="I2" data-label="詢問：要為哪些 skill
+加入 Signal Collection 區塊？" data-shape="rectangle">
+  <rect x="788.1208333333333" y="276.70000000000005" width="217.56699999999998" height="53.800000000000004" rx="0" ry="0" fill="#101e10" stroke="#60aa60" stroke-width="0.75" />
+  <text x="896.9043333333333" y="303.6" text-anchor="middle" font-size="13" font-weight="500" fill="#c0f0c0"><tspan x="896.9043333333333" dy="-3.9000000000000012">詢問：要為哪些 skill</tspan><tspan x="896.9043333333333" dy="16.900000000000002">加入 Signal Collection 區塊？</tspan></text>
+</g>
+<g class="node" data-id="I3" data-label="各 skill spawn 獨立 subagent
+分析 SKILL.md 目的與失敗模式" data-shape="rectangle">
+  <rect x="778.1173333333334" y="378.5" width="237.57399999999996" height="53.800000000000004" rx="0" ry="0" fill="#101e10" stroke="#60aa60" stroke-width="0.75" />
+  <text x="896.9043333333334" y="405.4" text-anchor="middle" font-size="13" font-weight="500" fill="#c0f0c0"><tspan x="896.9043333333334" dy="-3.9000000000000012">各 skill spawn 獨立 subagent</tspan><tspan x="896.9043333333334" dy="16.900000000000002">分析 SKILL.md 目的與失敗模式</tspan></text>
+</g>
+<g class="node" data-id="I4" data-label="提案：2-4 個 IF-condition
+→ S1/S2/S3 + gap 描述" data-shape="rectangle">
+  <rect x="877.7428333333332" y="480.3" width="193.11399999999998" height="53.800000000000004" rx="0" ry="0" fill="#101e10" stroke="#60aa60" stroke-width="0.75" />
+  <text x="974.2998333333333" y="507.2" text-anchor="middle" font-size="13" font-weight="500" fill="#c0f0c0"><tspan x="974.2998333333333" dy="-3.9000000000000012">提案：2-4 個 IF-condition</tspan><tspan x="974.2998333333333" dy="16.900000000000002">→ S1/S2/S3 + gap 描述</tspan></text>
+</g>
+<g class="node" data-id="I5" data-label="I5" data-shape="rectangle">
+  <rect x="866.9043333333333" y="582.1" width="60" height="36.900000000000006" rx="0" ry="0" fill="#3a0a3a" stroke="#c050c0" stroke-width="0.75" />
+  <text x="896.9043333333333" y="600.5500000000001" text-anchor="middle" font-size="13" font-weight="500" fill="#f8b8f8" dy="4.55">I5</text>
+</g>
+<g class="node" data-id="S" data-label="S" data-shape="rectangle">
+  <rect x="778.9043333333333" y="191.8" width="60" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="808.9043333333333" y="210.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">S</text>
+</g>
+<g class="node" data-id="I6" data-label="Append Signal Collection 區塊
+到目標 SKILL.md" data-shape="rectangle">
+  <rect x="727.6175833333333" y="735.3" width="219.04899999999998" height="53.800000000000004" rx="0" ry="0" fill="#101e10" stroke="#60aa60" stroke-width="0.75" />
+  <text x="837.1420833333333" y="762.1999999999999" text-anchor="middle" font-size="13" font-weight="500" fill="#c0f0c0"><tspan x="837.1420833333333" dy="-3.9000000000000012">Append Signal Collection 區塊</tspan><tspan x="837.1420833333333" dy="16.900000000000002">到目標 SKILL.md</tspan></text>
+</g>
+<g class="node" data-id="I7" data-label="繼續下一個 skill..." data-shape="rectangle">
+  <rect x="856.0819166666665" y="837.0999999999999" width="150.877" height="36.900000000000006" rx="0" ry="0" fill="#101e10" stroke="#60aa60" stroke-width="0.75" />
+  <text x="931.5204166666665" y="855.55" text-anchor="middle" font-size="13" font-weight="500" fill="#c0f0c0" dy="4.55">繼續下一個 skill...</text>
+</g>
+<g class="node" data-id="SC1" data-label="SC1" data-shape="rectangle">
+  <rect x="769.2849166666667" y="993.9999999999999" width="62.69799999999999" height="36.900000000000006" rx="0" ry="0" fill="#1e1e0a" stroke="#a8a830" stroke-width="0.75" />
+  <text x="800.6339166666668" y="1012.4499999999999" text-anchor="middle" font-size="13" font-weight="500" fill="#f0f0b0" dy="4.55">SC1</text>
+</g>
+<g class="node" data-id="SC2" data-label="SC2" data-shape="rectangle">
+  <rect x="760.4504166666668" y="1078.8999999999999" width="67.14399999999999" height="36.900000000000006" rx="0" ry="0" fill="#1e1e0a" stroke="#a8a830" stroke-width="0.75" />
+  <text x="794.0224166666668" y="1097.35" text-anchor="middle" font-size="13" font-weight="500" fill="#f0f0b0" dy="4.55">SC2</text>
+</g>
+<g class="node" data-id="SC3" data-label="SC3" data-shape="rectangle">
+  <rect x="665.3064166666668" y="1078.8999999999999" width="67.14399999999999" height="36.900000000000006" rx="0" ry="0" fill="#1e1e0a" stroke="#a8a830" stroke-width="0.75" />
+  <text x="698.8784166666668" y="1097.35" text-anchor="middle" font-size="13" font-weight="500" fill="#f0f0b0" dy="4.55">SC3</text>
+</g>
+<g class="node" data-id="skill-creator" data-label="skill-creator" data-shape="rectangle">
+  <rect x="627.4579166666667" y="993.9999999999999" width="113.827" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="684.3714166666667" y="1012.4499999999999" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">skill-creator</text>
+</g>
+</svg>

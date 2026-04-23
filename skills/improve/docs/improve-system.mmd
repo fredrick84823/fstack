@@ -1,0 +1,142 @@
+flowchart TD
+    %% ===== SIGNAL DETECTION =====
+    subgraph DETECT["🔍 Signal Detection — 任何對話中（無需 opt-in）"]
+        D1["使用者說「不對」「少了 X」「漏掉了」\n或執行後發現缺口"]
+        D2["Claude 偵測缺口\n在 response 末尾輸出標記"]
+        D3["`**&lt;&lt;IMPROVE_SIGNAL**
+skill='x' type='S2' gap='...'**&gt;&gt;**`"]
+        D1 --> D2 --> D3
+    end
+
+    %% ===== CAPTURE =====
+    subgraph CC["🖥️  Claude Code 環境"]
+        CC1["Stop hook 自動觸發\n（每次 Claude 回應結束）"]
+        CC2["capture-signal.sh\n解析標記 → 提取 skill/type/gap"]
+        CC1 --> CC2
+    end
+
+    subgraph CW["☁️  Cowork / Subagent 環境"]
+        CW1["無 Stop hook\nAgent 直接用 Bash 工具寫入"]
+        CW2["printf 'N pending signal'\n直接 append signal-queue.md"]
+        CW1 --> CW2
+    end
+
+    D3 --> CC1
+    D3 --> CW1
+
+    %% ===== QUEUE =====
+    Q[("📄 signal-queue.md
+## timestamp / skill-name
+- type: S1 / S2 / S3
+- gap: 一句話描述
+- status: pending")]
+
+    CC2 --> Q
+    CW2 --> Q
+
+    %% ===== NOTIFICATION =====
+    subgraph NCC["🖥️  Claude Code — 下次啟動時"]
+        N1["SessionStart hook\ncheck-signal-queue.sh"]
+        N2["⚠️ 有 N 個 pending signal\n注入 session 啟動 context"]
+        N1 --> N2
+    end
+
+    subgraph NCW["☁️  Cowork — 無自動通知"]
+        N3["無 SessionStart hook\n無自動提示"]
+        N4["Coordinator 看到 IMPROVE_SIGNAL 輸出\n或人工輸入 /improve"]
+        N3 --> N4
+    end
+
+    Q --> N1
+    Q --> N3
+
+    %% ===== TRIGGER =====
+    N2 --> TR
+    N4 --> TR
+    MAN["使用者主動輸入 /improve"] --> TR
+    TR(["▶ /improve 觸發"])
+
+    %% ===== IMPROVE WORKFLOW =====
+    subgraph WF["🔄  /improve 7-Step Workflow"]
+        W0["Step 0  Scope 偵測\nuser / project / repo"]
+        W1["Step 1  讀取 signal-queue\n取出 pending 項目"]
+        W2["Step 2  歸因分析\n定位 SKILL.md 缺口段落"]
+        W3["Step 3  IF/THEN 規則萃取"]
+        W4["Step 4  建立候選版本\n（working memory only，不寫檔）"]
+        W5["Step 5  skill-creator eval\n（無 evals.json 時跳過）"]
+        W6{{"⚠️ Step 6: Human Gate
+━━━━━━━━━━━━━━
+A  Approve
+R  Reject
+M  Modify"}}
+        W7["Step 7  寫入 SKILL.md
+更新 signal-queue status: resolved
+Append changelog.md"]
+        WE["結束\nsignal 標記 rejected / deferred"]
+
+        W0 --> W1 --> W2 --> W3 --> W4 --> W5 --> W6
+        W6 -->|"✅ Approve"| W7
+        W6 -->|"❌ Reject"| WE
+        W6 -->|"✏️ Modify"| W3
+    end
+
+    TR --> W0
+
+    %% ===== IMPROVE INIT =====
+    UINIT["使用者輸入\n/improve init"] --> I1
+
+    subgraph INIT["🚀  /improve init — 一次性批量初始化"]
+        I1["列出 ~/.claude/skills/ 下\n所有已安裝 skill"]
+        I2["詢問：要為哪些 skill\n加入 Signal Collection 區塊？"]
+        I3["各 skill spawn 獨立 subagent\n分析 SKILL.md 目的與失敗模式"]
+        I4["提案：2-4 個 IF-condition\n→ S1/S2/S3 + gap 描述"]
+        I5{{"⚠️ Human Gate
+━━━━━━━━━━━━━━
+A  Approve
+S  Skip
+M  Modify"}}
+        I6["Append Signal Collection 區塊\n到目標 SKILL.md"]
+        I7["繼續下一個 skill..."]
+
+        I1 --> I2 --> I3 --> I4 --> I5
+        I5 -->|"✅ Approve"| I6
+        I5 -->|"⏭️ Skip"| I7
+        I5 -->|"✏️ Modify"| I3
+        I6 --> I7
+    end
+
+    %% ===== SIGNAL COLLECTION BLOCKS =====
+    subgraph SC["📋  Signal Collection 區塊（可選 opt-in，安裝在個別 SKILL.md 末尾）"]
+        SC1["結構化 IF-condition 表格
+| IF situation | type | gap 描述 |"]
+        SC2["功能 1：精確偵測
+比 Universal Detection 更 skill-specific"]
+        SC3["功能 2：同時作為
+skill-creator eval 驗證指標"]
+        SC1 --> SC2
+        SC1 --> SC3
+    end
+
+    I6 --> SC1
+    SC1 -.->|"偵測到條件時\n輸出 IMPROVE_SIGNAL"| D2
+
+    %% ===== STYLES =====
+    classDef detect   fill:#12124a,stroke:#6666ff,color:#d0d0ff,font-size:13px
+    classDef cc       fill:#0a2240,stroke:#4a9ede,color:#b8d8f8,font-size:13px
+    classDef cw       fill:#402010,stroke:#e08030,color:#f8d8b8,font-size:13px
+    classDef queue    fill:#0a2a18,stroke:#40c070,color:#b0f0d0,font-size:14px
+    classDef trigger  fill:#2a1040,stroke:#a050e0,color:#e8c8ff,font-size:14px
+    classDef gate     fill:#3a0a3a,stroke:#c050c0,color:#f8b8f8,font-size:13px
+    classDef wf       fill:#141e14,stroke:#507850,color:#c8e8c8,font-size:13px
+    classDef init     fill:#101e10,stroke:#60aa60,color:#c0f0c0,font-size:13px
+    classDef sc       fill:#1e1e0a,stroke:#a8a830,color:#f0f0b0,font-size:13px
+
+    class D1,D2,D3 detect
+    class CC,CC1,CC2,NCC,N1,N2 cc
+    class CW,CW1,CW2,NCW,N3,N4 cw
+    class Q queue
+    class TR trigger
+    class W6,I5 gate
+    class W0,W1,W2,W3,W4,W5,W7,WE wf
+    class INIT,I1,I2,I3,I4,I6,I7 init
+    class SC,SC1,SC2,SC3 sc

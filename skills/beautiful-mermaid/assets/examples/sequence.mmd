@@ -1,0 +1,24 @@
+sequenceDiagram
+    participant Client
+    participant API
+    participant Database
+    participant Cache
+    
+    Client->>+API: GET /user/123
+    
+    API->>+Cache: Check cache
+    Cache-->>-API: Cache miss
+    
+    API->>+Database: SELECT * FROM users WHERE id=123
+    Database-->>-API: User data
+    
+    API->>Cache: Store in cache
+    
+    API-->>-Client: 200 OK + User data
+    
+    Note over Client,Cache: Subsequent request
+    
+    Client->>+API: GET /user/123
+    API->>+Cache: Check cache
+    Cache-->>-API: Cache hit
+    API-->>-Client: 200 OK + User data (cached)

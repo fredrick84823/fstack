@@ -1,0 +1,33 @@
+# Task Completion Template
+# Teammate 完工時照此格式填寫，寫到 thoughts/shared/task-completions/<task_id>-completion.yaml
+# 然後用 SendMessage 通知 lead「completion 已寫到 <路徑>」
+
+task_id: <對應 task-brief 的 task_id>
+status: complete | partial | blocked
+summary: <一句話說明做了什麼，lead 10 秒內能判斷「行不行」>
+
+actual_output:
+  - <實際產出 1（對應 task-brief 的 expected_output）>
+  - <實際產出 2>
+
+deviations:
+  # 與 task-brief 的差異，若無差異明確寫「無」，不要留空
+  - scope: <進了哪些 scope_out / 沒進哪些 scope_in，及原因>
+  - approach: <實作方式與 brief 不同之處>
+
+decisions_made:
+  - <決策 1：選了什麼，為什麼>
+  - <決策 2>
+
+validations_run:
+  - command: <跑的指令，e.g. pytest tests/unit/auth/ tests/integration/auth/ -v>
+    result: pass | fail | skipped
+    note: <skipped 時說明原因>
+
+risks:
+  # lead 在整合時需要知道的事，若無寫「無」
+  - <風險 1：什麼情況下可能壞，建議怎麼監控>
+
+blockers_hit:
+  # 遇到的阻塞，即使已解決也記錄，若無寫「無」
+  - <blocker 描述，及如何解決或繞過>

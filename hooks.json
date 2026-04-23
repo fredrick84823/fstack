@@ -1,0 +1,15 @@
+{
+  "SessionStart": [
+    {
+      "hooks": [{"type": "command", "command": "./hooks/improve/scripts/check-signal-queue.sh"}]
+    }
+  ],
+  "Stop": [
+    {
+      "hooks": [
+        {"type": "command", "command": "./hooks/improve/scripts/capture-signal.sh"},
+        {"type": "command", "command": "./hooks/improve/scripts/capture-skill-candidate.sh"}
+      ]
+    }
+  ]
+}

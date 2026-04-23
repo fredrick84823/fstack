@@ -1,0 +1,12 @@
+stateDiagram-v2
+    [*] --> Idle
+    
+    Idle --> Loading: fetch_data
+    Loading --> Success: data_loaded
+    Loading --> Error: request_failed
+    
+    Success --> Idle: reset
+    Error --> Idle: retry
+    Error --> Loading: retry_immediate
+    
+    Success --> [*]: cleanup

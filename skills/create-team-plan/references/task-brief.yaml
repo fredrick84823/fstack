@@ -1,0 +1,28 @@
+# Task Brief Template
+# 對應 AGENT_TEAM_COLLABORATION_SPEC.zh-TW.md §9
+# create-team-plan 在 Step 5 時照此格式填寫每個 task
+
+task_id: <e.g. T-auth-impl>
+objective: <一句話說明要達成什麼>
+why_this_task_exists: <為什麼這是獨立切片、為什麼不留在 lead>
+
+expected_output:
+  - <具體產出 1，e.g. src/auth/ 的實作與 tests/unit/auth/ + tests/integration/auth/ 全綠>
+  - <具體產出 2>
+
+scope_in:
+  - <允許碰的檔案/目錄>
+
+scope_out:
+  - <明確禁碰的範圍>
+
+dependencies:
+  - <task_id 或前提事實>
+
+write_scope:
+  - <檔案路徑或目錄>
+
+validation_expectation:
+  - <具體驗證指令或行為，e.g. pytest tests/unit/auth/ tests/integration/auth/ -v>
+
+escalation_rule: <碰到什麼情況停下回報，不要硬闖>

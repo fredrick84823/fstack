@@ -1,0 +1,19 @@
+graph TD
+    Start[User Opens App] --> Auth{Authenticated?}
+    Auth -->|No| Login[Show Login Screen]
+    Auth -->|Yes| Dashboard[Load Dashboard]
+    
+    Login --> Validate{Valid Credentials?}
+    Validate -->|No| Error[Show Error]
+    Validate -->|Yes| Dashboard
+    
+    Error --> Login
+    
+    Dashboard --> Action{User Action}
+    Action -->|View Profile| Profile[Profile Page]
+    Action -->|Settings| Settings[Settings Page]
+    Action -->|Logout| Logout[Clear Session]
+    
+    Profile --> Dashboard
+    Settings --> Dashboard
+    Logout --> Start

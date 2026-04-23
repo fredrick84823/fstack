@@ -1,0 +1,7 @@
+improve-workspace/
+excalidraw-diagram/references/.venv/
+**/.DS_Store
+node_modules/
+thoughts/
+.system/
+.claude/

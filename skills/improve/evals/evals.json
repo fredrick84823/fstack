@@ -1,0 +1,47 @@
+{
+  "skill_name": "improve",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我的 gsheet-progress-sync skill 剛才執行時漏掉了一件事：它沒有在同步完成後輸出最終更新的 row 範圍，所以我不知道哪幾行被更新了。請執行 /improve 幫我改進這個 skill。",
+      "expected_output": "完整走完 Step 0-4：偵測 scope、結構化 S2 gap、歸因到 gsheet-progress-sync、萃取 IF/THEN 規則、展示 diff preview，然後在 Step 6 停下來等待人工審核 [A/R/M]。不應該直接寫入 SKILL.md。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "signal-queue.md 目前是空的，也沒有特定的缺口要回報。請執行 /improve。",
+      "expected_output": "Step 1 讀取 signal-queue.md 後發現沒有 pending 項目，也沒有 SIGNAL 輸入，進入互動模式詢問使用者描述缺口，或直接輸出「目前無待處理的缺口信號」後結束。不應強行繼續執行 Step 2-7。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "signal-queue.md 裡有三個 pending 信號，類型分別是 S3、S1、S2，請執行 /improve 處理它們。注意：signal-queue.md 內容如下：\n\n## [2026-04-22T10:00+08:00] work-wrap-up\n\n- **type**: S3\n- **source**: session description\n- **gap**: work-wrap-up 傳給 commit-push-pr 的 PR body 格式不正確，導致 PR 建立失敗\n- **status**: pending\n\n## [2026-04-22T10:05+08:00] gsheet-progress-sync\n\n- **type**: S1\n- **source**: downstream skill cf-verify\n- **gap**: gsheet-progress-sync 回傳的 row index 格式與 cf-verify 預期不符\n- **status**: pending\n\n## [2026-04-22T10:10+08:00] slack-message\n\n- **type**: S2\n- **source**: user manual correction\n- **gap**: slack-message 沒有自動加上 thread_ts 讓訊息進入 thread\n- **status**: pending",
+      "expected_output": "依照 S1 > S2 > S3 優先順序，先處理 gsheet-progress-sync 的 S1 信號。完成一個 skill 改寫後，說明還有其他 pending 信號待後續處理。不應同時處理所有三個 skill 的改寫。",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "我在 /Users/fredrick/Desktop/01_Work/projects/github-projects/tagtoo-skills 目錄下工作，請執行 improve skill，TARGET_SKILL=extract-skill，幫我改進 extract-skill。這個目錄下有 skills/extract-skill/SKILL.md。",
+      "expected_output": "Step 0 偵測到 repo scope（因為 cwd 有 skills/ 目錄且含 SKILL.md），顯示 scope=repo，skill_path=<cwd>/skills/extract-skill/SKILL.md，queue_path=<cwd>/skills/improve/signal-queue.md。不應該誤判為 user scope。",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "請執行 improve init，針對 gsheet-progress-sync 這個 skill 生成 Signal Collection 區塊提案。使用者已選擇 gsheet-progress-sync（不需要再詢問選擇）。讀取 ~/.claude/skills/gsheet-progress-sync/SKILL.md，理解這個 skill 的目的與步驟，提出 2-4 個具體的 Signal Collection 條件，然後展示完整的提案並停在 [A/R/M] gate，不要寫入任何 SKILL.md 檔案。",
+      "expected_output": "提出 2-4 個專屬於 gsheet-progress-sync 的具體條件（提及 Google Sheet、row、sync、task row、進度等 skill 特有術語），格式包含 IF/THEN 結構和 S1/S2/S3 分類，展示完整 Signal Collection markdown 區塊，並顯示 [A] Approve [R] Skip [M] Modify 選項後暫停。不修改任何 SKILL.md 檔案。",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "請執行 improve init，針對 work-wrap-up 這個 skill 生成 Signal Collection 區塊提案。使用者已選擇 work-wrap-up（不需要再詢問選擇）。讀取 ~/.claude/skills/work-wrap-up/SKILL.md，理解這個 skill 的三步驟流程（commit+PR → gsheet → slack），提出 2-4 個具體的 Signal Collection 條件，展示提案並停在 [A/R/M] gate，不要寫入任何 SKILL.md 檔案。",
+      "expected_output": "提出專屬於 work-wrap-up 三步驟流程的條件（提及 commit、PR、push、gsheet 同步、slack 通知等），展示 Signal Collection 區塊草稿，顯示 [A/R/M] gate 後暫停。不修改任何 SKILL.md。",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "請執行 improve init，同時為 gsheet-progress-sync 和 slack-message 生成 Signal Collection 提案（使用者已選擇這兩個 skill）。展示第一個 skill 的提案後，暫停等待 [A/R/M] 選擇，不要自動繼續顯示第二個 skill 的提案，也不要寫入任何 SKILL.md 檔案。",
+      "expected_output": "先展示 gsheet-progress-sync 的 Signal Collection 提案，顯示 [A/R/M] gate 後完全停止，等待使用者回應。不自動展示 slack-message 的提案，不修改任何 SKILL.md。",
+      "files": []
+    }
+  ]
+}

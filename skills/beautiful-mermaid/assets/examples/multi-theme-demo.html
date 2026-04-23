@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beautiful Mermaid - 多主題展示</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0f0f0f;
+            color: #e0e0e0;
+            padding: 40px 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        h1 {
+            font-size: 3em;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 15px;
+        }
+
+        .subtitle {
+            font-size: 1.2em;
+            color: #888;
+        }
+
+        .controls {
+            background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+            padding: 30px;
+            border-radius: 16px;
+            margin-bottom: 40px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+
+        .controls h2 {
+            margin-bottom: 20px;
+            color: #fff;
+            font-size: 1.5em;
+        }
+
+        .theme-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .theme-btn {
+            padding: 15px 25px;
+            border: 2px solid transparent;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .theme-btn:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.4);
+        }
+
+        .theme-btn.active {
+            border-color: #fff;
+            box-shadow: 0 0 20px rgba(255,255,255,0.3);
+        }
+
+        .theme-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .theme-btn:hover::before {
+            opacity: 1;
+        }
+
+        /* Theme-specific button colors */
+        .btn-tokyo-night { background: #7aa2f7; color: #1a1b26; }
+        .btn-github-light { background: #0969da; color: white; }
+        .btn-github-dark { background: #4493f8; color: #0d1117; }
+        .btn-zinc-light { background: #52525b; color: white; }
+        .btn-zinc-dark { background: #a1a1aa; color: #18181b; }
+        .btn-dracula { background: #bd93f9; color: #282a36; }
+        .btn-nord { background: #88c0d0; color: #2e3440; }
+        .btn-nord-light { background: #5e81ac; color: #eceff4; }
+        .btn-catppuccin-mocha { background: #cba6f7; color: #1e1e2e; }
+        .btn-catppuccin-latte { background: #8839ef; color: #eff1f5; }
+        .btn-one-dark { background: #c678dd; color: #282c34; }
+        .btn-solarized-light { background: #268bd2; color: #fdf6e3; }
+        .btn-solarized-dark { background: #2aa198; color: #002b36; }
+
+        .diagram-section {
+            background: #1a1a1a;
+            padding: 40px;
+            border-radius: 16px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+
+        .diagram-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #2a2a2a;
+        }
+
+        .diagram-info h3 {
+            font-size: 1.8em;
+            color: #fff;
+        }
+
+        .current-theme {
+            display: inline-block;
+            padding: 8px 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        .diagram-container {
+            background: #0f0f0f;
+            padding: 30px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 400px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .diagram-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at 50% 50%, rgba(102, 126, 234, 0.1), transparent);
+            pointer-events: none;
+        }
+
+        .diagram-container img {
+            max-width: 100%;
+            height: auto;
+            position: relative;
+            z-index: 1;
+            transition: opacity 0.3s;
+        }
+
+        .loading {
+            position: absolute;
+            color: #888;
+            font-size: 1.2em;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 60px;
+            padding-top: 30px;
+            border-top: 1px solid #2a2a2a;
+            color: #666;
+        }
+
+        footer a {
+            color: #7aa2f7;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        footer a:hover {
+            color: #a9b1d6;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2em;
+            }
+
+            .theme-grid {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            }
+
+            .diagram-section {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎨 Beautiful Mermaid</h1>
+            <p class="subtitle">即時主題切換展示 - 15 個精心設計的主題</p>
+        </header>
+
+        <div class="controls">
+            <h2>選擇主題 👇</h2>
+            <div class="theme-grid">
+                <button class="theme-btn btn-tokyo-night active" onclick="switchTheme('tokyo-night')">
+                    Tokyo Night ⭐
+                </button>
+                <button class="theme-btn btn-github-light" onclick="switchTheme('github-light')">
+                    GitHub Light
+                </button>
+                <button class="theme-btn btn-github-dark" onclick="switchTheme('github-dark')">
+                    GitHub Dark
+                </button>
+                <button class="theme-btn btn-zinc-light" onclick="switchTheme('zinc-light')">
+                    Zinc Light
+                </button>
+                <button class="theme-btn btn-zinc-dark" onclick="switchTheme('zinc-dark')">
+                    Zinc Dark
+                </button>
+                <button class="theme-btn btn-dracula" onclick="switchTheme('dracula')">
+                    Dracula
+                </button>
+                <button class="theme-btn btn-nord" onclick="switchTheme('nord')">
+                    Nord
+                </button>
+                <button class="theme-btn btn-nord-light" onclick="switchTheme('nord-light')">
+                    Nord Light
+                </button>
+                <button class="theme-btn btn-catppuccin-mocha" onclick="switchTheme('catppuccin-mocha')">
+                    Catppuccin Mocha
+                </button>
+                <button class="theme-btn btn-catppuccin-latte" onclick="switchTheme('catppuccin-latte')">
+                    Catppuccin Latte
+                </button>
+                <button class="theme-btn btn-one-dark" onclick="switchTheme('one-dark')">
+                    One Dark
+                </button>
+                <button class="theme-btn btn-solarized-light" onclick="switchTheme('solarized-light')">
+                    Solarized Light
+                </button>
+                <button class="theme-btn btn-solarized-dark" onclick="switchTheme('solarized-dark')">
+                    Solarized Dark
+                </button>
+            </div>
+        </div>
+
+        <div class="diagram-section">
+            <div class="diagram-info">
+                <h3>📊 示範圖表</h3>
+                <span class="current-theme" id="current-theme">tokyo-night</span>
+            </div>
+            <div class="diagram-container" id="diagram-container">
+                <span class="loading">載入中...</span>
+                <img id="diagram-img" style="display: none;" alt="Mermaid 圖表">
+            </div>
+        </div>
+
+        <footer>
+            <p>
+                使用 <a href="https://github.com/mermaid-js/mermaid" target="_blank">Mermaid</a> 和
+                <a href="https://github.com/seanchas116/beautiful-mermaid" target="_blank">Beautiful-Mermaid</a> 建構
+            </p>
+            <p style="margin-top: 10px; font-size: 0.9em;">
+                💡 提示：點擊上方按鈕即時切換主題
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        let currentTheme = 'tokyo-night';
+
+        // 預先渲染的圖表（實際使用時需要先用 CLI 渲染所有主題）
+        // 這裡假設已經有預先渲染好的 SVG 檔案
+        const themeFiles = {
+            'tokyo-night': 'flowchart-tokyo-night.svg',
+            'github-light': 'flowchart-github-light.svg',
+            'github-dark': 'flowchart-github-dark.svg',
+            'zinc-light': 'flowchart-zinc-light.svg',
+            'zinc-dark': 'flowchart-zinc-dark.svg',
+            'dracula': 'flowchart-dracula.svg',
+            'nord': 'flowchart-nord.svg',
+            'nord-light': 'flowchart-nord-light.svg',
+            'catppuccin-mocha': 'flowchart-catppuccin-mocha.svg',
+            'catppuccin-latte': 'flowchart-catppuccin-latte.svg',
+            'one-dark': 'flowchart-one-dark.svg',
+            'solarized-light': 'flowchart-solarized-light.svg',
+            'solarized-dark': 'flowchart-solarized-dark.svg',
+        };
+
+        function switchTheme(theme) {
+            // 移除所有 active 類別
+            document.querySelectorAll('.theme-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // 添加 active 到當前按鈕
+            event.target.classList.add('active');
+
+            // 更新當前主題顯示
+            currentTheme = theme;
+            document.getElementById('current-theme').textContent = theme;
+
+            // 切換圖表
+            const img = document.getElementById('diagram-img');
+            const loading = document.querySelector('.loading');
+
+            // 顯示載入狀態
+            img.style.display = 'none';
+            loading.style.display = 'block';
+
+            // 載入新圖表
+            img.src = themeFiles[theme];
+
+            img.onload = () => {
+                loading.style.display = 'none';
+                img.style.display = 'block';
+            };
+
+            img.onerror = () => {
+                loading.textContent = `⚠️ 無法載入 ${theme} 主題的圖表`;
+                loading.style.color = '#ef4444';
+            };
+        }
+
+        // 初始化：載入預設主題
+        window.addEventListener('DOMContentLoaded', () => {
+            switchTheme('tokyo-night');
+        });
+
+        // 預載所有主題圖片
+        Object.values(themeFiles).forEach(file => {
+            const img = new Image();
+            img.src = file;
+        });
+    </script>
+</body>
+</html>
