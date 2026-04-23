@@ -1,0 +1,13 @@
+{
+  "name": "fstack",
+  "version": "1.0.0",
+  "description": "Personal Claude Code workflow skills, commands, and hooks",
+  "author": {
+    "name": "Fredrick",
+    "url": "https://github.com/fredrick84823"
+  },
+  "repository": "https://github.com/fredrick84823/fstack",
+  "homepage": "https://github.com/fredrick84823/fstack",
+  "license": "MIT",
+  "keywords": ["workflow", "productivity", "skills", "commands", "hooks"]
+}

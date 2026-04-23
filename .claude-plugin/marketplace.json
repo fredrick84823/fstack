@@ -1,0 +1,21 @@
+{
+  "name": "fstack",
+  "owner": {
+    "name": "Fredrick",
+    "email": "fredrick@tagtoo.com"
+  },
+  "metadata": {
+    "description": "Personal Claude Code workflow skills, commands & hooks",
+    "homepage": "https://github.com/fredrick84823/fstack"
+  },
+  "plugins": [
+    {
+      "name": "fstack",
+      "version": "1.0.0",
+      "source": "./",
+      "description": "25 workflow skills, 10 commands, and improve hooks for developer productivity",
+      "category": "productivity",
+      "tags": ["workflow", "productivity", "skills", "commands", "hooks", "planning", "handoff"]
+    }
+  ]
+}
