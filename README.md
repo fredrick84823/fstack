@@ -53,6 +53,19 @@ claude plugin install https://github.com/fredrick84823/fstack
 | `/start-worktree-task` | Create a new git worktree for isolated work |
 | `/work-wrap-up` | Shortcut to the work-wrap-up skill |
 
+## Agents (6)
+
+Sub-agents for the research → plan → implement workflow (from [HumanLayer](https://github.com/humanlayer/humanlayer/tree/main/.claude)):
+
+| Agent | Description |
+|-------|-------------|
+| `codebase-analyzer` | Deep analysis of specific codebase components |
+| `codebase-locator` | Locate relevant files and entry points for a task |
+| `codebase-pattern-finder` | Find existing patterns and conventions |
+| `thoughts-analyzer` | Analyze context from thoughts/ docs |
+| `thoughts-locator` | Locate relevant prior decisions in thoughts/ |
+| `web-search-researcher` | Research external context via web search |
+
 ## Hooks
 
 Wires the `improve` skill's signal capture into session lifecycle:
