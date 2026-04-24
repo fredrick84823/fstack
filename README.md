@@ -59,6 +59,7 @@ Sub-agents for the research → plan → implement workflow (from [HumanLayer](h
 
 | Agent | Description |
 |-------|-------------|
+| `session-ender` | Session 收尾：識別 improve signals → 提示 /work-wrap-up |
 | `codebase-analyzer` | Deep analysis of specific codebase components |
 | `codebase-locator` | Locate relevant files and entry points for a task |
 | `codebase-pattern-finder` | Find existing patterns and conventions |
