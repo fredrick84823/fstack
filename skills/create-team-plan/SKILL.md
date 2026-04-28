@@ -1,7 +1,7 @@
 ---
 name: create-team-plan
 description: Read a standard plan and decompose it into a team-plan with task briefs, dependency graph, and model assignments. Use when you want to run a complex plan with agent teams. Outputs a team-plan file for /implement-team-plan to execute. Does NOT spawn teammates — that's implement-team-plan's job.
-allowed-tools: Read, Write, Bash, Glob, Grep, Agent
+allowed-tools: Read, Write, Bash, Glob, Grep, Agent, mcp__plugin_claude-mem_mcp-search__smart_search, mcp__plugin_claude-mem_mcp-search__smart_outline, mcp__plugin_claude-mem_mcp-search__smart_unfold
 ---
 
 # Create Team Plan

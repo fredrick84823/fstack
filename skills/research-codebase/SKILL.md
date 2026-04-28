@@ -1,12 +1,24 @@
 ---
 name: research-codebase
 description: Document codebase as-is via parallel sub-agents. Use when researching how code works, mapping architecture, or answering questions about existing systems. Auto-detects thoughts/ directory — if present, integrates historical context and syncs; if absent, skips those steps.
-allowed-tools: Read, Grep, Glob, Bash, Agent
+allowed-tools: Read, Grep, Glob, Bash, Agent, mcp__plugin_claude-mem_mcp-search__smart_search, mcp__plugin_claude-mem_mcp-search__smart_outline, mcp__plugin_claude-mem_mcp-search__smart_unfold
 ---
 
 # Research Codebase
 
 Comprehensive codebase research via parallel sub-agents. **Document what EXISTS — no improvements, no critique.**
+
+## Exploration Tools Priority
+
+For code file exploration, prefer **smart-explore tools** (4-18x token savings):
+
+| Tool | Use instead of |
+|------|---------------|
+| `smart_search(query, path)` — discover files + symbols in one call | Glob + Grep discovery loop |
+| `smart_outline(file_path)` — structural skeleton (~1-2k tokens) | Read on files > 100 lines |
+| `smart_unfold(file_path, symbol_name)` — one symbol's full source | Read on large files for one function |
+
+**Rule**: Use Read only for files < 100 lines or non-code files (markdown, JSON, config).
 
 ## Initial Response
 
@@ -17,7 +29,8 @@ I'm ready to research the codebase. Please provide your research question or are
 ## Process
 
 ### 1. Read Mentioned Files First
-Read any mentioned files FULLY before spawning sub-tasks.
+For code files > 100 lines, prefer `smart_outline` + `smart_unfold` over Read.
+For small files, config, or markdown: use Read directly.
 
 ### 2. Check for thoughts/ Directory
 

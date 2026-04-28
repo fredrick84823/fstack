@@ -1,12 +1,24 @@
 ---
 name: create-plan
 description: Create detailed implementation plans through interactive research and iteration. Use when starting a new feature or ticket that needs a comprehensive technical plan. Saves plan to thoughts/shared/plans/.
-allowed-tools: Read, Write, Bash, Agent
+allowed-tools: Read, Write, Bash, Agent, mcp__plugin_claude-mem_mcp-search__smart_search, mcp__plugin_claude-mem_mcp-search__smart_outline, mcp__plugin_claude-mem_mcp-search__smart_unfold
 ---
 
 # Create Plan
 
 Create detailed implementation plans through an interactive, iterative process.
+
+## Exploration Tools Priority
+
+For code file exploration, prefer **smart-explore tools** (4-18x token savings):
+
+| Tool | Use instead of |
+|------|---------------|
+| `smart_search(query, path)` — discover files + symbols in one call | Glob + Grep discovery loop |
+| `smart_outline(file_path)` — structural skeleton (~1-2k tokens) | Read on files > 100 lines |
+| `smart_unfold(file_path, symbol_name)` — one symbol's full source | Read on large files for one function |
+
+**Rule**: Use Read only for files < 100 lines or non-code files (markdown, JSON, config, tickets).
 
 ## Initial Response
 
@@ -20,7 +32,7 @@ Tip: /create-plan thoughts/shared/tickets/eng_1234.md
 ## Process
 
 ### 1. Read Context Files Fully
-Read all mentioned files FULLY (no limit/offset). Do NOT spawn sub-tasks before reading.
+Read all mentioned files fully (no limit/offset). For code files > 100 lines, prefer `smart_outline` + `smart_unfold`. Do NOT spawn sub-tasks before reading.
 
 ### 2. Research in Parallel
 

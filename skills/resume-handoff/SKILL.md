@@ -1,7 +1,7 @@
 ---
 name: resume-handoff
 description: Resume work from a handoff document with context analysis and validation. Use when the user requests to resume from a handoff, continue previous work, or references a handoff path or ticket number (ENG-XXXX). Supports quick mode (default) and full mode (--full flag).
-allowed-tools: Read, Write, Bash, Agent
+allowed-tools: Read, Write, Bash, Agent, mcp__plugin_claude-mem_mcp-search__smart_search, mcp__plugin_claude-mem_mcp-search__smart_outline, mcp__plugin_claude-mem_mcp-search__smart_unfold
 ---
 
 # Resume Handoff
@@ -33,6 +33,7 @@ Tip: /resume_handoff thoughts/shared/handoffs/ENG-XXXX/file.md [--full]
 - Read entire handoff document
 - Extract all sections: tasks, changes, learnings, artifacts, action items
 - In Full Mode: use sub-agents to read referenced artifacts
+- For any referenced **code files > 100 lines**, prefer `smart_outline` + `smart_unfold` over Read
 
 ### 2. Present Analysis
 Cover: original tasks vs current verification, key learnings, recent changes, recommended next actions.
