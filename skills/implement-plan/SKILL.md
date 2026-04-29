@@ -20,6 +20,7 @@ If no plan path: ask for one.
 - Implement each phase fully before moving to the next
 - Update checkboxes (`- [x]`) in the plan as you complete sections
 - If something doesn't match the plan, STOP and communicate clearly
+- Before implementing any new module/class/function, run `/deep-module` — it enforces interface-first design and flags shallow abstractions before they're written
 
 ## Mismatch Format
 
@@ -48,6 +49,7 @@ Automated verification passed:
 
 Please perform manual verification:
 - [manual items from plan]
+- Run `/deep-module` to review encapsulation quality of modules added in this phase
 
 Let me know when manual testing is complete to proceed to Phase [N+1].
 ```
