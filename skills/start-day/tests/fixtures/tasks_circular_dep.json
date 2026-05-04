@@ -1,0 +1,20 @@
+{
+  "gsheet": [],
+  "github": [],
+  "heptabase": [
+    {
+      "name": "task a",
+      "name_raw": "Task A",
+      "status": "unknown",
+      "sources": [{"kind": "heptabase", "id": "card-a", "url": null, "status_raw": "card", "last_updated": ""}],
+      "conflict": null, "depends_on": ["Task B"], "card_id": "card-a"
+    },
+    {
+      "name": "task b",
+      "name_raw": "Task B",
+      "status": "unknown",
+      "sources": [{"kind": "heptabase", "id": "card-b", "url": null, "status_raw": "card", "last_updated": ""}],
+      "conflict": null, "depends_on": ["Task A"], "card_id": "card-b"
+    }
+  ]
+}

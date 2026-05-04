@@ -1,0 +1,29 @@
+{
+  "gsheet": [
+    {
+      "name": "implement auth module",
+      "name_raw": "Implement Auth Module",
+      "status": "in-progress",
+      "sources": [{"kind": "gsheet", "id": "", "url": null, "status_raw": "進行中", "last_updated": "2026/4/30"}],
+      "conflict": null, "depends_on": [], "card_id": null
+    }
+  ],
+  "github": [
+    {
+      "name": "implement auth module",
+      "name_raw": "implement auth module",
+      "status": "in-progress",
+      "sources": [{"kind": "github_pr", "id": "42", "url": "https://github.com/test/repo/pull/42", "status_raw": "open", "last_updated": "2026/4/30"}],
+      "conflict": null, "depends_on": [], "card_id": null
+    }
+  ],
+  "heptabase": [
+    {
+      "name": "implement auth module",
+      "name_raw": "Implement Auth Module",
+      "status": "unknown",
+      "sources": [{"kind": "heptabase", "id": "card-abc", "url": null, "status_raw": "card", "last_updated": "2026/4/30"}],
+      "conflict": null, "depends_on": [], "card_id": "card-abc"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "gsheet": [],
+  "github": [],
+  "heptabase": [
+    {
+      "name": "design system docs",
+      "name_raw": "Design System Docs",
+      "status": "unknown",
+      "sources": [{"kind": "heptabase", "id": "card-xyz", "url": null, "status_raw": "card", "last_updated": "2026/4/28"}],
+      "conflict": null, "depends_on": ["implement auth module"], "card_id": "card-xyz"
+    },
+    {
+      "name": "implement auth module",
+      "name_raw": "Implement Auth Module",
+      "status": "unknown",
+      "sources": [{"kind": "heptabase", "id": "card-abc", "url": null, "status_raw": "card", "last_updated": "2026/4/30"}],
+      "conflict": null, "depends_on": [], "card_id": "card-abc"
+    }
+  ]
+}

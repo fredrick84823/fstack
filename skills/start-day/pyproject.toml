@@ -1,0 +1,17 @@
+[project]
+name = "start-day"
+version = "0.1.0"
+description = "Daily task board skill — integrates gsheet / GitHub / Heptabase"
+requires-python = ">=3.11"
+dependencies = [
+    "gspread>=6.0",
+    "google-auth>=2.0",
+    "python-dateutil>=2.9",
+    "thefuzz>=0.22",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+]

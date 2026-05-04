@@ -1,0 +1,21 @@
+{
+  "gsheet": [
+    {
+      "name": "fix login bug",
+      "name_raw": "Fix Login Bug",
+      "status": "completed",
+      "sources": [{"kind": "gsheet", "id": "", "url": null, "status_raw": "完成", "last_updated": "2026/4/29"}],
+      "conflict": null, "depends_on": [], "card_id": null
+    }
+  ],
+  "github": [
+    {
+      "name": "fix login bug",
+      "name_raw": "fix login bug",
+      "status": "in-progress",
+      "sources": [{"kind": "github_pr", "id": "99", "url": "https://github.com/test/repo/pull/99", "status_raw": "open", "last_updated": "2026/4/30"}],
+      "conflict": null, "depends_on": [], "card_id": null
+    }
+  ],
+  "heptabase": []
+}
