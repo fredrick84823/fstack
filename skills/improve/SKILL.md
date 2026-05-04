@@ -2,7 +2,7 @@
 name: improve
 description: >
   通用 skill 自我進化工具。當任何 skill 執行後使用者有修正、抱怨、或說「少了什麼」，
-  立即在 response 末尾輸出 <<IMPROVE_SIGNAL skill="x" type="S2" gap="y">>，
+  立即在 response 末尾輸出 <<GAP skill-name: 一句話描述缺口>>，
   Stop hook 自動寫入 signal-queue.md。
   主動觸發：「improve」「skill 改進」「improve skill」「修正 skill」「更新 skill 規則」
   「skill 有缺口」「skill 漏掉了」「self-improve」「自我進化」「skill 學習」。
@@ -52,19 +52,19 @@ ELSE                                                 → 互動詢問
 
 ## Universal Signal Detection — 無需 Opt-in
 
-**執行任何 skill 的過程中**，若偵測到以下情況，在 response 末尾加入 `<<IMPROVE_SIGNAL>>` 標記，Stop hook 自動捕捉到 signal-queue.md，不需要 skill 本身做任何設定：
+**執行任何 skill 的過程中**，若偵測到以下情況，在 response 末尾加入 `<<GAP>>` 標記，Stop hook 自動捕捉到 signal-queue.md，不需要 skill 本身做任何設定：
 
-| 情況 | 分類 | 辨識關鍵字範例 |
-|------|------|--------------|
-| 使用者說結果不對、漏掉什麼、不是想要的 | S2 | 「不對」「漏掉了」「少了 X」「這不是我要的」「你忘了 Y」 |
-| 使用者對 skill 產出進行實質修正 | S2 | 使用者直接改寫或否定 agent 的輸出 |
-| 某 skill 的產出被下一個 skill 處理時格式不符 | S1 | 下游 skill 報錯或提到上游格式問題 |
-| Skill 指示的工具呼叫失敗、參數錯誤 | S3 | exit code 非零、工具回傳 schema error |
+| 情況 | 辨識關鍵字範例 |
+|------|--------------|
+| 使用者說結果不對、漏掉什麼、不是想要的 | 「不對」「漏掉了」「少了 X」「這不是我要的」「你忘了 Y」 |
+| 使用者對 skill 產出進行實質修正 | 使用者直接改寫或否定 agent 的輸出 |
+| 某 skill 的產出被下一個 skill 處理時格式不符 | 下游 skill 報錯或提到上游格式問題 |
+| Skill 指示的工具呼叫失敗、參數錯誤 | exit code 非零、工具回傳 schema error |
 
-**標記格式（單行，放 response 末尾）：**
+**標記格式（單行，放 response 末尾，不要放在 code block 內）：**
 
 ```
-<<IMPROVE_SIGNAL skill="skill-name" type="S2" gap="一句話描述缺口">>
+<<GAP skill-name: 一句話描述缺口>>
 ```
 
 **若 skill 有 Signal Collection 區塊**：以該區塊的條件為準（比通用偵測更精確），Signal Collection 區塊同時作為 skill-creator eval 的驗證指標，不需 opt-in 才能接收 signal。

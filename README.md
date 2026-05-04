@@ -61,7 +61,20 @@ Sub-agents for the research → plan → implement workflow (from [HumanLayer](h
 Wires the `improve` skill's signal capture into session lifecycle:
 
 - **SessionStart** → checks signal queue for pending improvements
-- **Stop** → captures signals and skill candidates automatically
+- **Stop** → captures `<<GAP skill: desc>>` markers and skill candidates automatically
+
+## Post-install: Enable auto gap detection
+
+Add the following to your `~/.claude/CLAUDE.md` so Claude emits gap signals after skill execution:
+
+```markdown
+# Skill Gap Detection
+
+After executing any skill, if a gap or improvement opportunity is found, output at the end of the response (not inside a code block):
+<<GAP skill-name: one-line description of the gap>>
+```
+
+This rule tells Claude to emit `<<GAP>>` markers that the Stop hook captures into `signal-queue.md`. Run `/improve` to process pending signals.
 
 ## License
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# capture-signal.sh - Capture <<IMPROVE_SIGNAL>> markers from agent output
+# capture-signal.sh - Capture <<GAP>> markers from agent output
 # Install: add to settings.json hooks.Stop
-# Format: <<IMPROVE_SIGNAL skill="name" type="S1|S2|S3" gap="description">>
+# Format: <<GAP skill-name: description>>
 
 set -euo pipefail
 
@@ -10,7 +10,7 @@ message=$(echo "$input" | jq -r '.last_assistant_message // empty' 2>/dev/null |
 [ -z "$message" ] && exit 0
 
 # Check for any markers before doing file I/O
-echo "$message" | grep -q '<<IMPROVE_SIGNAL' || exit 0
+echo "$message" | grep -q '<<GAP ' || exit 0
 
 # Determine queue path (project-level takes priority)
 if [ -f "$(pwd)/.claude/skills/improve/signal-queue.md" ]; then
@@ -23,17 +23,15 @@ fi
 
 ts=$(date -Iseconds)
 
-# Extract and append each <<IMPROVE_SIGNAL ...>> marker (BSD-compatible sed)
-echo "$message" | grep -o '<<IMPROVE_SIGNAL[^>]*>>' | while IFS= read -r marker; do
-  skill=$(echo "$marker" | sed 's/.*skill="\([^"]*\)".*/\1/')
-  type=$(echo "$marker"  | sed 's/.*type="\([^"]*\)".*/\1/')
-  gap=$(echo "$marker"   | sed 's/.*gap="\([^"]*\)".*/\1/')
+# Extract and append each <<GAP skill-name: description>> marker
+echo "$message" | grep -oE '<<GAP [^>]+>>' | while IFS= read -r marker; do
+  content="${marker#<<GAP }"
+  content="${content%>>}"
+  skill="${content%%: *}"
+  gap="${content#*: }"
+  type="S2"
 
-  # sed returns the original string unchanged if no match — detect that
-  [ "$skill" = "$marker" ] && skill="unknown"
-  [ "$type"  = "$marker" ] && type="S2"
-  [ "$gap"   = "$marker" ] && gap=""
-
+  [ "$skill" = "$content" ] && skill="unknown"  # no ': ' found
   [ -z "$gap" ] && continue
 
   {
