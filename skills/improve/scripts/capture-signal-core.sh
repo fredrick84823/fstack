@@ -1,20 +1,19 @@
 #!/usr/bin/env bash
-# capture-signal.sh - Capture <<GAP>> markers from agent output
-# Install: add to settings.json hooks.Stop
+# capture-signal-core.sh - Capture <<GAP>> markers from assistant text.
+# Input (stdin): plain assistant message text.
 # Format: <<GAP skill-name: description>>
 
 set -euo pipefail
 
-input=$(cat)
-message=$(echo "$input" | jq -r '.last_assistant_message // empty' 2>/dev/null || true)
+message="$(cat)"
 [ -z "$message" ] && exit 0
 
-# Check for any markers before doing file I/O
+# Check for any markers before doing file I/O.
 echo "$message" | grep -q '<<GAP ' || exit 0
 
 agents_skills_home="${AGENTS_SKILLS_HOME:-$HOME/.agents/skills}"
 
-# Determine queue path (project-level takes priority)
+# Determine queue path. Project-level .agents queues take priority when present.
 if [ -f "$(pwd)/.agents/skills/improve/signal-queue.md" ]; then
   queue="$(pwd)/.agents/skills/improve/signal-queue.md"
 else
@@ -23,12 +22,12 @@ else
   touch "$queue"
 fi
 
-ts=$(date -Iseconds)
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-memory_script="$repo_root/skills/improve/scripts/memory.sh"
+ts="$(date -Iseconds)"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+memory_script="$script_dir/memory.sh"
 memory_dir="$(dirname "$queue")/memory"
 
-# Extract and append each <<GAP skill-name: description>> marker
+# Extract and append each <<GAP skill-name: description>> marker.
 echo "$message" | grep -oE '<<GAP [^>]+>>' | while IFS= read -r marker; do
   content="${marker#<<GAP }"
   content="${content%>>}"
@@ -36,7 +35,7 @@ echo "$message" | grep -oE '<<GAP [^>]+>>' | while IFS= read -r marker; do
   gap="${content#*: }"
   type="S2"
 
-  [ "$skill" = "$content" ] && skill="unknown"  # no ': ' found
+  [ "$skill" = "$content" ] && skill="unknown"
   [ -z "$gap" ] && continue
 
   {

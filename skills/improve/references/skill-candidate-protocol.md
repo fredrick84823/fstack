@@ -42,7 +42,7 @@ Agent 應在以下情況輸出 marker：
 {
   "hooks": {
     "Stop": [
-      { "type": "command", "command": "~/.claude/skills/improve/scripts/capture-skill-candidate.sh" }
+      { "type": "command", "command": "~/.agents/skills/improve/scripts/capture-skill-candidate.sh" }
     ]
   }
 }
@@ -57,7 +57,7 @@ Agent 應在以下情況輸出 marker：
 若無 hook（Codex CLI 等），agent 或使用者可直接呼叫：
 
 ```bash
-~/.claude/skills/improve/scripts/propose.sh \
+~/.agents/skills/improve/scripts/propose.sh \
   --name "deploy-to-cf" \
   --reason "第三次執行相同的 gcloud build + deploy 流程" \
   --steps "gcloud builds submit; gcloud functions deploy; gcloud functions logs read" \

@@ -5,10 +5,10 @@
 input=$(cat)  # consume stdin (required for hooks)
 
 # Support both user-level and project-level queues
-if [ -f "$(pwd)/.claude/skills/improve/signal-queue.md" ]; then
-  QUEUE="$(pwd)/.claude/skills/improve/signal-queue.md"
-elif [ -f "$HOME/.claude/skills/improve/signal-queue.md" ]; then
-  QUEUE="$HOME/.claude/skills/improve/signal-queue.md"
+if [ -f "$(pwd)/.agents/skills/improve/signal-queue.md" ]; then
+  QUEUE="$(pwd)/.agents/skills/improve/signal-queue.md"
+elif [ -f "$HOME/.agents/skills/improve/signal-queue.md" ]; then
+  QUEUE="$HOME/.agents/skills/improve/signal-queue.md"
 else
   exit 0
 fi

@@ -5,11 +5,12 @@
 
 TARGET_SKILL="${1:?TARGET_SKILL required}"
 SCOPE="${2:-user}"
+AGENTS_SKILLS_HOME="${AGENTS_SKILLS_HOME:-$HOME/.agents/skills}"
 
 case "$SCOPE" in
   repo)    SKILLS_BASE="$(pwd)/skills" ;;
-  project) SKILLS_BASE="$(pwd)/.claude/skills" ;;
-  *)       SKILLS_BASE="$HOME/.claude/skills" ;;
+  project) SKILLS_BASE="$(pwd)/.agents/skills" ;;
+  *)       SKILLS_BASE="$AGENTS_SKILLS_HOME" ;;
 esac
 
 [ ! -d "$SKILLS_BASE" ] && echo "無" && exit 0

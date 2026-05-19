@@ -23,33 +23,33 @@
 
 ### `project` 模式
 
-**偵測條件**：cwd 下有 `.claude/skills/` 目錄
+**偵測條件**：cwd 下有 `.agents/skills/` 目錄
 
-**典型場景**：在有自己 `.claude/skills/` 的專案 repo 裡執行 `/improve`
+**典型場景**：在有自己 `.agents/skills/` 的專案 repo 裡執行 `/improve`
 
 **路徑對應**：
-- Target skill：`{cwd}/.claude/skills/{target}/SKILL.md`
-- Signal queue：`{cwd}/.claude/skills/improve/signal-queue.md`（不存在則 fallback 到 user queue）
-- Changelog：`{cwd}/.claude/skills/improve/changelog.md`
+- Target skill：`{cwd}/.agents/skills/{target}/SKILL.md`
+- Signal queue：`{cwd}/.agents/skills/improve/signal-queue.md`（不存在則 fallback 到 user queue）
+- Changelog：`{cwd}/.agents/skills/improve/changelog.md`
 
 ---
 
 ### `user` 模式（預設）
 
-**偵測條件**：以上皆不符，且 `~/.claude/skills/` 存在
+**偵測條件**：以上皆不符，且 `~/.agents/skills/` 存在
 
 **典型場景**：在任意 cwd 執行 `/improve`，操作的是 user-level skills
 
 **路徑對應**：
-- Target skill：`~/.claude/skills/{target}/SKILL.md`
-- Signal queue：`~/.claude/skills/improve/signal-queue.md`
-- Changelog：`~/.claude/skills/improve/changelog.md`
+- Target skill：`~/.agents/skills/{target}/SKILL.md`
+- Signal queue：`~/.agents/skills/improve/signal-queue.md`
+- Changelog：`~/.agents/skills/improve/changelog.md`
 
 ---
 
 ## 優先順序
 
-若 `repo` 和 `project` 條件同時成立（例如 skills repo 本身也有 `.claude/skills/`），以 `repo` 為準。
+若 `repo` 和 `project` 條件同時成立（例如 skills repo 本身也有 `.agents/skills/`），以 `repo` 為準。
 
 若使用者明確傳入 `SCOPE=user/project/repo`，覆蓋自動偵測。
 
@@ -57,7 +57,7 @@
 
 ## Signal Queue 雙層設計
 
-- **Primary**：`~/.claude/skills/improve/signal-queue.md`（user-level）
-- **Project override**：若 cwd 有 `.claude/skills/improve/signal-queue.md` 就優先讀它
+- **Primary**：`~/.agents/skills/improve/signal-queue.md`（user-level）
+- **Project override**：若 cwd 有 `.agents/skills/improve/signal-queue.md` 就優先讀它
 
 這樣多個 repo 並行時，各自的 queue 不會互相干擾。

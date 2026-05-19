@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# SessionStart hook: notify Claude about pending improve signals on session start
+# SessionStart hook: notify agent about pending improve signals on session start
 # Install: add to settings.json hooks.SessionStart
 
-input=$(cat)  # consume stdin (required for hooks)
+agents_skills_home="${AGENTS_SKILLS_HOME:-$HOME/.agents/skills}"
 
-# Support both user-level and project-level queues
-if [ -f "$(pwd)/.claude/skills/improve/signal-queue.md" ]; then
-  QUEUE="$(pwd)/.claude/skills/improve/signal-queue.md"
-elif [ -f "$HOME/.claude/skills/improve/signal-queue.md" ]; then
-  QUEUE="$HOME/.claude/skills/improve/signal-queue.md"
+# Support both user-level and project-level .agents queues.
+if [ -f "$(pwd)/.agents/skills/improve/signal-queue.md" ]; then
+  QUEUE="$(pwd)/.agents/skills/improve/signal-queue.md"
+elif [ -f "$agents_skills_home/improve/signal-queue.md" ]; then
+  QUEUE="$agents_skills_home/improve/signal-queue.md"
 else
   exit 0
 fi

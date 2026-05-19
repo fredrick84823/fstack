@@ -22,10 +22,12 @@ done
 
 [ -z "$name" ] && { echo "Error: --name is required" >&2; exit 1; }
 
-if [ -f "$(pwd)/.claude/skills/improve/candidate-queue.md" ]; then
-  queue="$(pwd)/.claude/skills/improve/candidate-queue.md"
+agents_skills_home="${AGENTS_SKILLS_HOME:-$HOME/.agents/skills}"
+
+if [ -f "$(pwd)/.agents/skills/improve/candidate-queue.md" ]; then
+  queue="$(pwd)/.agents/skills/improve/candidate-queue.md"
 else
-  queue="$HOME/.claude/skills/improve/candidate-queue.md"
+  queue="$agents_skills_home/improve/candidate-queue.md"
   mkdir -p "$(dirname "$queue")"
   touch "$queue"
 fi

@@ -11,11 +11,13 @@ input=$(cat)
 message=$(echo "$input" | jq -r '.last_assistant_message // empty' 2>/dev/null || true)
 [ -z "$message" ] && exit 0
 
+agents_skills_home="${AGENTS_SKILLS_HOME:-$HOME/.agents/skills}"
+
 # Determine queue path (project-level takes priority)
-if [ -f "$(pwd)/.claude/skills/improve/candidate-queue.md" ]; then
-  queue="$(pwd)/.claude/skills/improve/candidate-queue.md"
+if [ -f "$(pwd)/.agents/skills/improve/candidate-queue.md" ]; then
+  queue="$(pwd)/.agents/skills/improve/candidate-queue.md"
 else
-  queue="$HOME/.claude/skills/improve/candidate-queue.md"
+  queue="$agents_skills_home/improve/candidate-queue.md"
   mkdir -p "$(dirname "$queue")"
   touch "$queue"
 fi
