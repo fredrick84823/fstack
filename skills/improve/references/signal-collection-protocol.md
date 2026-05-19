@@ -11,7 +11,7 @@
 ```markdown
 ## Signal Collection
 
-偵測到以下情況時，自動 append 到對應的 `signal-queue.md`：
+偵測到以下情況時，自動 append 到對應的 `signal-queue.md`，並透過 `improve/scripts/memory.sh capture` 寫入 Skill Evolution Memory：
 - <具體情況描述，例如：若有 ❌ 未覆蓋項目>
 - <另一個情況>
 
@@ -31,11 +31,11 @@
 輸出格式改為：
 
 ```
-⚠️ [IMPROVE_SIGNAL] {skill-name}: {gap 一句話}
+⚠️ [GAP] {skill-name}: {gap 一句話}
 已 append 到 signal-queue.md。建議在本 session 中立即執行 /improve。
 ```
 
-Cowork 協調者看到 `[IMPROVE_SIGNAL]` 標記時，應在當前 task 完成後
+Cowork 協調者看到 `[GAP]` 標記時，應在當前 task 完成後
 立即 spawn 一個 /improve agent 處理，而不是等待下次 SessionStart。
 ```
 
@@ -55,7 +55,21 @@ Cowork 協調者看到 `[IMPROVE_SIGNAL]` 標記時，應在當前 task 完成�
 
 Signal 應 append 到以下路徑（優先順序）：
 
-1. 若 cwd 有 `.claude/skills/improve/signal-queue.md` → 寫入此處
-2. 否則 → 寫入 `~/.claude/skills/improve/signal-queue.md`
+1. 若 cwd 有 `.agents/skills/improve/signal-queue.md` → 寫入此處
+2. 否則 → 寫入 `~/.agents/skills/improve/signal-queue.md`
 
 若兩者都不存在，建立 user-level 檔案後再 append。
+
+## Precision Guard
+
+只有同時具備下列三個證據時才收集 signal：
+
+1. 能指出 active / target skill 名稱
+2. 能描述可重複的 skill 規則缺口
+3. 能寫出 expected behavior vs actual behavior
+
+不要在以下情況收集 signal：
+
+- 使用者只是在改需求、偏好或受眾
+- 問題來自資料缺漏、權限、外部服務失敗或一次性上下文不足
+- 使用者修正的是本次產物內容，但沒有證據顯示 skill workflow 需要更新

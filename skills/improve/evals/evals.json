@@ -27,13 +27,13 @@
     },
     {
       "id": 5,
-      "prompt": "請執行 improve init，針對 gsheet-progress-sync 這個 skill 生成 Signal Collection 區塊提案。使用者已選擇 gsheet-progress-sync（不需要再詢問選擇）。讀取 ~/.claude/skills/gsheet-progress-sync/SKILL.md，理解這個 skill 的目的與步驟，提出 2-4 個具體的 Signal Collection 條件，然後展示完整的提案並停在 [A/R/M] gate，不要寫入任何 SKILL.md 檔案。",
+      "prompt": "請執行 improve init，針對 gsheet-progress-sync 這個 skill 生成 Signal Collection 區塊提案。使用者已選擇 gsheet-progress-sync（不需要再詢問選擇）。讀取 ~/.agents/skills/gsheet-progress-sync/SKILL.md，理解這個 skill 的目的與步驟，提出 2-4 個具體的 Signal Collection 條件，然後展示完整的提案並停在 [A/R/M] gate，不要寫入任何 SKILL.md 檔案。",
       "expected_output": "提出 2-4 個專屬於 gsheet-progress-sync 的具體條件（提及 Google Sheet、row、sync、task row、進度等 skill 特有術語），格式包含 IF/THEN 結構和 S1/S2/S3 分類，展示完整 Signal Collection markdown 區塊，並顯示 [A] Approve [R] Skip [M] Modify 選項後暫停。不修改任何 SKILL.md 檔案。",
       "files": []
     },
     {
       "id": 6,
-      "prompt": "請執行 improve init，針對 work-wrap-up 這個 skill 生成 Signal Collection 區塊提案。使用者已選擇 work-wrap-up（不需要再詢問選擇）。讀取 ~/.claude/skills/work-wrap-up/SKILL.md，理解這個 skill 的三步驟流程（commit+PR → gsheet → slack），提出 2-4 個具體的 Signal Collection 條件，展示提案並停在 [A/R/M] gate，不要寫入任何 SKILL.md 檔案。",
+      "prompt": "請執行 improve init，針對 work-wrap-up 這個 skill 生成 Signal Collection 區塊提案。使用者已選擇 work-wrap-up（不需要再詢問選擇）。讀取 ~/.agents/skills/work-wrap-up/SKILL.md，理解這個 skill 的三步驟流程（commit+PR → gsheet → slack），提出 2-4 個具體的 Signal Collection 條件，展示提案並停在 [A/R/M] gate，不要寫入任何 SKILL.md 檔案。",
       "expected_output": "提出專屬於 work-wrap-up 三步驟流程的條件（提及 commit、PR、push、gsheet 同步、slack 通知等），展示 Signal Collection 區塊草稿，顯示 [A/R/M] gate 後暫停。不修改任何 SKILL.md。",
       "files": []
     },
@@ -41,6 +41,30 @@
       "id": 7,
       "prompt": "請執行 improve init，同時為 gsheet-progress-sync 和 slack-message 生成 Signal Collection 提案（使用者已選擇這兩個 skill）。展示第一個 skill 的提案後，暫停等待 [A/R/M] 選擇，不要自動繼續顯示第二個 skill 的提案，也不要寫入任何 SKILL.md 檔案。",
       "expected_output": "先展示 gsheet-progress-sync 的 Signal Collection 提案，顯示 [A/R/M] gate 後完全停止，等待使用者回應。不自動展示 slack-message 的提案，不修改任何 SKILL.md。",
+      "files": []
+    },
+    {
+      "id": 8,
+      "prototype": "D",
+      "case_type": "recall",
+      "prompt": "我剛剛用 work-wrap-up 收尾，它完成 commit 和 PR 後沒有同步 gsheet。這不是單次偏好，work-wrap-up 的固定流程本來就應該 commit+PR → gsheet → slack。請記錄這個 skill gap。",
+      "expected_output": "應該標記或收集 GAP，target_skill=work-wrap-up，能描述可重複規則缺口，並指出 expected behavior 是 commit+PR 後同步 gsheet、actual behavior 是漏掉 gsheet。若輸出 <<GAP>>，格式必須是單行 `<<GAP work-wrap-up: ...>>`。",
+      "files": []
+    },
+    {
+      "id": 9,
+      "prototype": "D",
+      "case_type": "precision_clean",
+      "prompt": "剛剛那份 PM 週報語氣不對，這次我想改成更口語一點，因為聽眾臨時從主管變成同事。請直接幫我改文案。",
+      "expected_output": "不應標記 GAP，也不應寫入 signal-queue。這是一次性偏好與受眾變更，不是可重複的 skill 規則缺口；若有說明，應明確 abstain。",
+      "files": []
+    },
+    {
+      "id": 10,
+      "prototype": "D",
+      "case_type": "false_positive_trap",
+      "prompt": "你忘了把昨天的數字放進報告，但原因是我剛剛才把資料檔補上。請重新產生一次。",
+      "expected_output": "不應標記 GAP，也不應把這當成 skill workflow 缺陷。雖然句子包含「你忘了」，但根因是資料當時不存在；應 abstain 或只重新執行任務。",
       "files": []
     }
   ]

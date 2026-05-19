@@ -5,7 +5,7 @@ Append-only。記錄每次 skill 改寫的決策脈絡。
 格式：
 ```
 ## {YYYY-MM-DD} — {target_skill} / {section}
-- Signal / Gap / Rule / Eval / Decision
+- Signal / Gap / Rule / Evolution / Eval cases / Memory links / Eval / Decision
 ```
 
 ---

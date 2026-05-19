@@ -10,7 +10,7 @@
   │                                                             │
   │  使用者說「不對」「少了 X」「漏掉了」→ Claude 偵測缺口        │
   │  在 response 末尾輸出：                                      │
-  │  <<IMPROVE_SIGNAL skill="x" type="S2" gap="...">>           │
+  │  <<GAP skill-name: gap description>>                       │
   └───────────────────────┬─────────────────────────────────────┘
                           │
           ┌───────────────┴───────────────┐
@@ -37,6 +37,15 @@
               │  - status: pending     │
               └────────────┬───────────┘
                            │
+                           ▼
+              ┌────────────────────────┐
+              │   🧠 memory/           │
+              │                        │
+              │  signals.jsonl         │
+              │  skill-graph.json      │
+              │  claims / eval-cases   │
+              └────────────┬───────────┘
+                           │
           ┌────────────────┴────────────────┐
           │                                 │
           ▼                                 ▼
@@ -59,11 +68,13 @@
   │  🔄  /improve 7-Step Workflow                    │
   │                                                 │
   │  Step 0  Scope 偵測（user / project / repo）    │
-  │  Step 1  讀取 signal-queue，取出 pending 項目   │
+  │  Step 0.5 查 Skill Evolution Memory             │
+  │  Step 1  讀取 signal-queue + memory evidence    │
   │  Step 2  歸因分析，定位 SKILL.md 缺口段落       │
   │  Step 3  IF/THEN 規則萃取                       │
-  │  Step 4  建立候選版本（working memory only）    │
-  │  Step 5  skill-creator eval（無 evals 則跳過）  │
+  │  Step 4  Skill Generator 建立候選 v_N           │
+  │  Step 4.5 Surrogate Verifier 合成 A/B/C/D tests │
+  │  Step 5  skill-creator eval + D 型 precision    │
   │  Step 6  ⚠️ Human Gate                         │
   │          [A] Approve → Step 7                   │
   │          [R] Reject  → 結束                     │
@@ -77,7 +88,7 @@
   使用者輸入 /improve init
        │
        ▼
-  列出 ~/.claude/skills/ 所有 skill
+  列出 ~/.agents/skills/ 所有 skill
        │
        ▼
   詢問：要為哪些 skill 加入 Signal Collection 區塊？
@@ -110,10 +121,10 @@
 當使用者在任何對話中表達不滿或指出缺口，Claude 自動在 response 末尾輸出標記：
 
 ```
-<<IMPROVE_SIGNAL skill="skill-name" type="S2" gap="gap description">>
+<<GAP skill-name: gap description>>
 ```
 
-Stop hook (`capture-signal.sh`) 捕捉後寫入 `signal-queue.md`，下次 session 啟動時
+Stop hook (`capture-signal.sh`) 捕捉後寫入 `signal-queue.md` 與 `memory/signals.jsonl`，下次 session 啟動時
 `check-signal-queue.sh` 自動提示。
 
 ### 手動觸發
@@ -145,7 +156,7 @@ Cowork 中沒有 Stop hook，偵測到 gap 時直接用 Bash 工具寫入：
 
 ```bash
 ts=$(date -Iseconds)
-queue="$HOME/.claude/skills/improve/signal-queue.md"
+queue="$HOME/.agents/skills/improve/signal-queue.md"
 printf '\n## [%s] %s\n\n- **type**: %s\n- **source**: cowork auto-detected\n- **gap**: %s\n- **status**: pending\n' \
   "$ts" "skill-name" "S2" "gap description" >> "$queue"
 ```
@@ -156,7 +167,7 @@ printf '\n## [%s] %s\n\n- **type**: %s\n- **source**: cowork auto-detected\n- **
 
 | Hook | 腳本 | 作用 |
 |------|------|------|
-| Stop | `capture-signal.sh` | 從 response 捕捉 `<<IMPROVE_SIGNAL>>` → signal-queue |
+| Stop | `capture-signal.sh` | 從 response 捕捉 `<<GAP>>` → signal-queue + memory |
 | Stop | `capture-skill-candidate.sh` | 從 response 捕捉 `<<SKILL_CANDIDATE>>` → candidate-queue |
 | SessionStart | `check-signal-queue.sh` | session 啟動時若有 pending signal 即提示 |
 
@@ -168,15 +179,33 @@ improve/
 ├── signal-queue.md                   # 待處理 signal 佇列
 ├── candidate-queue.md                # 待審 skill 候選佇列
 ├── changelog.md                      # 改寫歷史（只 append）
+├── memory/
+│   ├── signals.jsonl                  # raw signal events
+│   ├── skill-graph.json               # compact lookup index
+│   ├── claims/                        # consolidated recurring gap claims
+│   ├── eval-cases/                    # generated / approved eval cases
+│   └── versions/                      # version and outcome traces
 ├── scripts/
 │   ├── capture-signal.sh             # Stop hook: signal 捕捉
 │   ├── capture-skill-candidate.sh    # Stop hook: candidate 捕捉
 │   ├── check-signal-queue.sh         # SessionStart hook: 提示
 │   ├── resolve_scope.sh              # Scope 自動偵測
 │   ├── list_candidate_downstream.sh  # 動態推斷下游 skill
+│   ├── memory.sh                     # Skill Evolution Memory 寫入與查詢
+│   ├── consolidate-memory.sh         # 合併 duplicates 並產出 candidate claims
 │   └── propose.sh                    # 手動提交 candidate（Codex CLI 用）
 └── references/
     ├── signal-collection-protocol.md # Signal Collection 區塊範本
     ├── scope-resolution.md           # Scope 解析說明
     └── skill-candidate-protocol.md   # Skill candidate 協議說明
 ```
+
+## Skill Evolution Memory 整理
+
+定期整理 memory：
+
+```bash
+skills/improve/scripts/consolidate-memory.sh --memory-dir skills/improve/memory --min-evidence 2
+```
+
+輸出會依 `target_skill + affected_rule + gap_type` 分群，更新 `memory/claims/{skill}.md` 與 `memory/skill-graph.json`。只有 evidence count 足夠或 human 明確確認的 candidate claim 才能進入正式 skill rewrite。

@@ -3,8 +3,7 @@ flowchart TD
     subgraph DETECT["🔍 Signal Detection — 任何對話中（無需 opt-in）"]
         D1["使用者說「不對」「少了 X」「漏掉了」\n或執行後發現缺口"]
         D2["Claude 偵測缺口\n在 response 末尾輸出標記"]
-        D3["`**&lt;&lt;IMPROVE_SIGNAL**
-skill='x' type='S2' gap='...'**&gt;&gt;**`"]
+        D3["`**&lt;&lt;GAP skill-name: gap description&gt;&gt;**`"]
         D1 --> D2 --> D3
     end
 
@@ -43,7 +42,7 @@ skill='x' type='S2' gap='...'**&gt;&gt;**`"]
 
     subgraph NCW["☁️  Cowork — 無自動通知"]
         N3["無 SessionStart hook\n無自動提示"]
-        N4["Coordinator 看到 IMPROVE_SIGNAL 輸出\n或人工輸入 /improve"]
+        N4["Coordinator 看到 GAP 輸出\n或人工輸入 /improve"]
         N3 --> N4
     end
 
@@ -86,7 +85,7 @@ Append changelog.md"]
     UINIT["使用者輸入\n/improve init"] --> I1
 
     subgraph INIT["🚀  /improve init — 一次性批量初始化"]
-        I1["列出 ~/.claude/skills/ 下\n所有已安裝 skill"]
+        I1["列出 ~/.agents/skills/ 下\n所有已安裝 skill"]
         I2["詢問：要為哪些 skill\n加入 Signal Collection 區塊？"]
         I3["各 skill spawn 獨立 subagent\n分析 SKILL.md 目的與失敗模式"]
         I4["提案：2-4 個 IF-condition\n→ S1/S2/S3 + gap 描述"]
@@ -118,7 +117,7 @@ skill-creator eval 驗證指標"]
     end
 
     I6 --> SC1
-    SC1 -.->|"偵測到條件時\n輸出 IMPROVE_SIGNAL"| D2
+    SC1 -.->|"偵測到條件時\n輸出 GAP"| D2
 
     %% ===== STYLES =====
     classDef detect   fill:#12124a,stroke:#6666ff,color:#d0d0ff,font-size:13px

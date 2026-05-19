@@ -2,7 +2,7 @@
 name: improve
 description: >
   通用 skill 自我進化工具。當任何 skill 執行後使用者有修正、抱怨、或說「少了什麼」，
-  立即在 response 末尾輸出 <<GAP skill-name: 一句話描述缺口>>，
+  且能確認是可重複的 skill 規則缺口時，才在 response 末尾輸出 <<GAP skill-name: 一句話描述缺口>>，
   Stop hook 自動寫入 signal-queue.md。
   主動觸發：「improve」「skill 改進」「improve skill」「修正 skill」「更新 skill 規則」
   「skill 有缺口」「skill 漏掉了」「self-improve」「自我進化」「skill 學習」。
@@ -25,12 +25,12 @@ description: >
 
 ## Scope 解析
 
-執行時以 Bash 邏輯（或 `~/.claude/skills/improve/scripts/resolve_scope.sh`）自動偵測 scope：
+執行時以 Bash 邏輯（或 `~/.agents/skills/improve/scripts/resolve_scope.sh`）自動偵測 scope：
 
 ```
 IF cwd 底下有 skills/{TARGET_SKILL}/SKILL.md        → scope=repo
-ELIF cwd 底下有 .claude/skills/{TARGET_SKILL}/       → scope=project
-ELIF ~/.claude/skills/{TARGET_SKILL}/ 存在           → scope=user
+ELIF cwd 底下有 .agents/skills/{TARGET_SKILL}/       → scope=project
+ELIF ~/.agents/skills/{TARGET_SKILL}/ 存在           → scope=user
 ELSE                                                 → 互動詢問
 ```
 
@@ -38,9 +38,44 @@ ELSE                                                 → 互動詢問
 
 | scope | SKILL.md 路徑 | signal queue |
 |-------|--------------|--------------|
-| user | `~/.claude/skills/{target}/SKILL.md` | `~/.claude/skills/improve/signal-queue.md` |
-| project | `.claude/skills/{target}/SKILL.md` | `.claude/skills/improve/signal-queue.md`（無則 fallback user） |
+| user | `~/.agents/skills/{target}/SKILL.md` | `~/.agents/skills/improve/signal-queue.md` |
+| project | `.agents/skills/{target}/SKILL.md` | `.agents/skills/improve/signal-queue.md`（無則 fallback user） |
 | repo | `skills/{target}/SKILL.md` | `skills/improve/signal-queue.md` |
+
+## Skill Evolution Memory
+
+`signal-queue.md` 是人工可讀的待辦佇列；`memory/` 是 `/improve` 的可查詢狀態層。Stop hook 捕捉 `<<GAP>>` 時，必須同時寫入兩者：
+
+```
+skills/improve/memory/
+  signals.jsonl                 # raw events: correction, failure, suspected gap
+  skill-graph.json              # compact lookup index
+  claims/{skill}.md             # consolidated recurring gap claims
+  eval-cases/{skill}.json       # generated / approved eval cases
+  versions/{skill}.jsonl        # skill version and outcome trace
+```
+
+最小 schema：
+
+```json
+{
+  "signal_id": "sig_20260518_001",
+  "target_skill": "improve",
+  "affected_rule": "Universal Signal Detection",
+  "gap_type": "false_positive",
+  "expected_behavior": "do not emit GAP for one-off requirement correction",
+  "actual_behavior": "emits GAP because user said '不對'",
+  "evidence_count": 1,
+  "status": "pending",
+  "links": {
+    "duplicates": [],
+    "tested_by": [],
+    "caused_false_positive": []
+  }
+}
+```
+
+查詢時使用 `scripts/memory.sh lookup --memory-dir <dir> --target-skill <skill> [--affected-rule <rule>] [--gap-type <type>]`，先依 `target_skill`、`affected_rule`、`gap_type` 找 prior signals / claims / eval cases；不要直接手寫解析 JSONL。
 
 ## Signal 類型
 
@@ -52,7 +87,11 @@ ELSE                                                 → 互動詢問
 
 ## Universal Signal Detection — 無需 Opt-in
 
-**執行任何 skill 的過程中**，若偵測到以下情況，在 response 末尾加入 `<<GAP>>` 標記，Stop hook 自動捕捉到 signal-queue.md，不需要 skill 本身做任何設定：
+**執行任何 skill 的過程中**，只有同時滿足以下三個證據時，才在 response 末尾加入 `<<GAP>>` 標記，Stop hook 自動捕捉到 signal-queue.md，不需要 skill 本身做任何設定：
+
+1. 能指出 active / target skill 名稱
+2. 能描述「skill 文件中的可重複規則缺口」，不是單次任務失誤
+3. 能寫出 expected behavior vs actual behavior
 
 | 情況 | 辨識關鍵字範例 |
 |------|--------------|
@@ -60,6 +99,21 @@ ELSE                                                 → 互動詢問
 | 使用者對 skill 產出進行實質修正 | 使用者直接改寫或否定 agent 的輸出 |
 | 某 skill 的產出被下一個 skill 處理時格式不符 | 下游 skill 報錯或提到上游格式問題 |
 | Skill 指示的工具呼叫失敗、參數錯誤 | exit code 非零、工具回傳 schema error |
+
+**Do not emit GAP / Abstain 條件**：
+
+- 使用者只是在改需求、補偏好、調整一次性輸出，不代表 skill 規則要永久改寫
+- 問題來自缺少資料、外部系統失敗、權限不足、或一次性上下文不足
+- 使用者修正的是產物內容，但沒有證據顯示 skill workflow / trigger / output contract 需要更新
+- 句子包含「不對 / 少了 / 你忘了」，但根因是 product decision、資料來源不完整、或任務範圍改變
+
+**Abstain examples**：
+
+| 使用者訊息 | 判斷 |
+|------------|------|
+| 「不對，我這次想改成給 PM 看的語氣」 | 不標 GAP；這是單次偏好調整 |
+| 「少了昨天那份資料，因為我剛剛才補上檔案」 | 不標 GAP；資料當時不存在 |
+| 「你忘了在 work-wrap-up 後同步 gsheet，這是每次收尾都應該做的固定步驟」 | 標 GAP；有 target skill、可重複規則、expected vs actual |
 
 **標記格式（單行，放 response 末尾，不要放在 code block 內）：**
 
@@ -73,7 +127,7 @@ ELSE                                                 → 互動詢問
 
 ```bash
 ts=$(date -Iseconds)
-queue="$HOME/.claude/skills/improve/signal-queue.md"
+queue="$HOME/.agents/skills/improve/signal-queue.md"
 printf '\n## [%s] %s\n\n- **type**: %s\n- **source**: cowork auto-detected\n- **gap**: %s\n- **status**: pending\n' \
   "$ts" "skill-name" "S2" "gap description" >> "$queue"
 ```
@@ -82,7 +136,7 @@ printf '\n## [%s] %s\n\n- **type**: %s\n- **source**: cowork auto-detected\n- **
 
 使用者輸入 `/improve init` 或 `improve init` 時，執行以下流程：
 
-1. 列出 user scope 下所有 skill（`~/.claude/skills/`）
+1. 列出 user scope 下所有 skill（`~/.agents/skills/`）
 2. 詢問使用者：「要為哪些 skill 加入 Signal Collection 區塊？」（可複選，或輸入 `all`）
 3. 對每個選定的 skill，**spawn 獨立 subagent**：
    - 讀取該 skill 的完整 SKILL.md
@@ -111,8 +165,27 @@ printf '\n## [%s] %s\n\n- **type**: %s\n- **source**: cowork auto-detected\n- **
 ### Step 0: Scope 偵測
 
 1. 若使用者提供了 `SCOPE=user/project/repo`，直接使用
-2. 否則執行 `~/.claude/skills/improve/scripts/resolve_scope.sh` 自動推斷
+2. 否則執行 `~/.agents/skills/improve/scripts/resolve_scope.sh` 自動推斷
 3. 顯示偵測結果：`scope={value}, skill_path={path}, queue_path={path}`
+
+### Step 0.5: Skill Evolution Memory Lookup
+
+在正式進入 Step 2 歸因前，先查 `memory/skill-graph.json` 與 `memory/signals.jsonl`：
+
+1. 是否已有相似 signal（`duplicates`）
+2. 是否已有 rejected false positive（避免重複誤判）
+3. 是否已有同一 `affected_rule` 的 prior candidate / version
+4. 是否已有可重用的 A/B/C/D eval case
+5. 是否有 downstream skill 被過去改寫影響
+
+若查到相似歷史，Step 6 review 包必須展示：
+
+```
+related_signals: <signal ids>
+prior_decisions: approved / rejected / superseded
+reused_eval_cases: <eval case ids>
+risk: regression / contradiction / false_positive
+```
 
 ### Step 1: 收集信號 (Collect Signal)
 
@@ -133,6 +206,17 @@ gap = {
 }
 ```
 
+同時讀取 Skill Evolution Memory lookup 結果，附加：
+
+```
+memory_evidence = {
+  related_signals: <相似 signal id 列表>,
+  prior_claims: <claims/{skill}.md 中相關 claim>,
+  reusable_eval_cases: <eval-cases/{skill}.json 中可重用 cases>,
+  risk: <regression / contradiction / false_positive / none>
+}
+```
+
 若 queue 為空且無輸入，輸出「目前無待處理的缺口信號」並結束。
 
 若有多個 pending 信號，優先處理 **S1 > S2 > S3**，每次只處理一個 skill 的改寫。
@@ -142,7 +226,7 @@ gap = {
 對每個 gap：
 
 1. 若已指定 `TARGET_SKILL` → 直接讀取目標 skill 的 SKILL.md
-2. 否則 → 執行 `~/.claude/skills/improve/scripts/list_candidate_downstream.sh` 動態推斷候選，逐一讀取 SKILL.md
+2. 否則 → 執行 `~/.agents/skills/improve/scripts/list_candidate_downstream.sh` 動態推斷候選，逐一讀取 SKILL.md
 3. 定位缺口對應的具體段落（Step N、判斷規則、對照表的某行）
 
 **動態下游推斷**（取代手動維護的 dependency map）：
@@ -159,8 +243,8 @@ downstream_impact: <動態推斷出的下游 skill，若無則填「無」>
 ```
 
 ⚠️ **Scope Guard（嚴格執行）**：
-- `scope=user`：只能改 `~/.claude/skills/` 下的檔案
-- `scope=project`：只能改 `.claude/skills/` 下的檔案
+- `scope=user`：只能改 `~/.agents/skills/` 下的檔案
+- `scope=project`：只能改 `.agents/skills/` 下的檔案
 - `scope=repo`：只能改 `skills/` 下的檔案
 - 禁止修改 CLAUDE.md、settings.json、或任何非 skill 檔案
 
@@ -183,11 +267,79 @@ IF <condition> THEN <action>
 
 ### Step 4: 建立候選版本 (Build Candidate)
 
+**Role**：Skill Generator session = 主 Claude session 本身（執行 `/improve` 的這個 session）。不要為 generator 另 spawn subagent；主 session 已累積 Step 1-3 的 signal、memory evidence、歸因與 IF/THEN context。
+
 在 working memory 中（**不寫入正式檔案**）產出：
 - 改寫後的完整段落內容
 - 測試更新內容（若有）
 
-清楚標記：哪些是新增的規則（`[NEW]`），哪些是修改（`[MODIFIED]`）。
+清楚標記：
+- 哪些是新增的規則（`[NEW]`），哪些是修改（`[MODIFIED]`）
+- 若這是第 N 輪改寫（N > 1），標註上一輪 v_{N-1} 的 verifier diagnostic 與本輪 v_N 的修正點
+
+禁止在此 session 內做 self-review；驗證交給 Step 4.5 的獨立 verifier。
+
+### Step 4.5: Surrogate Verifier（協同演化驗證）⚡
+
+**目的**：在 human gate 前，用獨立 verifier 自動合成測試、做 mental simulation，攔截可預期的失敗。
+
+**Agent 拓撲**：
+- Generator = 主 Claude session（你自己，承載 Step 4 改寫）
+- Verifier = fresh subagent；優先使用 `skill-verifier`，若不存在則用 `general-purpose`
+
+**資訊隔離規則**：Verifier 只能看到下列資料，不看 generator 的推理過程與完整對話：
+- signal-queue.md 中的 gap 描述
+- Skill Evolution Memory 中與該 skill/rule 相關的 distilled evidence
+- target SKILL.md 改寫後完整段落（v_N）
+- 該 skill 的 Signal Collection 區塊（若有）
+- `references/eval-test-cases-design.md` 的 A/B/C/D 原型摘要
+
+**Verifier 流程**：
+
+1. 判定 eval 原型：
+   - A Golden Reference：有客觀答案可比對
+   - B Rubric + Scenario：產出主觀品質文件 / 報告 / scaffold
+   - C State Transition：會改變外部狀態 / 送訊息 / 部署 / 寫入系統
+   - D Adversarial / Counter-Example：任務是在找問題 / 診斷 / review / 判斷是否該標 GAP
+2. 依原型合成 3-5 個測試案例：
+   - A：golden answer + tolerance + wrong-but-plausible trap
+   - B：Yes/No rubric + typical / boundary / error scenarios
+   - C：pre-state / action / post-state + non-mutation assertion
+   - D：recall case + clean precision case + false-positive trap case
+3. 對候選 v_N 做 mental simulation：若測試案例觸發，新規則會怎麼處理？
+4. 若失敗，產 structured diagnostic 並回 Step 4 產生下一版
+5. 若通過，標記 `surrogate_pass` 並進 Step 5
+
+**特別規則**：若 target 是 `/improve` 的 Universal Signal Detection，必須至少生成 1 個「不應標 GAP」的 precision clean case 和 1 個 false-positive trap case；只測 recall 不算通過。
+
+**Diagnostic schema（必須回傳 YAML）**：
+
+```yaml
+verdict: fail | pass
+eval_prototype:
+  primary: A | B | C | D
+  secondary: []
+synthesized_cases:
+  - id: D-precision-clean
+    input: <具體情境>
+    expected: <應該發生什麼，例如 no_gap>
+    observed: <v_N 會怎麼處理>
+    source_evidence: <memory signal id / claim id / synthetic>
+root_cause: <為什麼 v_N 仍會觸發原 gap，pass 時填 none>
+missed_cases:
+  - case: <具體情境>
+    why_fails: <一句話原因>
+    failure_type: false_negative | false_positive | weak_rubric | state_leak | wrong_method
+actionable_fix:
+  - <Generator 下一輪該補什麼規則>
+memory_updates:
+  - <應新增 / supersede / link 的 signal、claim、eval case>
+```
+
+**Loop control**：
+- 內部預算 M=5：verifier subagent 內部最多 refine 自己 5 次
+- 外部預算 K=3：Step 4 ↔ Step 4.5 來回最多 3 次
+- 達上限仍 fail：不 rollback，帶最後 v_N 進 Step 6；review 包標記 `verifier_status: budget_exhausted`
 
 ### Step 5: skill-creator Eval（Eval on Candidate）⚡
 
@@ -203,9 +355,14 @@ IF <condition> THEN <action>
    - `trigger_score < 0.8` → ⛔ 觸發精度退化，回 Step 3 調整 description
    - `pass_rate delta < 0` → ⛔ 產出品質退化，回 Step 3 調整規則
 
+**若 target 是 GAP 偵測 / Universal Signal Detection**：
+- 必跑 D 型 precision guard：recall=1、precision clean=1、false-positive trap=1
+- precision clean 或 trap 任一失敗時，不得升級到 user-level `CLAUDE.md` 或 hook-level 強指示
+- 若現有 eval set 缺 D 型 cases，使用 Step 4.5 合成 cases 補進 Step 6 review 包，標記 `recommended_eval_cases`
+
 **若無 eval set**：
 - 標記 `eval_status: skipped（無 eval set）`
-- 在 Step 6 的 review 包中提示建議建立 eval cases
+- 不能只標 skipped；必須把 Step 4.5 合成的 A/B/C/D cases 放進 Step 6 review 包，作為「建議新增 eval set」給 human gate 審核
 
 ### Step 6: Human Review Gate ⚠️ STOP — 等待人工審核
 
@@ -233,9 +390,27 @@ THEN {action}
 ### Eval 結果
 | 維度 | 結果 |
 |------|------|
+| Eval prototype | {A/B/C/D primary}（secondary: {optional}） |
+| Surrogate verifier rounds | {N} / 3（攔截 {x} 個問題） |
+| Synthesized eval cases | {case_count}（包含 {precision_count} 個 precision/trap cases） |
 | Trigger precision | {score} {✅/⛔/⏭️} |
 | Output quality | {pass_rate} (delta: {+/-}) {✅/⛔/⏭️} |
-| 狀態 | ✅ 通過 / ⛔ 退化 / ⏭️ 跳過（無 eval set） |
+| 演化軌跡 | v1 → v2 → ... → v_N |
+| 狀態 | ✅ 通過 / ⛔ 退化 / ⚠️ budget exhausted / ⏭️ 跳過（無 eval set） |
+
+### Verifier 攔截報告（節選）
+- v1 問題：{verifier diagnostic 1}
+- v2 修正：{generator response}
+
+### False Positive Guard（若 target 是 GAP 偵測）
+- clean case: {no_gap case} → {pass/fail}
+- trap case: {looks_like_gap_but_not_skill_issue} → {pass/fail}
+
+### Memory Evidence
+- related_signals: {ids}
+- prior_decisions: approved / rejected / superseded
+- reused_eval_cases: {ids}
+- risk: regression / contradiction / false_positive / none
 
 ### 影響範圍
 - 直接改寫：{target_skill}/{section}
@@ -263,6 +438,17 @@ THEN {action}
 - **Signal**: {S1/S2/S3} — {來源描述}
 - **Gap**: {現象一句話描述}
 - **Rule**: `IF {condition} THEN {action}`
+- **Evolution**:
+  - surrogate_rounds: {N}
+  - oracle_rounds: {K}
+  - final_version: v{N}
+  - verifier_caught: {問題類型列表}
+- **Eval cases**:
+  - prototype: {A/B/C/D}
+  - added_cases: recall={N}, precision={N}, trap={N}
+- **Memory links**:
+  - related_signals: {ids}
+  - tested_by: {eval case ids}
 - **Eval**: trigger={score}, quality={pass_rate} (delta: {delta})
 - **Decision**: approved by human
 ```
@@ -285,7 +471,7 @@ THEN {action}
 
 Auto-trigger 機制：signal 產生時，skill **在當下輸出提示**，不依賴 Stop hook。
 
-其他 skill 若要 opt-in，參考 `~/.claude/skills/improve/references/signal-collection-protocol.md` 在 SKILL.md 末尾加入 Signal Collection 區塊。
+其他 skill 若要 opt-in，參考 `~/.agents/skills/improve/references/signal-collection-protocol.md` 在 SKILL.md 末尾加入 Signal Collection 區塊。
 
 ## Notes
 
@@ -294,3 +480,5 @@ Auto-trigger 機制：signal 產生時，skill **在當下輸出提示**，不�
 - changelog.md 只 append，永不修改歷史記錄
 - Eval 失敗（⛔）時不進入 Step 6，直接回 Step 3；三次仍失敗則報告 blocker 並請人工介入
 - 若 skill-creator plugin 未安裝，eval 步驟自動跳過並標記 skipped
+- Skill Evolution Memory 只追蹤 skill/rule/signal/eval/version/outcome，不建立完整個人知識庫
+- 定期整理 memory 時，使用 `scripts/consolidate-memory.sh --memory-dir <dir>` 合併 duplicates、標記 superseded claims、產出 high-priority candidate claims
