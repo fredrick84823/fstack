@@ -21,7 +21,7 @@
     },
     {
       "id": 4,
-      "prompt": "我在 /Users/fredrick/Desktop/01_Work/projects/github-projects/tagtoo-skills 目錄下工作，請執行 improve skill，TARGET_SKILL=extract-skill，幫我改進 extract-skill。這個目錄下有 skills/extract-skill/SKILL.md。",
+      "prompt": "我在 /Users/fredrick/Desktop/01_Work/workspace/fstack 目錄下工作，請執行 improve skill，TARGET_SKILL=extract-skill，幫我改進 extract-skill。這個目錄下有 skills/extract-skill/SKILL.md。",
       "expected_output": "Step 0 偵測到 repo scope（因為 cwd 有 skills/ 目錄且含 SKILL.md），顯示 scope=repo，skill_path=<cwd>/skills/extract-skill/SKILL.md，queue_path=<cwd>/skills/improve/signal-queue.md。不應該誤判為 user scope。",
       "files": []
     },

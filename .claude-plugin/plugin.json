@@ -1,7 +1,7 @@
 {
   "name": "fstack",
   "version": "1.0.0",
-  "description": "Personal Claude Code workflow skills, commands, and hooks",
+  "description": "Personal Claude Code workflow skills, commands, and hooks for context continuity and skill evolution",
   "author": {
     "name": "Fredrick",
     "url": "https://github.com/fredrick84823"
@@ -9,5 +9,5 @@
   "repository": "https://github.com/fredrick84823/fstack",
   "homepage": "https://github.com/fredrick84823/fstack",
   "license": "MIT",
-  "keywords": ["workflow", "productivity", "skills", "commands", "hooks"]
+  "keywords": ["workflow", "productivity", "skills", "commands", "hooks", "handoff", "evals"]
 }

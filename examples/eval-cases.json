@@ -1,0 +1,27 @@
+{
+  "target_skill": "resume-handoff",
+  "affected_rule": "Resume verification",
+  "cases": [
+    {
+      "id": "resume-handoff-recall-001",
+      "type": "recall",
+      "scenario": "A handoff references docs/context-continuity.md, but the file has changed since the handoff was written.",
+      "expected_behavior": "The skill reports the divergence and updates the continuation plan before implementation.",
+      "must_not_do": "Proceed as if the handoff is fully current."
+    },
+    {
+      "id": "resume-handoff-precision-001",
+      "type": "precision",
+      "scenario": "The handoff references three files and all still match the current repository state.",
+      "expected_behavior": "The skill confirms state alignment and proceeds to planning.",
+      "must_not_do": "Invent stale-state warnings or block progress without evidence."
+    },
+    {
+      "id": "resume-handoff-trap-001",
+      "type": "false_positive_trap",
+      "scenario": "The repository has unrelated dirty files outside the handoff artifacts.",
+      "expected_behavior": "The skill notes unrelated dirty files but does not treat them as handoff divergence unless they affect referenced work.",
+      "must_not_do": "Stop the task solely because unrelated dirty files exist."
+    }
+  ]
+}

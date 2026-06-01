@@ -1,0 +1,15 @@
+{
+  "skill_name": "personal-wiki-mine",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "Use a bounded source set similar to the successful Zettelkasten PoC v2: AI Coding or Context Engineering whiteboard context, the skill-evals blog card, and related thoughts files on item-label drift, personal wiki, CoEvoSkills, and requirements classification. Generate a candidate file for human scoring.",
+      "expected_output": "1. Writes a candidate file path under thoughts/global/fredrick/candidates/ 2. Includes a source manifest, source coverage audit, and Heptabase fetch notes 3. Classifies requested whiteboard coverage as complete, partial, not-found, or ambiguous 4. If a requested whiteboard is partial/not-found/ambiguous, performs compensating semantic_search_objects card searches and fetches selected cards fully 5. Produces 5 mechanism-first candidate claims 6. Each candidate has at least 3 evidence items, at least 2 source types, and a rebuttal path 7. Includes self-audit and user scoring sections 8. Runs scripts/validate_candidate_file.py if available and fixes structural failures 9. Does not promote output into thoughts/wiki"
+    },
+    {
+      "id": 1,
+      "prompt": "Run personal-wiki-mine on a bounded source brief where the requested Heptabase whiteboard may fetch only as a shell: AI Coding whiteboard plus related cards on Context Engineering, Intentional Compaction, Skill Evals, Dopamine Flywheels, and AI Coding Mindset. Generate a candidate file for human scoring.",
+      "expected_output": "1. Does not treat an empty or shell-only whiteboard fetch as complete evidence 2. Records the partial whiteboard limitation in Source Coverage Audit 3. Uses card-level semantic/title search to compensate for the partial whiteboard 4. Lists compensating queries and selected cards 5. Candidate evidence does not rely solely on the partial whiteboard shell 6. Output remains awaiting-user-scoring and does not write to thoughts/wiki"
+    }
+  ]
+}

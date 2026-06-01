@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skill Memory Reflect"
+  short_description: "Reflect on improve memory signals."
+  default_prompt: "Reflect on the pending /improve Skill Evolution Memory signals and produce a prioritized worklist."

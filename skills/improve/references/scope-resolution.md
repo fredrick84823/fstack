@@ -10,7 +10,7 @@
 
 **偵測條件**：cwd 下有 `skills/` 目錄，且該目錄內有至少一個 `SKILL.md`
 
-**典型場景**：在 `tagtoo-skills` 這類 skills 源碼 repo 裡執行 `/improve`
+**典型場景**：在 `fstack` 這類 skills 源碼 repo 裡執行 `/improve`
 
 **路徑對應**：
 - Target skill：`{cwd}/skills/{target}/SKILL.md`

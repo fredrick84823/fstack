@@ -77,6 +77,8 @@ skills/improve/memory/
 
 查詢時使用 `scripts/memory.sh lookup --memory-dir <dir> --target-skill <skill> [--affected-rule <rule>] [--gap-type <type>]`，先依 `target_skill`、`affected_rule`、`gap_type` 找 prior signals / claims / eval cases；不要直接手寫解析 JSONL。
 
+反思整理時使用 `skill-memory-reflect` skill，而不是把 raw hook capture 當成最終狀態。`skill-memory-reflect` 會讀取 `memory/signals.jsonl`、推論舊 records 的缺失欄位、產生 `claims/{skill}.md`、`eval-cases/{skill}.json`，並輸出 prioritized `/improve` worklist。`scripts/consolidate-memory.sh` 只作為機械備援，不是語意去重與 eval 產生的主要流程。
+
 ## Signal 類型
 
 | 類型 | 觸發情境 | 範例 |

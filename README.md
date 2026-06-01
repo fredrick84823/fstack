@@ -1,6 +1,23 @@
 # fstack
 
-Personal Claude Code workflow skills, commands, and hooks — optimized for developer productivity.
+Personal Claude Code workflow skills, commands, and hooks.
+
+`fstack` is my personal agent operating system for Claude Code: it preserves
+context across sessions, turns repeated workflow failures into skill
+improvements, and keeps agent work auditable through plans, handoffs, hooks,
+queues, eval cases, and human review gates.
+
+## What This Demonstrates
+
+- **Context continuity**: long-running agent work can be paused, handed off,
+  resumed, and verified against the current repository state.
+- **Closed-loop skill evolution**: user corrections and repeated failures are
+  captured as signals, consolidated into claims and eval cases, then reviewed
+  before changing durable skill behavior.
+- **Auditable agent work**: plans, handoffs, changelogs, queues, and validation
+  reports make agent decisions inspectable instead of hidden in chat history.
+- **Human-gated automation**: agents can propose changes, but durable workflow
+  mutations pass through explicit review.
 
 ## Installation
 
@@ -8,11 +25,80 @@ Personal Claude Code workflow skills, commands, and hooks — optimized for deve
 claude plugin install https://github.com/fredrick84823/fstack
 ```
 
-## Skills (16)
+## Core Workflows
+
+### Context Continuity
+
+```text
+research-codebase / create-plan
+        |
+        v
+implement-plan
+        |
+        v
+create-handoff
+        |
+        v
+resume-handoff
+        |
+        v
+verify current repo state before continuing
+```
+
+See [docs/context-continuity.md](docs/context-continuity.md) and
+[examples/handoff.md](examples/handoff.md).
+
+### Skill Evolution Loop
+
+```text
+User correction / repeated failure
+        |
+        v
+<<GAP skill-name: description>>
+        |
+        v
+Stop hook captures the signal
+        |
+        v
+signal-queue.md + memory/signals.jsonl
+        |
+        v
+skill-memory-reflect consolidates claims + eval cases
+        |
+        v
+/improve proposes a SKILL.md update
+        |
+        v
+human gate
+        |
+        v
+skill rule updated + changelog
+```
+
+See [docs/skill-evolution-loop.md](docs/skill-evolution-loop.md),
+[examples/improve-signal.md](examples/improve-signal.md),
+[examples/skill-memory-claim.md](examples/skill-memory-claim.md), and
+[examples/eval-cases.json](examples/eval-cases.json).
+
+## Design Principles
+
+- **Verify before continuing**: resumed work validates repository state instead
+  of trusting stale notes.
+- **Raw events are not decisions**: hook-captured signals are evidence; reflected
+  claims and eval cases are the review package.
+- **Human gate before mutation**: skill rewrites require explicit approval before
+  changing durable behavior.
+- **Precision over noise**: not every complaint becomes a skill gap; false
+  positive traps are part of eval design.
+- **Scope-aware mutation**: user, project, and repo skill scopes prevent
+  accidental cross-context edits.
+
+## Skills (21)
 
 | Skill | Description |
 |-------|-------------|
 | `beautiful-mermaid` | Render professionally-styled Mermaid diagrams |
+| `brainstorming` | Structured brainstorming coach |
 | `codex-brainstorm` | Adversarial brainstorming with Codex |
 | `codex-cli-review` | Review uncommitted changes via Codex CLI |
 | `create-handoff` | Create handoff docs for session transitions |
@@ -21,12 +107,16 @@ claude plugin install https://github.com/fredrick84823/fstack
 | `deep-module` | Enforce Deep Module principle for interface-first design |
 | `extract-skill` | Extract and build skills from candidate queue |
 | `grill-me` | Turn vague ideas into concrete PRDs through targeted questioning |
+| `heptabase-task-card` | Create Sprint-ready Heptabase task cards |
 | `implement-plan` | Execute phased plans with human checkpoints |
 | `implement-team-plan` | Execute team-plans with native agent teams |
 | `improve` | Skill self-evolution and gap tracking |
+| `personal-wiki-mine` | Mine mechanism-first candidate claims from bounded thoughts/ and Heptabase sources |
 | `research-and-plan` | Research codebase + plan in one step |
 | `research-codebase` | Document codebase architecture via sub-agents |
 | `resume-handoff` | Resume work from a handoff document |
+| `skill-memory-reflect` | Consolidate improve memory into claims, eval cases, and worklists |
+| `start-day` | Build a daily task board from local and external work signals |
 | `work-wrap-up` | Commit + PR + progress sync + Slack notification |
 
 ## Commands (8)
@@ -42,13 +132,14 @@ claude plugin install https://github.com/fredrick84823/fstack
 | `/start-worktree-task` | Create a new git worktree for isolated work |
 | `/work-wrap-up` | Shortcut to the work-wrap-up skill |
 
-## Agents (6)
+## Agents (8)
 
 Sub-agents for the research → plan → implement workflow (from [HumanLayer](https://github.com/humanlayer/humanlayer/tree/main/.claude)):
 
 | Agent | Description |
 |-------|-------------|
 | `session-ender` | Session 收尾：識別 improve signals → 提示 /work-wrap-up |
+| `skill-verifier` | Independently verify proposed skill rule changes and eval scenarios |
 | `codebase-analyzer` | Deep analysis of specific codebase components |
 | `codebase-locator` | Locate relevant files and entry points for a task |
 | `codebase-pattern-finder` | Find existing patterns and conventions |

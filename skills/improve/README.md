@@ -163,7 +163,7 @@ printf '\n## [%s] %s\n\n- **type**: %s\n- **source**: cowork auto-detected\n- **
 
 ## Hooks 安裝
 
-安裝 `tagtoo-skills` 時選擇 `improve`，安裝腳本會詢問是否啟用三個 hooks：
+安裝 `fstack` 時選擇 `improve`，安裝腳本會詢問是否啟用三個 hooks：
 
 | Hook | 腳本 | 作用 |
 |------|------|------|

@@ -1,6 +1,8 @@
 improve-workspace/
 excalidraw-diagram/references/.venv/
 **/.DS_Store
+**/__pycache__/
+*.pyc
 node_modules/
 thoughts/
 .system/
