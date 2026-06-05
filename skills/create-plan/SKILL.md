@@ -1,6 +1,6 @@
 ---
 name: create-plan
-description: Create detailed implementation plans through interactive research and iteration. Use when starting a new feature or ticket that needs a comprehensive technical plan. Saves plan to thoughts/shared/plans/.
+description: Create detailed implementation plans through interactive research and iteration. Use when starting a new feature or ticket that needs a comprehensive technical plan. Saves plans to the repo-appropriate plans location and emits Personal Knowledge events when applicable.
 allowed-tools: Read, Write, Bash, Agent, mcp__plugin_claude-mem_mcp-search__smart_search, mcp__plugin_claude-mem_mcp-search__smart_outline, mcp__plugin_claude-mem_mcp-search__smart_unfold
 ---
 
@@ -34,6 +34,15 @@ Tip: /create-plan thoughts/shared/tickets/eng_1234.md
 ### 1. Read Context Files Fully
 Read all mentioned files fully (no limit/offset). For code files > 100 lines, prefer `smart_outline` + `smart_unfold`. Do NOT spawn sub-tasks before reading.
 
+### 1.5. Query claude-mem for prior context
+
+Before spawning sub-agents, pull past work on this feature/ticket.
+
+1. **Search**: `mcp__plugin_claude-mem_mcp-search__search(query="<feature/ticket topic>", project="<repo>", limit=15, orderBy="relevance")`
+2. **Fetch** the 3-6 most relevant IDs: `mcp__plugin_claude-mem_mcp-search__get_observations(ids=[...])`
+
+Embed results into sub-agent prompts and include a brief summary in "Present Understanding" so the user sees what past work informs this plan. Skip silently if unavailable.
+
 ### 2. Research in Parallel
 
 Spawn parallel agents:
@@ -63,7 +72,10 @@ Propose phasing first, get buy-in before writing details.
 
 ### 5. Write Plan
 
-**Path**: `thoughts/shared/plans/YYYY-MM-DD[-ENG-XXXX]-description.md`
+**Path**:
+- Personal Knowledge repo: `plans/YYYY-MM-DD-description.md`
+- HumanLayer thoughts repos: `thoughts/shared/plans/YYYY-MM-DD[-ENG-XXXX]-description.md`
+- Other repos: use the nearest established `plans/`, `docs/plans/`, or `thoughts/shared/plans/` convention.
 
 ```markdown
 # [Feature] Implementation Plan
@@ -98,7 +110,38 @@ Propose phasing first, get buy-in before writing details.
 ## References
 ```
 
-### 6. Sync and Review
+### 6. Emit Personal Knowledge Event When Applicable
+
+If the plan is created inside `/Users/fredrick/Desktop/02_Personal/personal-knowledge` or is about Fredrick's Personal Knowledge system, append a metadata-only event to:
+
+`/Users/fredrick/Desktop/02_Personal/personal-knowledge/queues/events/knowledge-events.jsonl`
+
+Event rules:
+- Use `source_class: "plan"` and `signal_type: "artifact_completed"`.
+- Use a repo-relative `source_ref`, such as `plans/YYYY-MM-DD-description.md`.
+- Keep `summary` short and non-sensitive; do not copy plan body into the event.
+- Set `privacy` from the plan context when obvious; otherwise default to `sensitive`.
+- Set `suggested_route` to `wiki_candidate` or `wiki_source_queue`.
+- Set `status: "queued"`.
+- Add a candidate file only when the plan contains durable architecture, operating rules, or decisions that should later be reviewed for wiki ingestion.
+- Validate the JSONL after writing:
+
+```bash
+jq -c . /Users/fredrick/Desktop/02_Personal/personal-knowledge/queues/events/knowledge-events.jsonl >/dev/null
+```
+
+### 7. Sync and Review
+
+For Personal Knowledge repo plans, sync with git:
+
+```bash
+git status --short
+git add plans/YYYY-MM-DD-description.md queues/events/knowledge-events.jsonl
+git commit -m "docs(plans): add <description> plan"
+git push origin main
+```
+
+For HumanLayer thoughts repos:
 
 ```bash
 humanlayer thoughts sync
