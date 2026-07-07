@@ -8,6 +8,21 @@ allowed-tools: Read, Grep, Glob, Bash, Agent, mcp__plugin_claude-mem_mcp-search_
 
 Comprehensive codebase research via parallel sub-agents. **Document what EXISTS — no improvements, no critique.**
 
+## Hidden-Requirement Mode
+
+When `research-codebase` is invoked from a planning flow such as
+`ask-codebase-questions`, `design-concept`, `structure-outline`,
+`create-plan`, or `research-and-plan`, keep the research context as neutral as
+possible:
+
+- Research from questions, symbols, components, and code references.
+- Do not include the proposed solution, desired implementation, or design
+  direction in sub-agent prompts unless it is necessary to locate code.
+- Ask sub-agents for facts about current behavior only.
+- Write findings as factual current-state notes, not recommendations.
+
+This prevents the research step from confirming the requested design too early.
+
 ## Exploration Tools Priority
 
 For code file exploration, prefer **smart-explore tools** (4-18x token savings):
@@ -53,6 +68,15 @@ This determines which agents to spawn and whether to sync.
 
 Wait for ALL sub-agents to complete before synthesizing.
 
+In Hidden-Requirement Mode, phrase each sub-agent prompt as:
+
+```text
+Research these codebase questions and document current behavior only:
+- [question]
+
+Do not propose a solution or implementation plan.
+```
+
 ### 4. Gather Metadata
 
 **If `shared/scripts/spec_metadata.sh` is accessible:**
@@ -92,6 +116,9 @@ last_updated: [YYYY-MM-DD]
 
 ## Code References
 - `path/to/file:123` - Description
+
+## Requirement Visibility
+[If Hidden-Requirement Mode was used, note that research was question-driven and did not include the proposed solution.]
 
 ## Architecture Documentation
 

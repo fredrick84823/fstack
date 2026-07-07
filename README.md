@@ -93,10 +93,11 @@ See [docs/skill-evolution-loop.md](docs/skill-evolution-loop.md),
 - **Scope-aware mutation**: user, project, and repo skill scopes prevent
   accidental cross-context edits.
 
-## Skills (21)
+## Skills (24)
 
 | Skill | Description |
 |-------|-------------|
+| `ask-codebase-questions` | Create question artifacts before research or planning |
 | `beautiful-mermaid` | Render professionally-styled Mermaid diagrams |
 | `brainstorming` | Structured brainstorming coach |
 | `codex-brainstorm` | Adversarial brainstorming with Codex |
@@ -105,6 +106,7 @@ See [docs/skill-evolution-loop.md](docs/skill-evolution-loop.md),
 | `create-plan` | Create detailed implementation plans |
 | `create-team-plan` | Decompose plans for agent teams |
 | `deep-module` | Enforce Deep Module principle for interface-first design |
+| `design-concept` | Create concise architecture design concepts for human alignment |
 | `extract-skill` | Extract and build skills from candidate queue |
 | `grill-me` | Turn vague ideas into concrete PRDs through targeted questioning |
 | `heptabase-task-card` | Create Sprint-ready Heptabase task cards |
@@ -117,6 +119,7 @@ See [docs/skill-evolution-loop.md](docs/skill-evolution-loop.md),
 | `resume-handoff` | Resume work from a handoff document |
 | `skill-memory-reflect` | Consolidate improve memory into claims, eval cases, and worklists |
 | `start-day` | Build a daily task board from local and external work signals |
+| `structure-outline` | Create interface-first outlines with vertical verification slices |
 | `work-wrap-up` | Commit + PR + progress sync + Slack notification |
 
 ## Commands (8)
