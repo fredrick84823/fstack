@@ -14,8 +14,9 @@ queues, eval cases, and human review gates.
 - **Closed-loop skill evolution**: user corrections and repeated failures are
   captured as signals, consolidated into claims and eval cases, then reviewed
   before changing durable skill behavior.
-- **Auditable agent work**: plans, handoffs, changelogs, queues, and validation
-  reports make agent decisions inspectable instead of hidden in chat history.
+- **Auditable agent work**: questions, research docs, design concepts, structure
+  outlines, plans, handoffs, changelogs, queues, and validation reports make
+  agent decisions inspectable instead of hidden in chat history.
 - **Human-gated automation**: agents can propose changes, but durable workflow
   mutations pass through explicit review.
 
@@ -30,7 +31,19 @@ claude plugin install https://github.com/fredrick84823/fstack
 ### Context Continuity
 
 ```text
-research-codebase / create-plan
+ask-codebase-questions
+        |
+        v
+research-codebase
+        |
+        v
+design-concept
+        |
+        v
+structure-outline
+        |
+        v
+create-plan
         |
         v
 implement-plan
@@ -44,6 +57,13 @@ resume-handoff
         v
 verify current repo state before continuing
 ```
+
+This replaces the older Research → Plan → Implement shape with a smaller
+artifact chain: Questions → hidden-requirement Research → Design → Structure
+Outline → Plan → Implement. The change keeps architecture alignment readable,
+keeps codebase research fact-only, and avoids oversized plan files becoming a
+substitute for reading code. Source: Dexter Horthy, [Everything We Got Wrong
+About Research-Plan-Implement](https://www.youtube.com/watch?v=YwZR6tc7qYg).
 
 See [docs/context-continuity.md](docs/context-continuity.md) and
 [examples/handoff.md](examples/handoff.md).
@@ -137,7 +157,9 @@ See [docs/skill-evolution-loop.md](docs/skill-evolution-loop.md),
 
 ## Agents (8)
 
-Sub-agents for the research → plan → implement workflow (from [HumanLayer](https://github.com/humanlayer/humanlayer/tree/main/.claude)):
+Sub-agents for the Questions → Research → Design → Structure → Plan →
+Implement workflow (from
+[HumanLayer](https://github.com/humanlayer/humanlayer/tree/main/.claude)):
 
 | Agent | Description |
 |-------|-------------|
