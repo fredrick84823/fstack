@@ -16,8 +16,12 @@ When `research-codebase` is invoked from a planning flow such as
 possible:
 
 - Research from questions, symbols, components, and code references.
-- Do not include the proposed solution, desired implementation, or design
-  direction in sub-agent prompts unless it is necessary to locate code.
+- When spawning sub-agents, hide the user's requirement, proposed solution,
+  desired implementation, product intent, and design direction by default.
+- Pass only the minimum neutral research question needed to locate and explain
+  current code behavior.
+- If a requirement detail is truly necessary to locate code, rewrite it as a
+  neutral search target and do not reveal the intended change.
 - Ask sub-agents for facts about current behavior only.
 - Write findings as factual current-state notes, not recommendations.
 
@@ -68,13 +72,32 @@ This determines which agents to spawn and whether to sync.
 
 Wait for ALL sub-agents to complete before synthesizing.
 
-In Hidden-Requirement Mode, phrase each sub-agent prompt as:
+### 3.1 Sub-Agent Prompt Contract
+
+Before spawning each sub-agent, strip the prompt down to neutral research
+questions. Do not paste the ticket, PRD, user request, proposed design, target
+behavior, or implementation idea into the sub-agent prompt.
+
+In Hidden-Requirement Mode, phrase each sub-agent prompt like this:
 
 ```text
-Research these codebase questions and document current behavior only:
+Research these codebase questions and document current behavior only.
+You are intentionally not being given the product requirement or proposed
+solution. Do not infer or recommend a change.
+
 - [question]
 
-Do not propose a solution or implementation plan.
+Output:
+- Relevant files and symbols
+- Current behavior and data/control flow
+- Existing patterns and tests
+- Open questions answerable only by the caller
+```
+
+Bad sub-agent prompt:
+
+```text
+We need to add [feature/change]. Research how to implement it.
 ```
 
 ### 4. Gather Metadata
