@@ -1,11 +1,12 @@
 # fstack
 
-Personal Claude Code workflow skills, commands, and hooks.
+Personal Claude Code workflows and a Pi coding-agent team lead.
 
-`fstack` is my personal agent operating system for Claude Code: it preserves
-context across sessions, turns repeated workflow failures into skill
-improvements, and keeps agent work auditable through plans, handoffs, hooks,
-queues, eval cases, and human review gates.
+`fstack` is my personal agent operating system: it preserves context across
+sessions, turns repeated workflow failures into skill improvements, and keeps
+agent work auditable through plans, handoffs, hooks, queues, eval cases, and
+human review gates. It also includes **Firstmate**, a Pi team lead with isolated
+teammate delegation and durable local memory.
 
 ## What This Demonstrates
 
@@ -19,12 +20,29 @@ queues, eval cases, and human review gates.
   agent decisions inspectable instead of hidden in chat history.
 - **Human-gated automation**: agents can propose changes, but durable workflow
   mutations pass through explicit review.
+- **Agent-team orchestration**: Firstmate turns thought dumps into bounded work,
+  delegates to isolated Pi teammates, and recalls relevant local memory.
 
 ## Installation
+
+### Claude Code plugin
 
 ```bash
 claude plugin install https://github.com/fredrick84823/fstack
 ```
+
+### Pi package (Firstmate)
+
+```bash
+pi install git:github.com/fredrick84823/fstack
+pi
+```
+
+Firstmate ships with `scout`, `planner`, `worker`, and `reviewer` teammates. It
+auto-captures ordinary thought dumps into secret-screened project memory; set
+`FIRSTMATE_AUTO_MEMORY=0` to opt out. See
+[`extensions/firstmate/README.md`](extensions/firstmate/README.md) and
+[`docs/firstmate.md`](docs/firstmate.md).
 
 ## Core Workflows
 
@@ -99,6 +117,19 @@ See [docs/skill-evolution-loop.md](docs/skill-evolution-loop.md),
 [examples/improve-signal.md](examples/improve-signal.md),
 [examples/skill-memory-claim.md](examples/skill-memory-claim.md), and
 [examples/eval-cases.json](examples/eval-cases.json).
+
+## Firstmate for Pi
+
+```text
+thought dump -> Firstmate -> delegate isolated teammates -> verify
+                  |
+                  +-> durable local memory -> bounded relevant recall
+```
+
+Firstmate exposes two deep tools: `firstmate_delegate` for single or parallel
+crew work and `firstmate_memory` for durable recall. The root `package.json`
+uses an explicit Pi manifest, so installing fstack as a Pi package does not
+implicitly load the Claude-oriented `skills/`, `commands/`, or `agents/`.
 
 ## Design Principles
 

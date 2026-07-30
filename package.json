@@ -1,0 +1,27 @@
+{
+  "name": "fstack",
+  "version": "1.1.0",
+  "description": "Fredrick's Claude Code workflows and Firstmate team lead for Pi",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "pi-package",
+    "claude-code-plugin",
+    "coding-agent",
+    "multi-agent"
+  ],
+  "scripts": {
+    "test:firstmate": "node --test extensions/firstmate/tests/*.test.ts"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/firstmate/index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-agent-core": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  }
+}

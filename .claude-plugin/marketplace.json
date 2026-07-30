@@ -5,17 +5,17 @@
     "email": "fredrick@tagtoo.com"
   },
   "metadata": {
-    "description": "Personal Claude Code workflow skills, commands & hooks",
+    "description": "Personal Claude Code workflows plus the Firstmate Pi team lead",
     "homepage": "https://github.com/fredrick84823/fstack"
   },
   "plugins": [
     {
       "name": "fstack",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "source": "./",
-      "description": "24 workflow skills, 8 commands, and improve hooks for context continuity and skill evolution",
+      "description": "24 workflow skills, 8 commands, improve hooks, and the Firstmate Pi coding-agent team lead",
       "category": "productivity",
-      "tags": ["workflow", "productivity", "skills", "commands", "hooks", "planning", "handoff", "evals"]
+      "tags": ["workflow", "productivity", "skills", "commands", "hooks", "planning", "handoff", "evals", "pi", "multi-agent"]
     }
   ]
 }
