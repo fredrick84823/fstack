@@ -113,7 +113,7 @@ See [docs/skill-evolution-loop.md](docs/skill-evolution-loop.md),
 - **Scope-aware mutation**: user, project, and repo skill scopes prevent
   accidental cross-context edits.
 
-## Skills (24)
+## Skills (25)
 
 | Skill | Description |
 |-------|-------------|
@@ -140,6 +140,7 @@ See [docs/skill-evolution-loop.md](docs/skill-evolution-loop.md),
 | `skill-memory-reflect` | Consolidate improve memory into claims, eval cases, and worklists |
 | `start-day` | Build a daily task board from local and external work signals |
 | `structure-outline` | Create interface-first outlines with vertical verification slices |
+| `topic-dictionary` | Build dependency-aware concept dictionaries in learning order |
 | `work-wrap-up` | Commit + PR + progress sync + Slack notification |
 
 ## Commands (8)

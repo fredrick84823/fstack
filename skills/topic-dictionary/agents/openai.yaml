@@ -1,0 +1,4 @@
+interface:
+  display_name: "Topic Dictionary"
+  short_description: "Build structured concept dictionaries in learning order"
+  default_prompt: "Use $topic-dictionary to create a concept dictionary for this domain."
