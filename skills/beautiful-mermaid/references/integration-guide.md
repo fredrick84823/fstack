@@ -52,6 +52,79 @@
 
 ---
 
+## 互動式檢視器（`-f html` 預設）
+
+```bash
+node scripts/render_mermaid.js -i big.mmd -o big.html -f html            # 互動
+node scripts/render_mermaid.js -i big.mmd -o big.html -f html --static   # 靜態
+```
+
+模板實作在 `scripts/lib/html.js`：`#viewport` / `#stage` / `#hud` / `#hint` 加尾端 inline
+`<script>`，原生 JS、零依賴、可離線從 `file://` 開啟。滾輪／捏合以游標為錨點縮放
+（0.1x–8x），左鍵拖曳平移，雙擊 1:1，`f` fit、`0` reset、`+`/`-` 中心縮放，載入自動 fit。
+
+### 為何 CSS transform 縮放會模糊
+
+```text
+transform: scale(4) 的路徑
+  SVG 以 1x 佈局尺寸 rasterize 成合成圖層（bitmap）
+        │
+        ▼
+  合成器把該 bitmap 放大 4 倍 → 文字與線條邊緣模糊
+
+bake 的路徑
+  svg.style.width/height = base * scale
+        │
+        ▼
+  瀏覽器以新佈局尺寸重新 rasterize 向量 → 邊緣銳利
+```
+
+瀏覽器只保證「元素佈局尺寸」對應的解析度；`transform: scale()` 之後不會重新光柵化
+（部分情況會，但不保證，且大圖幾乎必然沿用舊圖層）。因此縮放必須寫進實際尺寸。
+
+### bake + residual 的做法
+
+```js
+// 1. 取出並移除固有尺寸，之後由 CSS 尺寸決定佈局
+var baseW = parseFloat(svg.getAttribute('width')) || viewBox[2];
+var baseH = parseFloat(svg.getAttribute('height')) || viewBox[3];
+svg.removeAttribute('width');
+svg.removeAttribute('height');
+
+// 2. 把縮放烘進真實尺寸（padding 同步乘 scale，避免邊框跳動）
+function bake() {
+  baked = scale;
+  svg.style.width = baseW * baked + 'px';
+  svg.style.height = baseH * baked + 'px';
+  stage.style.padding = PAD * baked + 'px';
+  draw();
+}
+
+// 3. 手勢進行中只用 residual transform，保持 60fps 即時回饋
+function draw() {
+  stage.style.transform =
+    'translate(' + tx + 'px,' + ty + 'px) scale(' + scale / baked + ')';
+}
+
+// 4. 停止約 90ms 後才 bake（bake 會觸發 layout + 重新光柵化，不能每一幀做）
+function scheduleBake() {
+  clearTimeout(bakeTimer);
+  bakeTimer = setTimeout(bake, 90);
+}
+```
+
+注意事項：
+
+| 項目 | 原因 |
+|---|---|
+| `will-change: transform` 只在 `.dragging` 期間 | 常駐會固定合成圖層，bake 後仍沿用舊 bitmap |
+| `#stage > svg { max-width: none }` | 否則 `max-width: 100%` 會壓縮 bake 後的尺寸 |
+| 錨點縮放 `tx = cx - k * (cx - tx)` | 保持游標下的內容座標不動 |
+| bake 前後 residual 應為 `scale(1)` | 可作為自動化驗證的斷言 |
+| `window.__mermaidViewer` | headless 驗證用（`state()` / `fit()` / `zoomAt()` / `bake()`） |
+
+---
+
 ## HTML 頁面組織模式
 
 ### 模式 1：單圖表頁面
@@ -251,7 +324,7 @@
 #!/bin/bash
 # batch-render.sh - 批量渲染所有 .mmd 檔案
 
-THEME="tokyo-night"
+PRESET="craft"
 INPUT_DIR="./diagrams"
 OUTPUT_DIR="./rendered"
 
@@ -269,7 +342,7 @@ for mmd_file in "$INPUT_DIR"/*.mmd; do
     node scripts/render_mermaid.js \
         -i "$mmd_file" \
         -o "$OUTPUT_DIR/${filename}.svg" \
-        -t "$THEME"
+        -p "$PRESET"
 
     if [ $? -eq 0 ]; then
         echo "✅ $filename.svg"
@@ -286,7 +359,7 @@ echo "✨ 完成！共渲染 $(ls "$OUTPUT_DIR"/*.svg 2>/dev/null | wc -l) 個�
 ```powershell
 # batch-render.ps1 - 批量渲染所有 .mmd 檔案
 
-$Theme = "tokyo-night"
+$Preset = "craft"
 $InputDir = "./diagrams"
 $OutputDir = "./rendered"
 
@@ -301,7 +374,7 @@ Get-ChildItem -Path $InputDir -Filter *.mmd | ForEach-Object {
     node scripts/render_mermaid.js `
         -i $_.FullName `
         -o "$OutputDir/$filename.svg" `
-        -t $Theme
+        -p $Preset
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host "✅ $filename.svg" -ForegroundColor Green
@@ -357,7 +430,7 @@ jobs:
             npx beautiful-mermaid render \
               -i "$file" \
               -o "rendered/${filename}.svg" \
-              -t github-light
+              --offline
           done
 
       - name: Commit rendered diagrams
@@ -378,23 +451,26 @@ jobs:
 
 ```tsx
 import { useEffect, useState } from 'react';
-import { renderMermaid } from 'beautiful-mermaid';
+import { renderMermaidSVG, THEMES } from 'beautiful-mermaid';
 
 interface DiagramProps {
   code: string;
   theme?: string;
 }
 
-export function MermaidDiagram({ code, theme = 'tokyo-night' }: DiagramProps) {
+export function MermaidDiagram({ code, theme = 'zinc-light' }: DiagramProps) {
   const [svg, setSvg] = useState<string>('');
   const [error, setError] = useState<string>('');
 
   useEffect(() => {
     const render = async () => {
       try {
-        const result = await renderMermaid(code, {
-          theme,
-          fontFamily: 'Inter',
+        const result = renderMermaidSVG(code, {
+          ...THEMES[theme],
+          transparent: true,
+          font: 'Inter',
+          nodeSpacing: 28,
+          layerSpacing: 48,
         });
         setSvg(result);
         setError('');
@@ -448,7 +524,7 @@ function App() {
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { renderMermaid } from 'beautiful-mermaid';
+import { renderMermaidSVG, THEMES } from 'beautiful-mermaid';
 
 const props = defineProps<{
   code: string;
@@ -460,9 +536,12 @@ const error = ref('');
 
 const render = async () => {
   try {
-    svg.value = await renderMermaid(props.code, {
-      theme: props.theme || 'tokyo-night',
-      fontFamily: 'Inter',
+    svg.value = renderMermaidSVG(props.code, {
+      ...THEMES[props.theme || 'zinc-light'],
+      transparent: true,
+      font: 'Inter',
+      nodeSpacing: 28,
+      layerSpacing: 48,
     });
     error.value = '';
   } catch (err) {
@@ -534,7 +613,7 @@ rendered/
 
 1. **快取渲染結果** - 避免重複渲染相同內容
 2. **預渲染靜態圖表** - 在建置階段渲染，而非執行時
-3. **使用 CDN** - 對於公開圖表，使用 CDN 加速
+3. **離線輸出** - 使用 `--offline` 移除遠端字型依賴
 4. **延遲載入** - 只渲染可見的圖表
 
 ---

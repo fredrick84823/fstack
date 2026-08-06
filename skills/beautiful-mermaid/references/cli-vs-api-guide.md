@@ -55,9 +55,15 @@ node scripts/render_mermaid.js [options]
 
 | 參數 | 簡寫 | 預設值 | 說明 | 範例 |
 |------|------|--------|------|------|
-| `--theme` | `-t` | `tokyo-night` | 主題名稱 | `-t github-light` |
-| `--format` | `-f` | `svg` | 輸出格式（svg 或 html） | `-f html` |
-| `--transparent` | 無 | `false` | 透明背景 | `--transparent` |
+| `--preset` | `-p` | `craft` | 呈現 preset（craft / craft-dark / legacy） | `-p craft-dark` |
+| `--theme` | `-t` | preset 決定 | 主題顏色覆寫（向後兼容） | `-t github-light` |
+| `--format` | `-f` | `svg` | `svg` / `html` / `ascii` | `-f ascii` |
+| `--transparent` / `--opaque` | 無 | preset 決定 | 強制透明 / 不透明 | `--opaque` |
+| `--offline` | 無 | `false` | 系統字體、移除遠端 `@import` | `--offline` |
+| `--font` | 無 | `Inter` | 字體覆寫 | `--font Georgia` |
+| `--padding` / `--node-spacing` / `--layer-spacing` | 無 | 40 / 28 / 48 | 間距覆寫 | `--layer-spacing 64` |
+| `--ascii-chars` | 無 | `false` | ASCII 格式改用 `+-|>` | `--ascii-chars` |
+| `--list-presets` / `--list-themes` | 無 | - | 列出可用選項 | `--list-presets` |
 | `--help` | `-h` | - | 顯示幫助訊息 | `-h` |
 
 ### CLI 使用範例
@@ -102,7 +108,7 @@ for file in diagrams/*.mmd; do
     node scripts/render_mermaid.js \
         -i "$file" \
         -o "rendered/${filename}.svg" \
-        -t nord
+        -p craft
     echo "✅ Rendered: $filename"
 done
 ```
@@ -157,7 +163,7 @@ jobs:
             node scripts/render_mermaid.js \
               -i "$file" \
               -o "rendered/${filename}.svg" \
-              -t github-light
+              --offline
           done
 
       - name: Commit changes
@@ -193,53 +199,53 @@ jobs:
 #### 主要渲染函數
 
 ```typescript
-function renderMermaid(
+function renderMermaidSVG(
   code: string,
   options?: RenderOptions
-): Promise<string>
+): string                       // 同步
 ```
 
 **參數**：
 - `code` (string) - Mermaid 圖表程式碼
 - `options` (RenderOptions, 可選) - 渲染選項
 
-**RenderOptions 介面**：
+**RenderOptions 介面（1.1.3 實際契約）**：
 
 ```typescript
 interface RenderOptions {
-  theme?: string;              // 主題名稱，預設 'tokyo-night'
-  fontFamily?: string;         // 字體，預設 'Inter'
-  monoFontFamily?: string;     // 等寬字體，預設 'JetBrains Mono'
+  // 顏色：直接展開 THEMES[name]，沒有 theme 欄位
+  bg?: string; fg?: string; line?: string; accent?: string;
+  muted?: string; surface?: string; border?: string;
+
+  font?: string;               // 字體，預設 'Inter'
+  padding?: number;            // 畫布 padding，預設 40
+  nodeSpacing?: number;        // 同層節點間距，預設 24
+  layerSpacing?: number;       // 層間距，預設 40
+  componentSpacing?: number;   // 不連通子圖間距
   transparent?: boolean;       // 透明背景，預設 false
-  scale?: number;              // 縮放比例，預設 1
-  width?: number;              // 寬度（像素）
-  height?: number;             // 高度（像素）
+  interactive?: boolean;       // 僅 xychart 的 hover tooltip
 }
 ```
 
-**返回值**：
-- Promise<string> - 渲染後的 SVG 字串
+不存在 `theme`、`fontFamily`、`monoFontFamily`、`scale`、`width`、`height`。
+
+**返回值**：string - SVG 字串（非同步版本：`renderMermaidSVGAsync`）
 
 #### ASCII 渲染函數
 
 ```typescript
-function renderMermaidAscii(
-  code: string
-): Promise<string>
+function renderMermaidASCII(
+  code: string,
+  options?: AsciiRenderOptions   // useAscii, paddingX/Y, colorMode, theme
+): string                        // 同步
 ```
-
-**參數**：
-- `code` (string) - Mermaid 圖表程式碼
-
-**返回值**：
-- Promise<string> - ASCII/Unicode 藝術字串
 
 ### API 使用範例
 
 #### 範例 1：基本 Node.js 使用
 
 ```javascript
-import { renderMermaid } from 'beautiful-mermaid';
+import { renderMermaidSVG, THEMES } from 'beautiful-mermaid';
 
 const code = `
 graph TD
@@ -248,9 +254,15 @@ graph TD
     B -->|No| D[End]
 `;
 
-const svg = await renderMermaid(code, {
-  theme: 'tokyo-night',
-  fontFamily: 'Inter',
+import { THEMES } from 'beautiful-mermaid';
+
+const svg = renderMermaidSVG(code, {
+  ...THEMES['zinc-light'],
+  transparent: true,
+  font: 'Inter',
+  padding: 40,
+  nodeSpacing: 28,
+  layerSpacing: 48,
 });
 
 console.log(svg); // SVG 字串
@@ -259,12 +271,12 @@ console.log(svg); // SVG 字串
 #### 範例 2：自定義選項
 
 ```javascript
-const svg = await renderMermaid(code, {
-  theme: 'github-light',
-  fontFamily: 'Arial',
-  monoFontFamily: 'Courier New',
+const svg = renderMermaidSVG(code, {
+  ...THEMES['github-light'],
+  font: 'Inter',
   transparent: true,
-  scale: 1.5,
+  nodeSpacing: 32,
+  layerSpacing: 56,
 });
 ```
 
@@ -272,7 +284,7 @@ const svg = await renderMermaid(code, {
 
 ```javascript
 try {
-  const svg = await renderMermaid(code, { theme: 'tokyo-night' });
+  const svg = renderMermaidSVG(code, THEMES['zinc-light']);
   console.log('✅ Rendered successfully');
 } catch (error) {
   console.error('❌ Rendering failed:', error.message);
@@ -284,9 +296,9 @@ try {
 
 ```typescript
 import { useEffect, useState } from 'react';
-import { renderMermaid } from 'beautiful-mermaid';
+import { renderMermaidSVG, THEMES } from 'beautiful-mermaid';
 
-function useMermaid(code: string, theme: string = 'tokyo-night') {
+function useMermaid(code: string, theme: string = 'zinc-light') {
   const [svg, setSvg] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -299,7 +311,7 @@ function useMermaid(code: string, theme: string = 'tokyo-night') {
       setError(null);
 
       try {
-        const result = await renderMermaid(code, { theme });
+        const result = renderMermaidSVG(code, { ...THEMES[theme], transparent: true });
         if (!cancelled) {
           setSvg(result);
           setLoading(false);
@@ -337,9 +349,9 @@ function DiagramComponent({ code }: { code: string }) {
 
 ```typescript
 import { ref, watch } from 'vue';
-import { renderMermaid } from 'beautiful-mermaid';
+import { renderMermaidSVG, THEMES } from 'beautiful-mermaid';
 
-export function useMermaid(code: string, theme: string = 'tokyo-night') {
+export function useMermaid(code: string, theme: string = 'zinc-light') {
   const svg = ref('');
   const loading = ref(true);
   const error = ref<string | null>(null);
@@ -349,7 +361,7 @@ export function useMermaid(code: string, theme: string = 'tokyo-night') {
     error.value = null;
 
     try {
-      svg.value = await renderMermaid(code, { theme });
+      svg.value = renderMermaidSVG(code, { ...THEMES[theme], transparent: true });
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Unknown error';
     } finally {
@@ -367,20 +379,20 @@ export function useMermaid(code: string, theme: string = 'tokyo-night') {
 
 ```javascript
 import express from 'express';
-import { renderMermaid } from 'beautiful-mermaid';
+import { renderMermaidSVG, THEMES } from 'beautiful-mermaid';
 
 const app = express();
 app.use(express.json());
 
 app.post('/api/render', async (req, res) => {
-  const { code, theme = 'tokyo-night' } = req.body;
+  const { code, theme = 'zinc-light' } = req.body;
 
   if (!code) {
     return res.status(400).json({ error: 'Missing code' });
   }
 
   try {
-    const svg = await renderMermaid(code, { theme });
+    const svg = renderMermaidSVG(code, { ...THEMES[theme], transparent: true });
     res.setHeader('Content-Type', 'image/svg+xml');
     res.send(svg);
   } catch (error) {
@@ -399,11 +411,11 @@ app.listen(3000, () => {
 #### 範例 7：快取優化
 
 ```javascript
-import { renderMermaid } from 'beautiful-mermaid';
+import { renderMermaidSVG, THEMES } from 'beautiful-mermaid';
 
 const cache = new Map();
 
-async function renderWithCache(code, theme = 'tokyo-night') {
+async function renderWithCache(code, theme = 'zinc-light') {
   const key = `${code}:${theme}`;
 
   if (cache.has(key)) {
@@ -412,7 +424,7 @@ async function renderWithCache(code, theme = 'tokyo-night') {
   }
 
   console.log('🔄 Rendering...');
-  const svg = await renderMermaid(code, { theme });
+  const svg = renderMermaidSVG(code, { ...THEMES[theme], transparent: true });
   cache.set(key, svg);
 
   // 限制快取大小
@@ -428,7 +440,7 @@ async function renderWithCache(code, theme = 'tokyo-night') {
 #### 範例 8：ASCII 渲染（終端預覽）
 
 ```javascript
-import { renderMermaidAscii } from 'beautiful-mermaid';
+import { renderMermaidASCII } from 'beautiful-mermaid';
 
 const code = `
 graph TD
@@ -436,7 +448,7 @@ graph TD
     B --> C
 `;
 
-const ascii = await renderMermaidAscii(code);
+const ascii = renderMermaidASCII(code, { colorMode: 'none' });
 console.log(ascii);
 
 // 輸出範例：

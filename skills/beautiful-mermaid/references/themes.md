@@ -2,6 +2,9 @@
 
 Complete reference for all 15 built-in themes in beautiful-mermaid.
 
+預設不是主題，而是 preset：`craft`（`zinc-light` + transparent + Inter + 40/28/48）。
+主題只在明確需要換色時用 `--theme` 覆寫，spacing 仍由 preset 決定。
+
 ## 快速主題選擇流程
 
 ### 根據用途選擇
@@ -13,7 +16,8 @@ Complete reference for all 15 built-in themes in beautiful-mermaid.
 - 護眼長文 → `solarized-light` / `solarized-dark`
 
 **技術文檔與開發**
-- 標準開發者 → `tokyo-night`（預設，最推薦）
+- 標準開發者 → `zinc-light`（`craft` preset 預設）/ `zinc-dark`（`craft-dark`）
+- 深色偏好 → `tokyo-night`（`legacy` preset）
 - VS Code 用戶 → `one-dark`
 - 涼爽專業 → `nord` / `nord-light`
 
@@ -26,7 +30,7 @@ Complete reference for all 15 built-in themes in beautiful-mermaid.
 
 | 情境 | 推薦主題（淺色） | 推薦主題（深色） |
 |------|----------------|----------------|
-| **首次使用** | `github-light` | `tokyo-night` ⭐ |
+| **首次使用** | `zinc-light` ⭐（craft） | `zinc-dark` ⭐（craft-dark） |
 | **企業報告** | `zinc-light` | `zinc-dark` |
 | **開源專案** | `github-light` | `github-dark` |
 | **技術演示** | `catppuccin-latte` | `catppuccin-mocha` |
@@ -187,7 +191,7 @@ If optional colors aren't provided, they are derived from `bg` and `fg` using `c
 
 ---
 
-### tokyo-night (DEFAULT)
+### tokyo-night (legacy preset)
 **Best for:** Developer tools, terminals, code-heavy diagrams
 
 ```javascript

@@ -1,6 +1,10 @@
 # Mermaid Diagram Types Reference
 
-Complete guide to the 5 diagram types supported by beautiful-mermaid.
+Complete guide to the 6 diagram families supported by beautiful-mermaid 1.1.3.
+
+Styling note: keep `.mmd` sources monochrome and emoji-free. Colors, fonts and spacing
+belong to the render preset (`scripts/lib/presets.js`), not the diagram source.
+The diagram header must be the first line — leading `%%` comments break header detection.
 
 ---
 
@@ -167,33 +171,26 @@ flowchart TB
     output --> end_state
     error --> end_state
 
-    style start fill:#dcfce7,stroke:#22c55e
-    style end_state fill:#fecaca,stroke:#ef4444
-    style db fill:#dbeafe,stroke:#3b82f6
-    style error fill:#fed7aa,stroke:#f97316
 ```
 
-### 使用 HTML 標籤美化節點
+### 節點文字排版
 
 ```mermaid
 graph LR
-    A["<b>粗體標題</b><br/><small>次要說明文字</small>"]
-    B["🎨 Beautiful<br/>Mermaid"]
-    C["📊 資料分析<br/><small>v1.0.0</small>"]
+    A["<b>主標題</b><br/><small>次要說明</small>"]
+    B[Beautiful Mermaid]
+    C["資料分析<br/><small>v1.0.0</small>"]
 
     A --> B --> C
-
-    style A fill:#fef3c7,stroke:#fbbf24
-    style B fill:#e9d5ff,stroke:#a855f7
-    style C fill:#dbeafe,stroke:#3b82f6
 ```
 
 **進階技巧**：
-- ✅ 使用 `<br/>` 來分行，提升可讀性
+- ✅ 使用 `<br/>` 分行，提升可讀性
 - ✅ 使用 `<small>` 添加次要資訊
 - ✅ 使用 `<b>` 強調重要文字
-- ✅ 使用 emoji 增加視覺吸引力（適度使用）
-- ✅ 使用 `style` 命令自定義顏色
+- ✅ metadata（協定、格式、條件）寫在 edge label
+- ❌ 不用 emoji；❌ 不在 source 寫 `style ... fill:`（交給 preset）
+- ❗ 只有失敗、風險、單一強調路徑才用 accent 色
 
 ---
 
@@ -584,6 +581,39 @@ erDiagram
 
 ---
 
+## 6. XY Charts
+
+**Use when:** showing numeric series (latency, volume, cost) without a charting library
+
+**Syntax:** `xychart-beta` (also accepts `xychart`)
+
+### Basic Example
+
+```mermaid
+xychart-beta
+    title "Render latency by diagram size"
+    x-axis [10, 25, 50, 100, 200]
+    y-axis "ms" 0 --> 120
+    line [4, 9, 21, 48, 105]
+    bar [6, 12, 26, 55, 112]
+```
+
+### Notes
+
+- `line` and `bar` can be combined; multiple series get sequential color indices.
+- `y-axis "label" min --> max` fixes the scale; omit to auto-scale.
+- `interactive: true` in `RenderOptions` adds hover tooltips (XY charts only).
+- Rendered classes: `.xychart-line`, `.xychart-bar`, `.xychart-dot`, `.xychart-grid`.
+
+### Best Practices
+
+1. **Label the unit** - always name the y-axis
+2. **Few series** - 1–3 series per chart
+3. **Prefer bar for categories**, line for continuous trends
+4. **No chart junk** - the preset handles color; do not restyle in source
+
+---
+
 ## Choosing the Right Diagram Type
 
 | Diagram Type | Best For | Key Strength |
@@ -593,6 +623,7 @@ erDiagram
 | **Sequence** | API interactions, message flow | Shows time-ordered interactions |
 | **Class** | OOP structure, type systems | Shows relationships between classes |
 | **ER** | Database design, data models | Shows entity relationships |
+| **XY chart** | Numeric series, trends | Line/bar chart without a plotting lib |
 
 ### Decision Tree
 
@@ -602,7 +633,8 @@ Need to show...
 ├─ States and transitions? → State Diagram
 ├─ Interactions over time? → Sequence Diagram
 ├─ Class/object structure? → Class Diagram
-└─ Database relationships? → ER Diagram
+├─ Database relationships? → ER Diagram
+└─ Numbers over a scale?    → XY Chart
 ```
 
 ---

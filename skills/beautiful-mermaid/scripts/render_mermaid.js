@@ -1,206 +1,242 @@
 #!/usr/bin/env node
+'use strict';
 
 /**
- * Beautiful Mermaid Renderer
- * 
- * Renders Mermaid diagrams to SVG using the beautiful-mermaid package.
- * Supports both themed SVG output and standalone SVG files.
+ * Beautiful Mermaid Renderer (CLI)
+ *
+ * Single render path: beautiful-mermaid `renderMermaidSVG()` / `renderMermaidASCII()`.
+ * Presentation comes from a preset; the default `craft` preset reproduces the
+ * Craft sample look (mono zinc-light, transparent, Inter, 40/28/48 spacing).
  */
 
 const fs = require('fs');
 const path = require('path');
+const {
+  PRESETS,
+  DEFAULT_PRESET,
+  renderSVG,
+  renderASCII,
+  loadPackage,
+} = require('./lib/presets');
+const { staticHTML, interactiveHTML } = require('./lib/html');
 
-// Parse command line arguments
-const args = process.argv.slice(2);
 const options = {
   input: null,
   output: null,
-  theme: 'tokyo-night',
-  format: 'svg', // 'svg' or 'html'
-  transparent: false,
+  preset: DEFAULT_PRESET,
+  theme: null,
+  format: 'svg', // svg | html | ascii
+  transparent: undefined,
+  offline: false,
+  font: null,
+  padding: undefined,
+  nodeSpacing: undefined,
+  layerSpacing: undefined,
+  useAscii: false,
+  // HTML interactivity (pan/zoom). null = default per format.
+  htmlInteractive: null,
 };
 
-for (let i = 0; i < args.length; i++) {
-  const arg = args[i];
-  switch (arg) {
-    case '--input':
-    case '-i':
-      options.input = args[++i];
-      break;
-    case '--output':
-    case '-o':
-      options.output = args[++i];
-      break;
-    case '--theme':
-    case '-t':
-      options.theme = args[++i];
-      break;
-    case '--format':
-    case '-f':
-      options.format = args[++i];
-      break;
-    case '--transparent':
-      options.transparent = true;
-      break;
-    case '--help':
-    case '-h':
-      printHelp();
-      process.exit(0);
-      break;
-    default:
-      console.error(`Unknown option: ${arg}`);
-      printHelp();
-      process.exit(1);
+function num(value, flag) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    fail(`Option ${flag} expects a number, got '${value}'`);
   }
+  return parsed;
+}
+
+function fail(message) {
+  console.error(`Error: ${message}`);
+  process.exit(1);
 }
 
 function printHelp() {
+  const presetList = Object.entries(PRESETS)
+    .map(([name, p]) => `  ${name.padEnd(12)} ${p.description}`)
+    .join('\n');
   console.log(`
 Beautiful Mermaid Renderer
 
 Usage:
-  node render_mermaid.js --input <file> --output <file> [options]
+  node render_mermaid.js --input <file> [--output <file>] [options]
 
 Options:
-  -i, --input <file>       Input Mermaid file (.mmd or .txt)
-  -o, --output <file>      Output file (.svg or .html)
-  -t, --theme <name>       Theme name (default: tokyo-night)
-  -f, --format <type>      Output format: 'svg' or 'html' (default: svg)
-  --transparent            Make background transparent
-  -h, --help               Show this help message
+  -i, --input <file>       Input Mermaid file (.mmd or .txt); '-' reads stdin
+  -o, --output <file>      Output file; omit to write to stdout
+  -p, --preset <name>      Presentation preset (default: ${DEFAULT_PRESET})
+  -t, --theme <name>       Theme override (explicit opt-in, kept for compatibility)
+  -f, --format <type>      svg | html | ascii (default: svg)
+      --interactive        HTML output: pan/zoom viewer (default for -f html)
+      --static             HTML output: plain embedded SVG, no script
+      --transparent        Force transparent background
+      --opaque             Force opaque background
+      --offline            No remote fonts: system font stack, strip @import
+      --font <family>      Font family override
+      --padding <px>       Canvas padding
+      --node-spacing <px>  Spacing between sibling nodes
+      --layer-spacing <px> Spacing between layers
+      --ascii-chars        ASCII format: use +-|> instead of box-drawing
+      --list-presets       Print presets and exit
+      --list-themes        Print available theme names and exit
+  -h, --help               Show this help
 
-Available themes:
-  zinc-light, zinc-dark, tokyo-night, tokyo-night-storm, tokyo-night-light,
-  catppuccin-mocha, catppuccin-latte, nord, nord-light, dracula,
-  github-light, github-dark, solarized-light, solarized-dark, one-dark
+Presets:
+${presetList}
 
 Examples:
-  # Render with default theme
+  # Default Craft look (mono, transparent, Inter)
   node render_mermaid.js -i diagram.mmd -o diagram.svg
 
-  # Render with specific theme
+  # Dark container
+  node render_mermaid.js -i diagram.mmd -o diagram.svg -p craft-dark
+
+  # Explicit theme override (backwards compatible)
   node render_mermaid.js -i diagram.mmd -o diagram.svg -t nord
 
-  # Render as HTML with embedded SVG
+  # Fully offline SVG (no Google Fonts import)
+  node render_mermaid.js -i diagram.mmd -o diagram.svg --offline
+
+  # Interactive HTML viewer (wheel zoom, drag pan, f/0/+/-)
   node render_mermaid.js -i diagram.mmd -o diagram.html -f html
 
-  # Render with transparent background
-  node render_mermaid.js -i diagram.mmd -o diagram.svg --transparent
+  # Static HTML (no script, e.g. for further embedding)
+  node render_mermaid.js -i diagram.mmd -o diagram.html -f html --static
+
+  # Terminal preview
+  node render_mermaid.js -i diagram.mmd -f ascii
 `);
+}
+
+async function parseArgs(args) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    switch (arg) {
+      case '--input':
+      case '-i':
+        options.input = args[++i];
+        break;
+      case '--output':
+      case '-o':
+        options.output = args[++i];
+        break;
+      case '--preset':
+      case '-p':
+        options.preset = args[++i];
+        break;
+      case '--theme':
+      case '-t':
+        options.theme = args[++i];
+        break;
+      case '--format':
+      case '-f':
+        options.format = args[++i];
+        break;
+      case '--transparent':
+        options.transparent = true;
+        break;
+      case '--opaque':
+        options.transparent = false;
+        break;
+      case '--offline':
+        options.offline = true;
+        break;
+      case '--font':
+        options.font = args[++i];
+        break;
+      case '--padding':
+        options.padding = num(args[++i], '--padding');
+        break;
+      case '--node-spacing':
+        options.nodeSpacing = num(args[++i], '--node-spacing');
+        break;
+      case '--layer-spacing':
+        options.layerSpacing = num(args[++i], '--layer-spacing');
+        break;
+      case '--ascii-chars':
+        options.useAscii = true;
+        break;
+      case '--interactive':
+        options.htmlInteractive = true;
+        break;
+      case '--static':
+        options.htmlInteractive = false;
+        break;
+      case '--list-presets':
+        Object.entries(PRESETS).forEach(([name, p]) =>
+          console.log(`${name}\t${p.description}`)
+        );
+        process.exit(0);
+        break;
+      case '--list-themes': {
+        const { THEMES } = await loadPackage();
+        Object.keys(THEMES).forEach((t) => console.log(t));
+        process.exit(0);
+        break;
+      }
+      case '--help':
+      case '-h':
+        printHelp();
+        process.exit(0);
+        break;
+      default:
+        fail(`Unknown option: ${arg}`);
+    }
+  }
+}
+
+function readSource() {
+  if (options.input === '-') return fs.readFileSync(0, 'utf8');
+  if (!fs.existsSync(options.input)) {
+    fail(`Input file not found: ${options.input}`);
+  }
+  return fs.readFileSync(options.input, 'utf8');
+}
+
+/**
+ * HTML wrapper selection. `-f html` defaults to the interactive viewer;
+ * `--static` falls back to the plain embedded-SVG document.
+ */
+function generateHTML(svg, ctx) {
+  const interactive = options.htmlInteractive !== false;
+  return interactive ? interactiveHTML(svg, ctx) : staticHTML(svg, ctx);
+}
+
+function write(content) {
+  if (options.output) {
+    fs.mkdirSync(path.dirname(path.resolve(options.output)), { recursive: true });
+    fs.writeFileSync(options.output, content, 'utf8');
+    console.error(`Wrote ${options.output}`);
+  } else {
+    process.stdout.write(content.endsWith('\n') ? content : `${content}\n`);
+  }
 }
 
 async function main() {
-  // Validate required arguments
-  if (!options.input || !options.output) {
-    console.error('Error: --input and --output are required');
-    printHelp();
-    process.exit(1);
+  await parseArgs(process.argv.slice(2));
+
+  if (!options.input) fail('--input is required (use - for stdin)');
+  if (!['svg', 'html', 'ascii'].includes(options.format)) {
+    fail(`--format must be svg, html or ascii (got '${options.format}')`);
   }
 
-  // Check if input file exists
-  if (!fs.existsSync(options.input)) {
-    console.error(`Error: Input file not found: ${options.input}`);
-    process.exit(1);
-  }
+  const source = readSource();
 
   try {
-    // Dynamically import beautiful-mermaid
-    const { renderMermaid, THEMES } = await import('beautiful-mermaid');
-
-    // Read Mermaid source
-    const mermaidCode = fs.readFileSync(options.input, 'utf8');
-
-    // Get theme configuration
-    let themeConfig;
-    if (THEMES[options.theme]) {
-      themeConfig = THEMES[options.theme];
-    } else {
-      console.error(`Warning: Theme '${options.theme}' not found. Using tokyo-night.`);
-      themeConfig = THEMES['tokyo-night'];
+    if (options.format === 'ascii') {
+      write(await renderASCII(source, options));
+      return;
     }
 
-    // Apply transparent background if requested
-    if (options.transparent) {
-      themeConfig = { ...themeConfig, transparent: true };
-    }
-
-    // Render to SVG
-    console.log(`Rendering diagram with theme: ${options.theme}`);
-    const svg = await renderMermaid(mermaidCode, themeConfig);
-
-    // Generate output based on format
-    let outputContent;
-    if (options.format === 'html') {
-      outputContent = generateHTML(svg, options.theme);
-    } else {
-      outputContent = svg;
-    }
-
-    // Write output file
-    fs.writeFileSync(options.output, outputContent, 'utf8');
-    console.log(`✅ Successfully rendered to: ${options.output}`);
-
+    const { svg, presetName, themeName } = await renderSVG(source, options);
+    write(
+      options.format === 'html'
+        ? generateHTML(svg, { presetName, themeName, offline: options.offline })
+        : svg
+    );
   } catch (error) {
-    if (error.code === 'ERR_MODULE_NOT_FOUND' || error.message.includes('Cannot find package')) {
-      console.error(`
-❌ Error: beautiful-mermaid package not found.
-
-Please install it first:
-  npm install beautiful-mermaid
-  # or
-  npm install -g beautiful-mermaid
-  # or
-  pnpm add beautiful-mermaid
-  # or
-  bun add beautiful-mermaid
-
-Then try again.
-`);
-      process.exit(1);
-    } else {
-      console.error(`Error rendering diagram: ${error.message}`);
-      console.error(error.stack);
-      process.exit(1);
-    }
+    if (error.code === 'BM_NOT_INSTALLED') fail(error.message);
+    fail(`${error.message}\n${error.stack || ''}`);
   }
-}
-
-function generateHTML(svg, themeName) {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mermaid Diagram - ${themeName}</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 20px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-      background: #f5f5f5;
-    }
-    .container {
-      background: white;
-      padding: 30px;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-    svg {
-      max-width: 100%;
-      height: auto;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    ${svg}
-  </div>
-</body>
-</html>`;
 }
 
 main();

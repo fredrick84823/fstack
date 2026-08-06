@@ -166,10 +166,11 @@ project/
 
 ```bash
 # 渲染單一檔案
-node scripts/render_mermaid.js -i diagram.mmd -o diagram.svg -t github-light
+node scripts/render_mermaid.js -i diagram.mmd -o diagram.svg            # craft preset
+node scripts/render_mermaid.js -i diagram.mmd -o diagram.svg --offline  # 無遠端字型
 
 # 批量渲染
-./assets/examples/batch-render.sh diagrams rendered github-light
+./assets/examples/batch-render.sh diagrams rendered craft svg
 ```
 
 #### 方式 B：Git Hook 自動渲染
@@ -189,22 +190,22 @@ if [ -n "$changed_files" ]; then
         node scripts/render_mermaid.js \
             -i "$file" \
             -o "rendered/${filename}.svg" \
-            -t github-light
+            --offline
         git add "rendered/${filename}.svg"
     done
 fi
 ```
 
-### 5. 主題選擇建議
+### 5. Preset 選擇建議
 
-根據文檔類型選擇合適的主題：
+預設 `craft`（透明、單色）幾乎適用所有 Markdown 場景，因為背景由頁面決定。
 
-| 文檔類型 | 推薦主題（淺色） | 推薦主題（深色） |
-|---------|----------------|----------------|
-| GitHub README | `github-light` | `github-dark` |
-| 企業文檔 | `zinc-light` | `zinc-dark` |
-| 技術部落格 | `tokyo-night-light` | `tokyo-night` |
-| 演示簡報 | `catppuccin-latte` | `catppuccin-mocha` |
+| 文檔類型 | Preset | 備註 |
+|---------|--------|------|
+| GitHub README | `craft` | 透明 SVG 在 light/dark 模式皆可讀 |
+| 企業文檔 | `craft` | 單色，可直接印刷 |
+| 深色簡報 | `craft-dark` | 深底容器 |
+| 需要品牌色 | `craft` + `--theme <name>` | 只換色，spacing 不變 |
 
 ### 6. 圖表大小控制
 
@@ -226,18 +227,17 @@ fi
 
 ## 進階技巧
 
-### 多主題支援
+### 深淺色版本
 
-為同一個圖表生成多個主題版本：
+透明輸出通常一份就夠；需要不同字色時再分兩份：
 
 ```bash
 #!/bin/bash
-themes=("github-light" "github-dark" "tokyo-night")
-for theme in "${themes[@]}"; do
+for preset in craft craft-dark; do
     node scripts/render_mermaid.js \
         -i architecture.mmd \
-        -o "architecture-${theme}.svg" \
-        -t "$theme"
+        -o "architecture-${preset}.svg" \
+        -p "$preset" --offline
 done
 ```
 

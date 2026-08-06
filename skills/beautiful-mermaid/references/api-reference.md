@@ -20,16 +20,16 @@ npm install -g beautiful-mermaid
 
 ## Core Functions
 
-### `renderMermaid(text, options?)`
+### `renderMermaidSVG(text, options?)` — primary API
 
-Render a Mermaid diagram to SVG.
+Render a Mermaid diagram to SVG. **Synchronous** (ELK runs inline, no flash).
 
 **Signature:**
 ```typescript
-async function renderMermaid(
+function renderMermaidSVG(
   text: string,
   options?: RenderOptions
-): Promise<string>
+): string
 ```
 
 **Parameters:**
@@ -37,13 +37,18 @@ async function renderMermaid(
 - `text` (string, required): Mermaid source code
 - `options` (RenderOptions, optional): Rendering configuration
 
-**Returns:** Promise<string> - SVG string
+**Returns:** string - self-contained SVG
+
+**Async variant:** `renderMermaidSVGAsync(text, options?): Promise<string>`.
+
+**Deprecated aliases:** `renderMermaid` (async) and `renderMermaidAscii` still exist for
+backwards compatibility; do not use them in new code.
 
 **Example:**
 ```javascript
-import { renderMermaid } from 'beautiful-mermaid';
+import { renderMermaidSVG } from 'beautiful-mermaid';
 
-const svg = await renderMermaid(`
+const svg = renderMermaidSVG(`
   graph TD
     A[Start] --> B{Decision}
     B -->|Yes| C[Action]
@@ -53,13 +58,13 @@ const svg = await renderMermaid(`
 
 ---
 
-### `renderMermaidAscii(text, options?)`
+### `renderMermaidASCII(text, options?)`
 
 Render a Mermaid diagram to ASCII/Unicode text. **Synchronous.**
 
 **Signature:**
 ```typescript
-function renderMermaidAscii(
+function renderMermaidASCII(
   text: string,
   options?: AsciiRenderOptions
 ): string
@@ -74,13 +79,13 @@ function renderMermaidAscii(
 
 **Example:**
 ```javascript
-import { renderMermaidAscii } from 'beautiful-mermaid';
+import { renderMermaidASCII } from 'beautiful-mermaid';
 
 // Unicode output (prettier)
-const unicode = renderMermaidAscii(`graph LR; A --> B`);
+const unicode = renderMermaidASCII(`graph LR; A --> B`);
 
 // ASCII output (maximum compatibility)
-const ascii = renderMermaidAscii(`graph LR; A --> B`, { 
+const ascii = renderMermaidASCII(`graph LR; A --> B`, { 
   useAscii: true 
 });
 ```
@@ -105,14 +110,14 @@ function fromShikiTheme(theme: ShikiTheme): DiagramColors
 **Example:**
 ```javascript
 import { getSingletonHighlighter } from 'shiki';
-import { renderMermaid, fromShikiTheme } from 'beautiful-mermaid';
+import { renderMermaidSVG, fromShikiTheme } from 'beautiful-mermaid';
 
 const highlighter = await getSingletonHighlighter({
   themes: ['vitesse-dark', 'rose-pine']
 });
 
 const colors = fromShikiTheme(highlighter.getTheme('vitesse-dark'));
-const svg = await renderMermaid(diagram, colors);
+const svg = renderMermaidSVG(diagram, colors);
 ```
 
 **Theme color mapping:**
@@ -145,11 +150,23 @@ interface RenderOptions {
   surface?: string;     // Node fill color
   border?: string;      // Node stroke color
   
-  // Other options
+  // Typography
   font?: string;        // Font family (default: 'Inter')
-  transparent?: boolean;// Transparent background (default: false)
+
+  // Layout spacing
+  padding?: number;           // Canvas padding (default: 40)
+  nodeSpacing?: number;       // Sibling spacing (default: 24)
+  layerSpacing?: number;      // Layer spacing (default: 40)
+  componentSpacing?: number;  // Disconnected components (default: nodeSpacing)
+
+  // Output
+  transparent?: boolean;// No background on the SVG root (default: false)
+  interactive?: boolean;// Hover tooltips, xychart only (default: false)
 }
 ```
+
+There is **no** `theme`, `fontFamily`, `scale`, `width` or `height` option.
+Select a theme by spreading `THEMES[name]` into the options object.
 
 **Defaults:**
 ```javascript
@@ -157,13 +174,22 @@ interface RenderOptions {
   bg: '#FFFFFF',
   fg: '#27272A',
   font: 'Inter',
+  padding: 40,
+  nodeSpacing: 24,
+  layerSpacing: 40,
   transparent: false
 }
 ```
 
+**Skill default (`craft` preset):**
+```javascript
+{ ...THEMES['zinc-light'], transparent: true, font: 'Inter',
+  padding: 40, nodeSpacing: 28, layerSpacing: 48 }
+```
+
 **Mono Mode Example:**
 ```javascript
-await renderMermaid(diagram, {
+renderMermaidSVG(diagram, {
   bg: '#1a1b26',
   fg: '#a9b1d6'
 });
@@ -172,7 +198,7 @@ await renderMermaid(diagram, {
 
 **Enriched Mode Example:**
 ```javascript
-await renderMermaid(diagram, {
+renderMermaidSVG(diagram, {
   bg: '#1a1b26',
   fg: '#a9b1d6',
   line: '#3d59a1',
@@ -195,6 +221,8 @@ interface AsciiRenderOptions {
   paddingX?: number;        // Horizontal padding (default: 5)
   paddingY?: number;        // Vertical padding (default: 5)
   boxBorderPadding?: number;// Padding inside boxes (default: 1)
+  colorMode?: 'none' | 'auto' | 'ansi16' | 'ansi256' | 'truecolor' | 'html'; // default 'auto'
+  theme?: Partial<AsciiTheme>; // ASCII color theme
 }
 ```
 
@@ -274,9 +302,9 @@ const THEMES: Record<string, DiagramColors>
 
 **Example:**
 ```javascript
-import { renderMermaid, THEMES } from 'beautiful-mermaid';
+import { renderMermaidSVG, THEMES } from 'beautiful-mermaid';
 
-const svg = await renderMermaid(diagram, THEMES['tokyo-night']);
+const svg = renderMermaidSVG(diagram, THEMES['tokyo-night']);
 ```
 
 ---
@@ -295,9 +323,9 @@ const DEFAULTS: {
 
 **Example:**
 ```javascript
-import { renderMermaid, DEFAULTS } from 'beautiful-mermaid';
+import { renderMermaidSVG, DEFAULTS } from 'beautiful-mermaid';
 
-const svg = await renderMermaid(diagram, DEFAULTS);
+const svg = renderMermaidSVG(diagram, DEFAULTS);
 ```
 
 ---
@@ -309,29 +337,33 @@ const svg = await renderMermaid(diagram, DEFAULTS);
 ```html
 <script src="https://unpkg.com/beautiful-mermaid/dist/beautiful-mermaid.browser.global.js"></script>
 <script>
-  const { renderMermaid, THEMES } = beautifulMermaid;
+  const { renderMermaidSVG, THEMES } = beautifulMermaid;
   
-  renderMermaid('graph TD; A-->B', THEMES['tokyo-night'])
+  renderMermaidSVG('graph TD; A-->B', THEMES['tokyo-night'])
     .then(svg => {
       document.getElementById('diagram').innerHTML = svg;
     });
 </script>
 ```
 
-### Via CDN (jsDelivr)
+### Via CDN (ESM only)
+
+The package ships ESM (`dist/index.js`); there is no browser global bundle.
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/beautiful-mermaid/dist/beautiful-mermaid.browser.global.js"></script>
+<script type="module">
+  import { renderMermaidSVG, THEMES } from 'https://cdn.jsdelivr.net/npm/beautiful-mermaid@1.1.3/+esm';
+  document.getElementById('d').innerHTML =
+    renderMermaidSVG('graph TD; A-->B', { ...THEMES['zinc-light'], transparent: true });
+</script>
 ```
 
 ### Available exports
 
-The global `beautifulMermaid` object includes:
-- `renderMermaid`
-- `renderMermaidAscii`
-- `THEMES`
-- `DEFAULTS`
-- `fromShikiTheme`
+- `renderMermaidSVG`, `renderMermaidSVGAsync`, `renderMermaidASCII`
+- `parseMermaid`
+- `THEMES`, `DEFAULTS`, `fromShikiTheme`
+- deprecated: `renderMermaid`, `renderMermaidAscii`, `renderMermaidSync`
 
 ---
 
@@ -346,7 +378,7 @@ const customTheme = {
   transparent: true  // Makes background transparent
 };
 
-const svg = await renderMermaid(diagram, customTheme);
+const svg = renderMermaidSVG(diagram, customTheme);
 ```
 
 ### Dynamic Theme Switching
@@ -355,7 +387,7 @@ Beautiful-mermaid uses CSS custom properties, allowing live theme changes withou
 
 ```javascript
 // Initial render
-const svg = await renderMermaid(diagram, THEMES['tokyo-night']);
+const svg = renderMermaidSVG(diagram, THEMES['tokyo-night']);
 document.getElementById('diagram').innerHTML = svg;
 
 // Later, switch theme dynamically
@@ -370,7 +402,7 @@ svgElement.style.setProperty('--accent', '#bd93f9');
 
 ```javascript
 import { getSingletonHighlighter } from 'shiki';
-import { renderMermaid, fromShikiTheme } from 'beautiful-mermaid';
+import { renderMermaidSVG, fromShikiTheme } from 'beautiful-mermaid';
 
 // Load highlighter with desired themes
 const highlighter = await getSingletonHighlighter({
@@ -387,14 +419,14 @@ const rosePineColors = fromShikiTheme(
 );
 
 // Use extracted colors
-const svg1 = await renderMermaid(diagram, vitesseColors);
-const svg2 = await renderMermaid(diagram, rosePineColors);
+const svg1 = renderMermaidSVG(diagram, vitesseColors);
+const svg2 = renderMermaidSVG(diagram, rosePineColors);
 ```
 
 ### Font Customization
 
 ```javascript
-const svg = await renderMermaid(diagram, {
+const svg = renderMermaidSVG(diagram, {
   ...THEMES['tokyo-night'],
   font: 'JetBrains Mono, monospace'
 });
@@ -406,7 +438,7 @@ const svg = await renderMermaid(diagram, {
 
 ```javascript
 try {
-  const svg = await renderMermaid(mermaidCode, options);
+  const svg = renderMermaidSVG(mermaidCode, options);
   console.log('Success:', svg);
 } catch (error) {
   if (error.message.includes('Parse error')) {
@@ -440,7 +472,7 @@ const diagrams = [diagram1, diagram2, diagram3];
 const theme = THEMES['tokyo-night'];
 
 const svgs = await Promise.all(
-  diagrams.map(d => renderMermaid(d, theme))
+  diagrams.map(d => renderMermaidSVG(d, theme))
 );
 ```
 
@@ -454,7 +486,7 @@ async function renderInChunks(diagrams, theme, chunkSize = 10) {
   for (let i = 0; i < diagrams.length; i += chunkSize) {
     const chunk = diagrams.slice(i, i + chunkSize);
     const svgs = await Promise.all(
-      chunk.map(d => renderMermaid(d, theme))
+      chunk.map(d => renderMermaidSVG(d, theme))
     );
     results.push(...svgs);
   }
@@ -501,19 +533,20 @@ Use the official Mermaid library for unsupported diagram types.
 Beautiful-mermaid is written in TypeScript and includes type definitions.
 
 ```typescript
-import { 
-  renderMermaid, 
-  renderMermaidAscii,
-  RenderOptions,
-  DiagramColors,
+import {
+  renderMermaidSVG,
+  renderMermaidASCII,
+  type RenderOptions,
+  type DiagramColors,
   THEMES
 } from 'beautiful-mermaid';
 
 const options: RenderOptions = {
-  bg: '#1a1b26',
-  fg: '#a9b1d6',
-  transparent: false
+  ...THEMES['zinc-light'],
+  transparent: true,
+  nodeSpacing: 28,
+  layerSpacing: 48
 };
 
-const svg: string = await renderMermaid('graph TD; A-->B', options);
+const svg: string = renderMermaidSVG('graph TD; A-->B', options);
 ```

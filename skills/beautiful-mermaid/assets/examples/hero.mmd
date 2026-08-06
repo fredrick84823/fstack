@@ -1,0 +1,13 @@
+stateDiagram-v2
+  %% Reference fixture: reproduces the Craft sample hero diagram.
+  %% Authoring pattern: single direction, short labels, metadata on edges.
+  direction LR
+  [*] --> Input
+  Input --> Parse: DSL
+  Parse --> Layout: AST
+  Layout --> SVG: Vector
+  Layout --> ASCII: Text
+  SVG --> Theme
+  ASCII --> Theme
+  Theme --> Output
+  Output --> [*]

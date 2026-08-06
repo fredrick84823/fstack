@@ -8,10 +8,10 @@
 #
 # 使用方式：
 #   ./batch-render.sh
-#   ./batch-render.sh <input_dir> <output_dir> <theme>
+#   ./batch-render.sh <input_dir> <output_dir> <preset> <format>
 #
 # 範例：
-#   ./batch-render.sh diagrams rendered tokyo-night
+#   ./batch-render.sh diagrams rendered craft svg
 #
 # ========================================
 
@@ -24,13 +24,13 @@ set -e  # 遇到錯誤時退出
 # 預設值
 DEFAULT_INPUT_DIR="./diagrams"
 DEFAULT_OUTPUT_DIR="./rendered"
-DEFAULT_THEME="tokyo-night"
+DEFAULT_PRESET="craft"
 DEFAULT_FORMAT="svg"
 
 # 從命令列參數取得設定，或使用預設值
 INPUT_DIR="${1:-$DEFAULT_INPUT_DIR}"
 OUTPUT_DIR="${2:-$DEFAULT_OUTPUT_DIR}"
-THEME="${3:-$DEFAULT_THEME}"
+PRESET="${3:-$DEFAULT_PRESET}"
 FORMAT="${4:-$DEFAULT_FORMAT}"
 
 # 顏色輸出（optional）
@@ -56,7 +56,7 @@ print_config() {
     echo -e "${BLUE}配置：${NC}"
     echo -e "  輸入目錄: ${YELLOW}$INPUT_DIR${NC}"
     echo -e "  輸出目錄: ${YELLOW}$OUTPUT_DIR${NC}"
-    echo -e "  主題:     ${YELLOW}$THEME${NC}"
+    echo -e "  Preset:   ${YELLOW}$PRESET${NC}"
     echo -e "  格式:     ${YELLOW}$FORMAT${NC}"
     echo ""
 }
@@ -136,7 +136,7 @@ for mmd_file in "$INPUT_DIR"/*.mmd; do
     if node scripts/render_mermaid.js \
         -i "$mmd_file" \
         -o "$output_file" \
-        -t "$THEME" \
+        -p "$PRESET" \
         -f "$FORMAT" \
         > /dev/null 2>&1; then
 

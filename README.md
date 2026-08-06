@@ -144,7 +144,7 @@ See [docs/skill-evolution-loop.md](docs/skill-evolution-loop.md),
 | Skill | Description |
 |-------|-------------|
 | `ask-codebase-questions` | Create question artifacts before research or planning |
-| `beautiful-mermaid` | Render professionally-styled Mermaid diagrams |
+| `beautiful-mermaid` | Render Craft-style Mermaid diagrams (SVG / interactive HTML / ASCII) |
 | `brainstorming` | Structured brainstorming coach |
 | `codex-brainstorm` | Adversarial brainstorming with Codex |
 | `codex-cli-review` | Review uncommitted changes via Codex CLI |
