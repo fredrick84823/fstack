@@ -26,6 +26,32 @@ queues, eval cases, and human review gates.
 claude plugin install https://github.com/fredrick84823/fstack
 ```
 
+### Non-engineer quick start (no clone, no build)
+
+If you don't use Claude Code plugins, or you're on Codex, Cursor, or another
+agent, use the [`skills` CLI](https://github.com/vercel-labs/skills) to pull
+skills straight from this repo. Just tell your agent:
+
+> Run `npx skills add https://github.com/fredrick84823/fstack --all -y` to
+> install all skills from this repo.
+
+Or paste the command directly into any terminal your agent has access to:
+
+```bash
+# install everything (all skills, all detected agents)
+npx skills add https://github.com/fredrick84823/fstack --all
+
+# install just one skill, e.g. doc-to-html
+npx skills add https://github.com/fredrick84823/fstack -s doc-to-html
+
+# preview what's available before installing
+npx skills add https://github.com/fredrick84823/fstack --list
+```
+
+Add `-g` to install globally (available in every project) instead of just the
+current project. No git clone, no Node build step, no manual file copying —
+`npx skills` handles fetching and wiring the skill into your agent's config.
+
 ## Core Workflows
 
 ### Context Continuity
