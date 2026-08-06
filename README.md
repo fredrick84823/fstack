@@ -113,7 +113,7 @@ See [docs/skill-evolution-loop.md](docs/skill-evolution-loop.md),
 - **Scope-aware mutation**: user, project, and repo skill scopes prevent
   accidental cross-context edits.
 
-## Skills (25)
+## Skills (27)
 
 | Skill | Description |
 |-------|-------------|
@@ -127,12 +127,14 @@ See [docs/skill-evolution-loop.md](docs/skill-evolution-loop.md),
 | `create-team-plan` | Decompose plans for agent teams |
 | `deep-module` | Enforce Deep Module principle for interface-first design |
 | `design-concept` | Create concise architecture design concepts for human alignment |
+| `doc-to-html` | Convert technical and knowledge documents into responsive single-page HTML |
 | `extract-skill` | Extract and build skills from candidate queue |
 | `grill-me` | Turn vague ideas into concrete PRDs through targeted questioning |
 | `heptabase-task-card` | Create Sprint-ready Heptabase task cards |
 | `implement-plan` | Execute phased plans with human checkpoints |
 | `implement-team-plan` | Execute team-plans with native agent teams |
 | `improve` | Skill self-evolution and gap tracking |
+| `knowledge-map` | Build visual-first learning maps from learning targets and current state |
 | `personal-wiki-mine` | Mine mechanism-first candidate claims from bounded thoughts/ and Heptabase sources |
 | `research-and-plan` | Research codebase + plan in one step |
 | `research-codebase` | Document codebase architecture via sub-agents |

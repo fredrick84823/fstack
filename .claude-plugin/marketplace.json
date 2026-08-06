@@ -13,7 +13,7 @@
       "name": "fstack",
       "version": "1.0.0",
       "source": "./",
-      "description": "25 workflow skills, 8 commands, and improve hooks for context continuity and skill evolution",
+      "description": "27 workflow skills, 8 commands, and improve hooks for context continuity and skill evolution",
       "category": "productivity",
       "tags": ["workflow", "productivity", "skills", "commands", "hooks", "planning", "handoff", "evals"]
     }

@@ -1,0 +1,514 @@
+[
+  {
+    "skill": "agent-browser",
+    "category": "Browser / Automation",
+    "source": "local",
+    "suggestion": "maybe",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "ask-codebase-questions",
+    "category": "Code workflow",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "beautiful-mermaid",
+    "category": "Diagram",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "bigquery-cost-control",
+    "category": "Work / BigQuery",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "bigquery-labeled-query",
+    "category": "Work / BigQuery",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "brainstorming",
+    "category": "Thinking",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "cf-verify",
+    "category": "Work / GCP",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "clean-worktree",
+    "category": "Git workflow",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "codex-brainstorm",
+    "category": "Thinking",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "remove",
+    "feedback": "之前使用 claude code 就不常使用，目前主要使用 codex 後更用不到。"
+  },
+  {
+    "skill": "codex-cli-review",
+    "category": "Code review",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "remove",
+    "feedback": "之前使用 claude code 就不常使用，目前主要使用 codex 後更用不到。"
+  },
+  {
+    "skill": "create-handoff",
+    "category": "Handoff",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "create-plan",
+    "category": "Planning",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "create-team-plan",
+    "category": "Planning",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "maybe",
+    "feedback": ""
+  },
+  {
+    "skill": "cross-machine-runtime-sync",
+    "category": "Runtime sync",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "deep-inquiry",
+    "category": "Research",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": "可能想改名"
+  },
+  {
+    "skill": "deep-inquiry-v2",
+    "category": "Research",
+    "source": "local",
+    "suggestion": "maybe",
+    "decision": "keep",
+    "feedback": "想改名，v2 很不直覺"
+  },
+  {
+    "skill": "deep-module",
+    "category": "Design / Architecture",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "maybe",
+    "feedback": "覺得使用頻率不高"
+  },
+  {
+    "skill": "design-concept",
+    "category": "Code workflow",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "digest-agent",
+    "category": "Personal reflection",
+    "source": "local",
+    "suggestion": "maybe",
+    "decision": "maybe",
+    "feedback": "改名"
+  },
+  {
+    "skill": "excalidraw-diagram",
+    "category": "Diagram",
+    "source": "local",
+    "suggestion": "maybe",
+    "decision": "remove",
+    "feedback": ""
+  },
+  {
+    "skill": "extract-skill",
+    "category": "Skill evolution",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "maybe",
+    "feedback": "之後會被 skillify 取代"
+  },
+  {
+    "skill": "find-skills",
+    "category": "Skill discovery",
+    "source": "local",
+    "suggestion": "maybe",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "gcp-debug",
+    "category": "Work / GCP",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "remove",
+    "feedback": "用不到，直接用 gcloud logging cli 即可"
+  },
+  {
+    "skill": "generate-meeting-notes",
+    "category": "Meeting",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "generate-pm-weekly-doc",
+    "category": "Work report",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "graphify",
+    "category": "Knowledge graph",
+    "source": "local",
+    "suggestion": "maybe",
+    "decision": "remove",
+    "feedback": ""
+  },
+  {
+    "skill": "grill-me",
+    "category": "PRD",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "gsheet-progress-sync",
+    "category": "Work report",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "heavyskill",
+    "category": "Reasoning",
+    "source": "local",
+    "suggestion": "maybe",
+    "decision": "maybe",
+    "feedback": ""
+  },
+  {
+    "skill": "heptabase-task-card",
+    "category": "Heptabase",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "maybe",
+    "feedback": ""
+  },
+  {
+    "skill": "implement-plan",
+    "category": "Implementation",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "implement-team-plan",
+    "category": "Implementation",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "maybe",
+    "feedback": ""
+  },
+  {
+    "skill": "improve",
+    "category": "Skill evolution",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "job-application-optimizer",
+    "category": "Career",
+    "source": "local",
+    "suggestion": "maybe",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "personal-llm-wiki",
+    "category": "Personal wiki",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "personal-wiki-inject",
+    "category": "Personal wiki",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "personal-wiki-lint",
+    "category": "Personal wiki",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "personal-wiki-mine",
+    "category": "Personal wiki",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "maybe",
+    "feedback": "想改名"
+  },
+  {
+    "skill": "personal-wiki-query",
+    "category": "Personal wiki",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "plugin-creator",
+    "category": "Plugin",
+    "source": "local",
+    "suggestion": "maybe",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "product-lens",
+    "category": "Product",
+    "source": "local",
+    "suggestion": "maybe",
+    "decision": "maybe",
+    "feedback": ""
+  },
+  {
+    "skill": "repos-wiki-ingest",
+    "category": "Career wiki",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "maybe",
+    "feedback": "轉移成 career project level skill"
+  },
+  {
+    "skill": "repos-wiki-lint",
+    "category": "Career wiki",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "maybe",
+    "feedback": "轉移成 career project level skill"
+  },
+  {
+    "skill": "repos-wiki-query",
+    "category": "Career wiki",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "maybe",
+    "feedback": "轉移成 career project level skill"
+  },
+  {
+    "skill": "research-and-plan",
+    "category": "Planning",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "research-article",
+    "category": "Writing",
+    "source": "local",
+    "suggestion": "maybe",
+    "decision": "keep",
+    "feedback": "改名"
+  },
+  {
+    "skill": "research-codebase",
+    "category": "Research",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "resume-handoff",
+    "category": "Handoff",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "rss-research-digest",
+    "category": "Research digest",
+    "source": "local",
+    "suggestion": "maybe",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "self-observer",
+    "category": "Personal reflection",
+    "source": "local",
+    "suggestion": "maybe",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "skill-memory-reflect",
+    "category": "Skill evolution",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "slack-canvas",
+    "category": "Slack",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "slack-message",
+    "category": "Slack",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "start-day",
+    "category": "Daily workflow",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "remove",
+    "feedback": "用不到，暫時移除"
+  },
+  {
+    "skill": "start-standup",
+    "category": "Daily workflow",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "remove",
+    "feedback": "用不到，暫時移除"
+  },
+  {
+    "skill": "start-worktree",
+    "category": "Git workflow",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "startup-ideation",
+    "category": "Startup",
+    "source": "local",
+    "suggestion": "maybe",
+    "decision": "remove",
+    "feedback": "用不到"
+  },
+  {
+    "skill": "structure-outline",
+    "category": "Code workflow",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "tagtoo-create-flow",
+    "category": "Work / Tagtoo",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "maybe",
+    "feedback": "改名"
+  },
+  {
+    "skill": "tagtoo-cross-repo",
+    "category": "Work / Tagtoo",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "maybe",
+    "feedback": "改名"
+  },
+  {
+    "skill": "ui-ux-pro-max",
+    "category": "UI / Design",
+    "source": "local",
+    "suggestion": "maybe",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "vercel-deployment",
+    "category": "Deployment",
+    "source": "local",
+    "suggestion": "maybe",
+    "decision": "keep",
+    "feedback": ""
+  },
+  {
+    "skill": "verify-audience-write",
+    "category": "Work / BigQuery",
+    "source": "local",
+    "suggestion": "keep",
+    "decision": "maybe",
+    "feedback": ""
+  },
+  {
+    "skill": "work-wrap-up",
+    "category": "Wrap up",
+    "source": "fstack",
+    "suggestion": "keep",
+    "decision": "keep",
+    "feedback": ""
+  }
+]

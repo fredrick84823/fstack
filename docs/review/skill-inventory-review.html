@@ -1,0 +1,794 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skill Inventory Review</title>
+  <style>
+    :root {
+      --paper: #fbfaf7;
+      --ink: #202124;
+      --muted: #6b6f76;
+      --line: #e6e1d9;
+      --line-strong: #d4cabd;
+      --panel: #ffffff;
+      --soft: #f4f1ea;
+      --keep: #27734d;
+      --keep-bg: #e8f4ed;
+      --maybe: #9a6200;
+      --maybe-bg: #fff3d8;
+      --remove: #a63f3f;
+      --remove-bg: #fde9e7;
+      --focus: #4d7cff;
+      --shadow: 0 1px 2px rgba(32, 33, 36, .05), 0 10px 30px rgba(32, 33, 36, .06);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --serif: ui-serif, Georgia, "Times New Roman", serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, .78), rgba(251, 250, 247, .96)),
+        radial-gradient(circle at top left, rgba(255, 229, 188, .55), transparent 30rem),
+        var(--paper);
+      color: var(--ink);
+      font-family: var(--sans);
+      line-height: 1.45;
+    }
+
+    button, input, textarea, select {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .shell {
+      width: min(1440px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 24px;
+      align-items: end;
+      padding: 16px 0 28px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      font-family: var(--mono);
+      margin-bottom: 12px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #2f6f55;
+      box-shadow: 0 0 0 4px rgba(47, 111, 85, .12);
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(34px, 5vw, 64px);
+      font-weight: 600;
+      letter-spacing: 0;
+      line-height: 1.02;
+    }
+
+    .lede {
+      max-width: 760px;
+      margin: 14px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 104px);
+      gap: 10px;
+    }
+
+    .stat {
+      background: rgba(255, 255, 255, .82);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      box-shadow: var(--shadow);
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 26px;
+      line-height: 1;
+    }
+
+    .stat span {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) 180px 180px auto;
+      gap: 10px;
+      align-items: center;
+      padding: 14px 0;
+      background: rgba(251, 250, 247, .92);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .control, .action {
+      min-height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .9);
+      color: var(--ink);
+      box-shadow: 0 1px 0 rgba(32, 33, 36, .03);
+    }
+
+    .control {
+      width: 100%;
+      padding: 0 12px;
+    }
+
+    .control:focus, .action:focus, textarea:focus, .choice:focus {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      white-space: nowrap;
+    }
+
+    .action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 12px;
+      font-size: 13px;
+    }
+
+    .action.primary {
+      background: #202124;
+      border-color: #202124;
+      color: #fff;
+    }
+
+    .status-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin: 18px 0;
+    }
+
+    .bucket {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .72);
+      padding: 12px 14px;
+    }
+
+    .bucket b {
+      font-size: 18px;
+    }
+
+    .bucket span {
+      color: var(--muted);
+      font-size: 12px;
+      margin-left: 6px;
+    }
+
+    .table-wrap {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .86);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    thead {
+      background: #f5f2ec;
+      color: #555b63;
+      font-size: 12px;
+      text-align: left;
+    }
+
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 12px;
+      vertical-align: top;
+    }
+
+    th:nth-child(1), td:nth-child(1) { width: 130px; }
+    th:nth-child(2), td:nth-child(2) { width: 190px; }
+    th:nth-child(3), td:nth-child(3) { width: 88px; }
+    th:nth-child(4), td:nth-child(4) { width: auto; }
+    th:nth-child(5), td:nth-child(5) { width: 238px; }
+    th:nth-child(6), td:nth-child(6) { width: 260px; }
+
+    tbody tr:hover {
+      background: rgba(246, 243, 237, .66);
+    }
+
+    code {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: #f1eee8;
+      border: 1px solid #e5ded3;
+      border-radius: 6px;
+      padding: 2px 5px;
+      overflow-wrap: anywhere;
+    }
+
+    .category {
+      color: #5d646c;
+      font-size: 12px;
+    }
+
+    .source {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      border-radius: 999px;
+      padding: 0 8px;
+      font-size: 12px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .source.fstack {
+      border-color: #bdd8c7;
+      background: #ecf6ef;
+      color: #2f6f55;
+    }
+
+    .desc {
+      color: #35383d;
+      font-size: 13px;
+    }
+
+    .suggestion {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      border-radius: 999px;
+      padding: 0 8px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0;
+      font-family: var(--mono);
+    }
+
+    .suggestion.keep { color: var(--keep); background: var(--keep-bg); }
+    .suggestion.maybe { color: var(--maybe); background: var(--maybe-bg); }
+    .suggestion.remove { color: var(--remove); background: var(--remove-bg); }
+
+    .review-cell {
+      display: grid;
+      gap: 8px;
+    }
+
+    .choices {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+
+    .choice {
+      min-height: 32px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: #4b5159;
+      font-size: 12px;
+    }
+
+    .choice[data-value="keep"].active {
+      border-color: #9cc9ad;
+      background: var(--keep-bg);
+      color: var(--keep);
+      font-weight: 650;
+    }
+
+    .choice[data-value="maybe"].active {
+      border-color: #e5c170;
+      background: var(--maybe-bg);
+      color: var(--maybe);
+      font-weight: 650;
+    }
+
+    .choice[data-value="remove"].active {
+      border-color: #e2aaa3;
+      background: var(--remove-bg);
+      color: var(--remove);
+      font-weight: 650;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 58px;
+      resize: vertical;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 9px 10px;
+      color: var(--ink);
+      background: #fff;
+      font-size: 13px;
+    }
+
+    .toast {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      z-index: 20;
+      transform: translateY(18px);
+      opacity: 0;
+      pointer-events: none;
+      transition: .18s ease;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: var(--shadow);
+      padding: 10px 12px;
+      color: #34383e;
+      font-size: 13px;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .empty {
+      display: none;
+      padding: 36px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .empty.show {
+      display: block;
+    }
+
+    @media (max-width: 1100px) {
+      header {
+        grid-template-columns: 1fr;
+      }
+
+      .stats {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .toolbar {
+        position: static;
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .actions {
+        grid-column: 1 / -1;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+      }
+
+      table {
+        min-width: 1080px;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .shell {
+        width: min(100vw - 20px, 1440px);
+        padding-top: 18px;
+      }
+
+      .toolbar, .status-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .stats {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <div class="kicker"><span class="dot"></span> Local skill review / 2026-07-08</div>
+        <h1>Skill Inventory Review</h1>
+        <p class="lede">直接在表格中選擇保留狀態並留下回饋。選擇會自動儲存在這個瀏覽器；整理完可匯出 Markdown 或 JSON 回貼給 agent 處理。</p>
+      </div>
+      <div class="stats" aria-label="summary">
+        <div class="stat"><strong id="totalCount">64</strong><span>Total skills</span></div>
+        <div class="stat"><strong id="fstackCount">24</strong><span>From fstack</span></div>
+        <div class="stat"><strong id="reviewedCount">0</strong><span>Reviewed</span></div>
+      </div>
+    </header>
+
+    <section class="toolbar" aria-label="filters and actions">
+      <input id="search" class="control" type="search" placeholder="Search skill, category, description, feedback">
+      <select id="categoryFilter" class="control" aria-label="Filter by category">
+        <option value="">All categories</option>
+      </select>
+      <select id="statusFilter" class="control" aria-label="Filter by review status">
+        <option value="">All statuses</option>
+        <option value="blank">Not reviewed</option>
+        <option value="keep">Keep</option>
+        <option value="maybe">Maybe</option>
+        <option value="remove">Remove</option>
+      </select>
+      <div class="actions">
+        <button class="action" id="fillSuggestions" type="button">Use suggestions</button>
+        <button class="action" id="exportJson" type="button">Export JSON</button>
+        <button class="action primary" id="exportMarkdown" type="button">Export Markdown</button>
+        <button class="action" id="resetReview" type="button">Reset</button>
+      </div>
+    </section>
+
+    <section class="status-strip" aria-label="review counts">
+      <div class="bucket"><b id="countBlank">0</b><span>not reviewed</span></div>
+      <div class="bucket"><b id="countKeep">0</b><span>keep</span></div>
+      <div class="bucket"><b id="countMaybe">0</b><span>maybe</span></div>
+      <div class="bucket"><b id="countRemove">0</b><span>remove</span></div>
+    </section>
+
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Skill</th>
+            <th>Source</th>
+            <th>Function</th>
+            <th>Review</th>
+            <th>Feedback</th>
+          </tr>
+        </thead>
+        <tbody id="skillRows"></tbody>
+      </table>
+      <div class="empty" id="emptyState">No skills match the current filters.</div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const STORAGE_KEY = "fstack.skillInventoryReview.v1";
+
+    const skills = [
+      ["Browser / Automation", "agent-browser", "local", "自動操作網站、填表、點擊、截圖、抓頁面資料、測試 web app。", "maybe"],
+      ["Code workflow", "ask-codebase-questions", "fstack", "在研究、設計、計畫前先產出 Questions artifact。", "keep"],
+      ["Diagram", "beautiful-mermaid", "fstack", "用 beautiful-mermaid 套件渲染高品質 Mermaid 圖。", "keep"],
+      ["Work / BigQuery", "bigquery-cost-control", "local", "BigQuery 查詢前 dry run，估算成本並依政策警告或阻擋。", "keep"],
+      ["Work / BigQuery", "bigquery-labeled-query", "local", "BigQuery/ETL 查詢套用標準安全、label 與查詢規範。", "keep"],
+      ["Thinking", "brainstorming", "fstack", "個人腦力激盪教練，用問題引導你產生自己的想法。", "keep"],
+      ["Work / GCP", "cf-verify", "local", "Cloud Function unit/integration/e2e/deploy/logs 全流程驗證。", "keep"],
+      ["Git workflow", "clean-worktree", "local", "清理已合併 worktree，同步 output、移除暫存檔、刪 branch/worktree。", "keep"],
+      ["Thinking", "codex-brainstorm", "fstack", "Claude 與 Codex 獨立研究後辯論，用於方案探索與可行性分析。", "keep"],
+      ["Code review", "codex-cli-review", "fstack", "呼叫 Codex CLI 對未提交變更做獨立 code review。", "keep"],
+      ["Handoff", "create-handoff", "fstack", "建立 session handoff 文件，交接未完成工作與上下文。", "keep"],
+      ["Planning", "create-plan", "fstack", "建立詳細 implementation plan，寫入合適 plans 位置。", "keep"],
+      ["Planning", "create-team-plan", "fstack", "將標準 plan 拆成 team-plan、任務 brief、依賴圖與模型分工。", "keep"],
+      ["Runtime sync", "cross-machine-runtime-sync", "local", "同步與驗證 work/home machine 的 runtime、skills、hooks、Personal Wiki。", "keep"],
+      ["Research", "deep-inquiry", "local", "多來源深度研究、來源交叉驗證、假設檢查與綜合。", "keep"],
+      ["Research", "deep-inquiry-v2", "local", "實驗版 local-first 深度研究，含 evidence matrix 與 durable artifacts。", "maybe"],
+      ["Design / Architecture", "deep-module", "fstack", "用 Deep Module 原則檢查介面、封裝與模組邊界。", "keep"],
+      ["Code workflow", "design-concept", "fstack", "將 questions 與 research 轉成簡短設計概念，供人類對齊。", "keep"],
+      ["Personal reflection", "digest-agent", "local", "整理 Heptabase journal 成主題、決策、問題與 next actions。", "maybe"],
+      ["Diagram", "excalidraw-diagram", "local", "產生 Excalidraw JSON，用圖解工作流、架構或概念。", "maybe"],
+      ["Skill evolution", "extract-skill", "fstack", "從 candidate queue 去重、合併、review，經批准後建立新 skill。", "keep"],
+      ["Skill discovery", "find-skills", "local", "幫忙尋找或安裝可用 skill。", "maybe"],
+      ["Work / GCP", "gcp-debug", "local", "系統性調查 Cloud Function/Cloud Run 問題，查 logs 與 git/GitHub 線索。", "keep"],
+      ["Meeting", "generate-meeting-notes", "local", "從錄音、逐字稿或文字紀錄產生會議記錄，支援 Drive/Slack 輸出。", "keep"],
+      ["Work report", "generate-pm-weekly-doc", "local", "聚合一週 commits/handoffs，產生 PM 週會報告。", "keep"],
+      ["Knowledge graph", "graphify", "local", "將輸入轉成 knowledge graph、社群分群、HTML/JSON/audit report。", "maybe"],
+      ["PRD", "grill-me", "fstack", "用一次性問題把模糊想法逼成 PRD draft。", "keep"],
+      ["Work report", "gsheet-progress-sync", "local", "將工作進度、handoff 或 git work 同步到 Tagtoo Data Team 進度表。", "keep"],
+      ["Reasoning", "heavyskill", "local", "對高正確性需求問題做多軌推理與 sequential deliberation。", "maybe"],
+      ["Heptabase", "heptabase-task-card", "fstack", "在 Heptabase 建立符合 Sprint whiteboard 格式的任務卡與依賴。", "keep"],
+      ["Implementation", "implement-plan", "fstack", "執行已批准 plan，依 phase 更新 checkbox，階段間停下驗證。", "keep"],
+      ["Implementation", "implement-team-plan", "fstack", "執行 team-plan，使用 agent teams 分派任務並產出 walkthrough。", "keep"],
+      ["Skill evolution", "improve", "fstack", "捕捉 skill gap signal、維護 queue、提出 skill 規則改進。", "keep"],
+      ["Career", "job-application-optimizer", "local", "依職缺客製履歷、cover letter、面試問題。", "maybe"],
+      ["Personal wiki", "personal-llm-wiki", "local", "Personal LLM Wiki router，依需求轉到 query/inject/lint 等子 skill。", "keep"],
+      ["Personal wiki", "personal-wiki-inject", "local", "將已審核 synthesis/source 注入 Personal LLM Wiki。", "keep"],
+      ["Personal wiki", "personal-wiki-lint", "local", "檢查 Personal LLM Wiki 結構、引用、隱私與 discoverability。", "keep"],
+      ["Personal wiki", "personal-wiki-mine", "fstack", "從 bounded thoughts/ 與 Heptabase sources 挖 candidate claims。", "keep"],
+      ["Personal wiki", "personal-wiki-query", "local", "唯讀查詢 Personal LLM Wiki，回答 compiled knowledge 與 project routing 問題。", "keep"],
+      ["Plugin", "plugin-creator", "local", "建立 Claude Code plugin 結構、manifest 與 marketplace integration。", "maybe"],
+      ["Product", "product-lens", "local", "用 PM/product lens 做開發前產品判斷 gate。", "maybe"],
+      ["Career wiki", "repos-wiki-ingest", "local", "從本機 repo 更新 career repos-wiki project page。", "keep"],
+      ["Career wiki", "repos-wiki-lint", "local", "檢查 career repos-wiki schema、連結、量化與 index 健康。", "keep"],
+      ["Career wiki", "repos-wiki-query", "local", "依職缺從 career repos-wiki 選 project evidence。", "keep"],
+      ["Planning", "research-and-plan", "fstack", "小型任務直接 codebase research + concise plan。", "keep"],
+      ["Writing", "research-article", "local", "研究專家觀點後，以你的第一人稱寫繁中觀點文章。", "maybe"],
+      ["Research", "research-codebase", "fstack", "透過 subagents 盤點 codebase 現況、架構與既有決策。", "keep"],
+      ["Handoff", "resume-handoff", "fstack", "從 handoff 文件恢復工作，先驗證當前 repo 狀態再續工。", "keep"],
+      ["Research digest", "rss-research-digest", "local", "匯入 RSS/YouTube RSS，產生來源標註 digest 與 archives。", "maybe"],
+      ["Personal reflection", "self-observer", "local", "從 Heptabase/journal/memory 做長期模式與風險觀察。", "maybe"],
+      ["Skill evolution", "skill-memory-reflect", "fstack", "整理 improve memory，生成 claims、eval cases、worklists。", "keep"],
+      ["Slack", "slack-canvas", "local", "建立或更新 Slack Canvas，用於報告、會議記錄、技術說明。", "keep"],
+      ["Slack", "slack-message", "local", "草擬或發送 Slack 訊息，確保格式正確渲染。", "keep"],
+      ["Daily workflow", "start-day", "fstack", "整合 GSheet/GitHub/Heptabase 任務狀態，建立每日任務看板。", "keep"],
+      ["Daily workflow", "start-standup", "local", "互動式 daily stand-up，整理近期專案狀態、阻塞與今日 focus。", "keep"],
+      ["Git workflow", "start-worktree", "local", "建立新的 git worktree 以隔離任務開發。", "keep"],
+      ["Startup", "startup-ideation", "local", "產生與評估 startup idea、市場機會與可行性。", "maybe"],
+      ["Code workflow", "structure-outline", "fstack", "在詳細 planning/implementation 前產出 interface-first structure outline。", "keep"],
+      ["Work / Tagtoo", "tagtoo-create-flow", "local", "依 data_team_repos 原始碼與知識產出標準 flow 文件。", "keep"],
+      ["Work / Tagtoo", "tagtoo-cross-repo", "local", "查詢跨 repo/service/table 資料流與整合點。", "keep"],
+      ["UI / Design", "ui-ux-pro-max", "local", "UI/UX 設計 intelligence，涵蓋風格、palette、font、framework 與 review。", "maybe"],
+      ["Deployment", "vercel-deployment", "local", "Next.js/Vercel 部署專家知識。", "maybe"],
+      ["Work / BigQuery", "verify-audience-write", "local", "驗證 EC 受眾是否正確寫入 BigQuery LTA 表。", "keep"],
+      ["Wrap up", "work-wrap-up", "fstack", "功能完成後執行 commit/PR、GSheet 進度同步、可選 Slack 通知。", "keep"]
+    ].map(([category, name, source, description, suggestion]) => ({
+      category, name, source, description, suggestion
+    }));
+
+    const state = loadState();
+    const rows = document.getElementById("skillRows");
+    const search = document.getElementById("search");
+    const categoryFilter = document.getElementById("categoryFilter");
+    const statusFilter = document.getElementById("statusFilter");
+    const emptyState = document.getElementById("emptyState");
+
+    function loadState() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+      } catch {
+        return {};
+      }
+    }
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function ensureReview(name) {
+      if (!state[name]) state[name] = { decision: "", feedback: "" };
+      return state[name];
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById("toast");
+      toast.textContent = message;
+      toast.classList.add("show");
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => toast.classList.remove("show"), 1800);
+    }
+
+    function populateCategories() {
+      const categories = [...new Set(skills.map(skill => skill.category))].sort();
+      for (const category of categories) {
+        const option = document.createElement("option");
+        option.value = category;
+        option.textContent = category;
+        categoryFilter.appendChild(option);
+      }
+    }
+
+    function render() {
+      const query = search.value.trim().toLowerCase();
+      const selectedCategory = categoryFilter.value;
+      const selectedStatus = statusFilter.value;
+
+      const filtered = skills.filter(skill => {
+        const review = ensureReview(skill.name);
+        const decision = review.decision || "";
+        const haystack = [
+          skill.category,
+          skill.name,
+          skill.source,
+          skill.description,
+          skill.suggestion,
+          review.feedback || ""
+        ].join(" ").toLowerCase();
+
+        if (query && !haystack.includes(query)) return false;
+        if (selectedCategory && skill.category !== selectedCategory) return false;
+        if (selectedStatus === "blank" && decision) return false;
+        if (selectedStatus && selectedStatus !== "blank" && decision !== selectedStatus) return false;
+        return true;
+      });
+
+      rows.innerHTML = filtered.map(skill => rowHtml(skill)).join("");
+      emptyState.classList.toggle("show", filtered.length === 0);
+      updateCounts();
+    }
+
+    function rowHtml(skill) {
+      const review = ensureReview(skill.name);
+      const decision = review.decision || "";
+      return `
+        <tr data-skill="${escapeHtml(skill.name)}">
+          <td><div class="category">${escapeHtml(skill.category)}</div></td>
+          <td><code>${escapeHtml(skill.name)}</code></td>
+          <td><span class="source ${skill.source === "fstack" ? "fstack" : ""}">${escapeHtml(skill.source)}</span></td>
+          <td>
+            <div class="desc">${escapeHtml(skill.description)}</div>
+            <div style="margin-top:8px"><span class="suggestion ${escapeHtml(skill.suggestion)}">${escapeHtml(skill.suggestion)}</span></div>
+          </td>
+          <td>
+            <div class="review-cell">
+              <div class="choices" role="group" aria-label="Review ${escapeHtml(skill.name)}">
+                ${choiceHtml(skill.name, "keep", decision)}
+                ${choiceHtml(skill.name, "maybe", decision)}
+                ${choiceHtml(skill.name, "remove", decision)}
+              </div>
+            </div>
+          </td>
+          <td>
+            <textarea data-feedback="${escapeHtml(skill.name)}" placeholder="留下使用頻率、移除理由或替代方案">${escapeHtml(review.feedback || "")}</textarea>
+          </td>
+        </tr>
+      `;
+    }
+
+    function choiceHtml(name, value, decision) {
+      const active = decision === value ? " active" : "";
+      return `<button class="choice${active}" type="button" data-skill-choice="${escapeHtml(name)}" data-value="${value}">${value}</button>`;
+    }
+
+    function updateCounts() {
+      let blank = 0;
+      let keep = 0;
+      let maybe = 0;
+      let remove = 0;
+
+      for (const skill of skills) {
+        const decision = ensureReview(skill.name).decision;
+        if (decision === "keep") keep += 1;
+        else if (decision === "maybe") maybe += 1;
+        else if (decision === "remove") remove += 1;
+        else blank += 1;
+      }
+
+      document.getElementById("totalCount").textContent = skills.length;
+      document.getElementById("fstackCount").textContent = skills.filter(skill => skill.source === "fstack").length;
+      document.getElementById("reviewedCount").textContent = keep + maybe + remove;
+      document.getElementById("countBlank").textContent = blank;
+      document.getElementById("countKeep").textContent = keep;
+      document.getElementById("countMaybe").textContent = maybe;
+      document.getElementById("countRemove").textContent = remove;
+    }
+
+    function exportRows() {
+      return skills.map(skill => {
+        const review = ensureReview(skill.name);
+        return {
+          skill: skill.name,
+          category: skill.category,
+          source: skill.source,
+          suggestion: skill.suggestion,
+          decision: review.decision || "",
+          feedback: review.feedback || ""
+        };
+      });
+    }
+
+    function exportMarkdown() {
+      const lines = [
+        "# Skill Inventory Review Result",
+        "",
+        "| Skill | Source | Suggestion | Decision | Feedback |",
+        "|---|---|---|---|---|"
+      ];
+
+      for (const row of exportRows()) {
+        const feedback = row.feedback.replaceAll("|", "\\|").replaceAll("\n", "<br>");
+        lines.push(`| \`${row.skill}\` | ${row.source} | ${row.suggestion} | ${row.decision || ""} | ${feedback} |`);
+      }
+
+      return lines.join("\n");
+    }
+
+    function download(filename, content, type) {
+      const blob = new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    rows.addEventListener("click", event => {
+      const button = event.target.closest("[data-skill-choice]");
+      if (!button) return;
+
+      const name = button.dataset.skillChoice;
+      const value = button.dataset.value;
+      const review = ensureReview(name);
+      review.decision = review.decision === value ? "" : value;
+      saveState();
+      render();
+    });
+
+    rows.addEventListener("input", event => {
+      const textarea = event.target.closest("[data-feedback]");
+      if (!textarea) return;
+      ensureReview(textarea.dataset.feedback).feedback = textarea.value;
+      saveState();
+      updateCounts();
+    });
+
+    search.addEventListener("input", render);
+    categoryFilter.addEventListener("change", render);
+    statusFilter.addEventListener("change", render);
+
+    document.getElementById("fillSuggestions").addEventListener("click", () => {
+      for (const skill of skills) {
+        ensureReview(skill.name).decision = skill.suggestion;
+      }
+      saveState();
+      render();
+      showToast("Filled with suggestions.");
+    });
+
+    document.getElementById("exportJson").addEventListener("click", () => {
+      download("skill-inventory-review-result.json", JSON.stringify(exportRows(), null, 2), "application/json");
+      showToast("JSON exported.");
+    });
+
+    document.getElementById("exportMarkdown").addEventListener("click", () => {
+      download("skill-inventory-review-result.md", exportMarkdown(), "text/markdown");
+      showToast("Markdown exported.");
+    });
+
+    document.getElementById("resetReview").addEventListener("click", () => {
+      if (!confirm("Clear all review choices and feedback in this browser?")) return;
+      localStorage.removeItem(STORAGE_KEY);
+      for (const key of Object.keys(state)) delete state[key];
+      render();
+      showToast("Review cleared.");
+    });
+
+    populateCategories();
+    render();
+  </script>
+</body>
+</html>
