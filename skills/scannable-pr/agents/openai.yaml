@@ -1,0 +1,3 @@
+interface:
+  display_name: "Scannable PR"
+  short_description: "Scannable GitHub PR bodies"
