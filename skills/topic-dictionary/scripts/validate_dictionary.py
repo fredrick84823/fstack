@@ -7,6 +7,7 @@ import argparse
 import json
 import re
 import sys
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -197,6 +198,19 @@ def validate_entry_shape(entry: Entry) -> list[Finding]:
     for field in ("prerequisites", "related", "sources"):
         if field in entry.metadata and not isinstance(entry.metadata[field], list):
             findings.append(Finding("error", "field-type", f"`{field}` must be a list.", location))
+        elif field in ("prerequisites", "related"):
+            duplicates = sorted(
+                value for value, count in Counter(list_value(entry, field)).items() if count > 1
+            )
+            for value in duplicates:
+                findings.append(
+                    Finding(
+                        "error",
+                        "duplicate-edge",
+                        f"`{field}` contains `{value}` more than once.",
+                        location,
+                    )
+                )
     for field in ("section_order", "order"):
         value = entry.metadata.get(field)
         if not isinstance(value, int) or value < 1:

@@ -9,6 +9,7 @@ Run `scripts/validate_dictionary.py <dictionary-dir>` after generating the READM
 - Section names have one consistent `section_order`.
 - Section/order pairs are unique.
 - Every prerequisite and related slug resolves to an entry.
+- No prerequisite or related edge is repeated within one entry.
 - The prerequisite graph has no cycle or self-edge.
 - Every relative Markdown link resolves.
 

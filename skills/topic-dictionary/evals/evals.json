@@ -1,0 +1,113 @@
+{
+  "target_skill": "topic-dictionary",
+  "version": 1,
+  "scoring": {
+    "hard_gates": "All structural checks must pass.",
+    "semantic_rubric": "At least 5 of 6 criteria must pass.",
+    "critical_failure": "Any must_not_do behavior fails the case."
+  },
+  "cases": [
+    {
+      "id": "topic-dictionary-create-technical-001",
+      "type": "rubric_scenario",
+      "prompt": "Use $topic-dictionary to build an 8–12 entry dictionary that teaches Bayesian inference to product analysts with no statistics background.",
+      "expected_behavior": [
+        "Discovers prerequisite concepts without receiving a concept list.",
+        "Orders foundations before inference mechanisms and applications.",
+        "Generates one Markdown file per concept and a README.",
+        "Answers all seven required questions in every entry.",
+        "Passes strict dictionary validation."
+      ],
+      "must_not_do": [
+        "Organize the complete dictionary alphabetically.",
+        "Produce only short glossary definitions.",
+        "Rely on unexplained statistical terminology."
+      ]
+    },
+    {
+      "id": "topic-dictionary-create-nontechnical-001",
+      "type": "generalization",
+      "prompt": "Use $topic-dictionary to create a Traditional Chinese concept dictionary for sourdough bread making, aimed at first-time home bakers.",
+      "expected_behavior": [
+        "Applies the curriculum method outside software domains.",
+        "Uses Traditional Chinese consistently.",
+        "Separates ingredients, mechanisms, process decisions, and failure modes.",
+        "Uses stable valid canonical slugs.",
+        "Passes strict dictionary validation."
+      ],
+      "must_not_do": [
+        "Turn the dictionary into a recipe collection.",
+        "Mix unexplained English terminology into the prose.",
+        "Treat branded products as foundational concepts."
+      ]
+    },
+    {
+      "id": "topic-dictionary-audit-001",
+      "type": "adversarial_recall",
+      "fixture": "A dictionary containing a dependency cycle, broken link, duplicate node, duplicate edge, and glossary-style entry.",
+      "prompt": "Use $topic-dictionary in audit mode. Report and repair the dictionary without adding unrelated concepts.",
+      "expected_behavior": [
+        "Finds every planted structural defect.",
+        "Distinguishes duplicate node identity from duplicate graph edges.",
+        "Recognizes and rewrites the glossary-style explanation.",
+        "Regenerates README after repairs.",
+        "Produces zero strict-validation failures."
+      ],
+      "must_not_do": [
+        "Report clean entries as defective.",
+        "Hide warnings without resolving or explaining them.",
+        "Rewrite the dictionary from scratch."
+      ]
+    },
+    {
+      "id": "topic-dictionary-expand-001",
+      "type": "state_transition",
+      "fixture": "A valid six-entry dictionary with stable slugs, ordering, and cross-links.",
+      "prompt": "Use $topic-dictionary in expand mode to add the concepts needed to explain optimistic concurrency control.",
+      "expected_behavior": [
+        "Adds only the missing prerequisite subgraph.",
+        "Preserves existing canonical slugs.",
+        "Preserves unrelated entry contents and ordering.",
+        "Updates cross-links and README.",
+        "Leaves the complete dictionary valid."
+      ],
+      "must_not_do": [
+        "Rename existing concepts without necessity.",
+        "Renumber or rewrite unrelated entries.",
+        "Add the target concept without its prerequisites."
+      ]
+    },
+    {
+      "id": "topic-dictionary-determinism-001",
+      "type": "consistency",
+      "prompt": "Run the same bounded dictionary request twice in isolated directories and compare the resulting manifests.",
+      "expected_behavior": [
+        "Produces the same canonical concept set.",
+        "Produces the same slugs and prerequisite edges.",
+        "Produces the same sections and learning order.",
+        "Produces deterministically equivalent README indexes."
+      ],
+      "must_not_do": [
+        "Require byte-identical prose.",
+        "Treat harmless wording differences as failures.",
+        "Allow graph or naming drift between runs."
+      ]
+    }
+  ],
+  "semantic_rubric": [
+    "The concept set covers foundations, mechanisms, practices, and important boundaries appropriate to scope.",
+    "Every prerequisite edge represents knowledge needed to understand the dependent concept.",
+    "The section and entry order forms a coherent learning progression.",
+    "Entries explain purpose and causal mechanism rather than restating their titles.",
+    "Related-concept and next-step links state meaningful relationships.",
+    "The output follows the requested audience, scope, language, and update constraints."
+  ],
+  "determinism_manifest": [
+    "slug",
+    "section",
+    "section_order",
+    "order",
+    "prerequisites",
+    "related"
+  ]
+}
