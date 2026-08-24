@@ -1,5 +1,7 @@
 improve-workspace/
 excalidraw-diagram/references/.venv/
+**/.venv/
+**/.pytest_cache/
 **/.DS_Store
 **/__pycache__/
 *.pyc

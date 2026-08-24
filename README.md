@@ -139,7 +139,7 @@ See [docs/skill-evolution-loop.md](docs/skill-evolution-loop.md),
 - **Scope-aware mutation**: user, project, and repo skill scopes prevent
   accidental cross-context edits.
 
-## Skills (27)
+## Skills (30)
 
 | Skill | Description |
 |-------|-------------|
@@ -154,6 +154,7 @@ See [docs/skill-evolution-loop.md](docs/skill-evolution-loop.md),
 | `deep-module` | Enforce Deep Module principle for interface-first design |
 | `design-concept` | Create concise architecture design concepts for human alignment |
 | `doc-to-html` | Convert technical and knowledge documents into responsive single-page HTML |
+| `generate-meeting-notes` | Turn transcripts, captions, or audio into structured meeting notes in Google Docs + Slack |
 | `extract-skill` | Extract and build skills from candidate queue |
 | `grill-me` | Turn vague ideas into concrete PRDs through targeted questioning |
 | `heptabase-task-card` | Create Sprint-ready Heptabase task cards |
@@ -162,10 +163,12 @@ See [docs/skill-evolution-loop.md](docs/skill-evolution-loop.md),
 | `improve` | Skill self-evolution and gap tracking |
 | `knowledge-map` | Build visual-first learning maps from learning targets and current state |
 | `personal-wiki-mine` | Mine mechanism-first candidate claims from bounded thoughts/ and Heptabase sources |
+| `scannable-pr` | Pack GitHub PR bodies into scannable markdown |
 | `research-and-plan` | Research codebase + plan in one step |
 | `research-codebase` | Document codebase architecture via sub-agents |
 | `resume-handoff` | Resume work from a handoff document |
 | `skill-memory-reflect` | Consolidate improve memory into claims, eval cases, and worklists |
+| `spawn` | Hand a handoff doc to a fresh Claude in a new cmux surface |
 | `start-day` | Build a daily task board from local and external work signals |
 | `structure-outline` | Create interface-first outlines with vertical verification slices |
 | `topic-dictionary` | Build dependency-aware concept dictionaries in learning order |
