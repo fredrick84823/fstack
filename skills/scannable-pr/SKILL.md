@@ -9,9 +9,11 @@ description: >
 
 Reviewer grasps **what / why / risk** **above the fold** — no expand, no scroll hunt.
 
+Another skill already framed the body? Start at **Pack bulk**. Keep its headings.
+
 ## Steps
 
-1. **Skeleton** — fill from the real change; drop empty headings:
+1. **Skeleton** — fill from the real change; drop empty headings. Skip when the body already exists:
 
 ```markdown
 ## Summary
