@@ -16,13 +16,11 @@ Presentation (fold, alerts, details, ship markdown): load the [`scannable-pr`](.
 
 ## Title & headings
 
-English: the title, every `##` / `###` heading, and every `<summary>` line. Reviewer's language (繁中 by default): prose, tables, bullets, checklists, code comments.
+Title: **繁體中文**. Every `##` / `###` heading and every `<summary>` line: **English**. Prose, tables, bullets, checklists, code comments: 繁體中文.
 
-The split follows *scan surface*, not markdown syntax — a `<summary>` is the only line visible while its `<details>` stays collapsed, so to someone scrolling the PR it is a heading.
+The split is about who reads what. A title answers *what changed* to a teammate scrolling `gh pr list` — their own language reads fastest. Headings are structure, not content: they become anchor links (`#how-i-implemented-it`), they are what a reviewer greps across PRs, and they stay stable while the prose under them is rewritten. Keeping them English makes the skeleton comparable across every PR the team opens; the sentences inside carry the meaning.
 
-Why the split — a session-level "answer in 繁體中文" is about talking to *you*; the title and headings are repo artifacts. They get scanned in `gh pr list`, notification digests, release notes, changelog greps and `Fixes #N` backlinks, where a mixed-script line is the one that stops the eye. The body is where the reviewer already committed to reading, so it can be 繁中.
-
-Title: imperative, ≤72 chars, states the observable change — `fix(cost-export): drop user_email from public NDJSON`, not `修正公開檔案外洩 email`, not `fixed the email leak`. Match the repo's existing title convention (check `gh pr list`); adopt a `feat(scope):` prefix only if the repo already uses one.
+Title: 一句話講可觀察的變化, ≤72 chars — `修正公開 NDJSON 外洩 user_email`, not `修好了` and not `更新 export.py`. Match the repo's existing title convention (check `gh pr list`); adopt a `fix(scope):` prefix only if the repo already uses one — the prefix stays English, the sentence after it does not.
 
 ## Steps
 
@@ -36,7 +34,7 @@ Title: imperative, ≤72 chars, states the observable change — `fix(cost-expor
 
 3. **Present** — load scannable-pr at Pack bulk. Ship `gh pr create` / `gh pr edit --body-file` markdown.
 
-   **Done when:** paste-ready body; title, headings and `<summary>` lines are English; linked issues use `Fixes`/`Closes`/`Resolves` when merge should close them.
+   **Done when:** paste-ready body; title is 繁中, headings and `<summary>` lines are English; linked issues use `Fixes`/`Closes`/`Resolves` when merge should close them.
 
 Section's shape unclear — alternative table, boundary table, ship-fact, cost-of-choice, three-way deviation split? [`reference/examples.md`](reference/examples.md) quotes a real PR for each.
 
