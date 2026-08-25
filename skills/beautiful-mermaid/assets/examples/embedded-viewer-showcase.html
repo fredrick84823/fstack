@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Embedded Mermaid multi-viewer showcase</title><style>
+* { box-sizing: border-box; } html { overflow-x: hidden; } body { margin: 0; padding: 32px 20px 80px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #27272a; background: #fff; }
+main { width: min(960px, 100%); margin: 0 auto; } h1 { font-size: 28px; } .showcase-spacer { height: 45vh; }
+.mermaid-viewer {
+  --mv-surface: #fff; --mv-ink: #27272a; --mv-muted: #71717a; --mv-rule: #e4e4e7;
+  position: relative; margin: 1.5rem 0; min-width: 0; color: var(--mv-ink);
+  outline: none;
+}
+.mermaid-viewer:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
+.mermaid-viewer__canvas {
+  position: relative; width: 100%; min-height: 0; overflow: auto; cursor: default;
+  touch-action: auto; background: var(--mv-surface);
+  border: 1px solid var(--mv-rule); border-radius: 10px;
+}
+.mermaid-viewer[data-viewer-ready="true"] .mermaid-viewer__canvas {
+  height: min(520px, 70vh); min-height: 280px; overflow: hidden; cursor: grab; touch-action: pan-y;
+}
+.mermaid-viewer[data-viewer-ready="true"] .mermaid-viewer__canvas.dragging { cursor: grabbing; }
+.mermaid-viewer__stage {
+  position: relative; transform-origin: 0 0; padding: 24px;
+  background: var(--mv-surface); border-radius: 8px;
+}
+.mermaid-viewer[data-viewer-ready="true"] .mermaid-viewer__stage { position: absolute; left: 0; top: 0; }
+.mermaid-viewer[data-viewer-ready="true"] .mermaid-viewer__canvas.dragging .mermaid-viewer__stage { will-change: transform; }
+.mermaid-viewer__stage > svg { display: block; max-width: 100%; height: auto; }
+.mermaid-viewer[data-viewer-ready="true"] .mermaid-viewer__stage > svg { max-width: none; }
+.mermaid-viewer__toolbar {
+  display: none; align-items: center; justify-content: flex-end; gap: 6px;
+  margin-bottom: 8px; flex-wrap: wrap; user-select: none;
+}
+.mermaid-viewer[data-viewer-ready="true"] .mermaid-viewer__toolbar { display: flex; }
+.mermaid-viewer__toolbar button {
+  font: inherit; font-size: 12px; line-height: 1; min-width: 30px; min-height: 30px;
+  padding: 6px 8px; border: 1px solid var(--mv-rule); border-radius: 6px;
+  background: var(--mv-surface); color: var(--mv-ink); cursor: pointer;
+}
+.mermaid-viewer__toolbar button:hover { background: color-mix(in srgb, var(--mv-ink) 5%, var(--mv-surface)); }
+.mermaid-viewer__toolbar button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.mermaid-viewer__level { min-width: 48px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
+.mermaid-viewer__hint, .mermaid-viewer figcaption { color: var(--mv-muted); font-size: 12px; }
+.mermaid-viewer__hint { display: none; margin: 7px 0 0; }
+.mermaid-viewer[data-viewer-ready="true"] .mermaid-viewer__hint { display: block; }
+.mermaid-viewer figcaption { margin-top: 8px; }
+.mermaid-viewer--standalone { margin: 0; height: 100vh; }
+.mermaid-viewer--standalone .mermaid-viewer__toolbar { position: absolute; z-index: 2; top: 12px; right: 12px; }
+.mermaid-viewer--standalone .mermaid-viewer__canvas { height: 100vh; border: 0; border-radius: 0; }
+.mermaid-viewer--standalone .mermaid-viewer__hint { position: absolute; z-index: 2; left: 12px; bottom: 12px; margin: 0; }
+@media (max-width: 480px) {
+  .mermaid-viewer[data-viewer-ready="true"] .mermaid-viewer__canvas { height: 360px; min-height: 240px; }
+  .mermaid-viewer__hint { font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) { .mermaid-viewer * { scroll-behavior: auto !important; } }
+@media print {
+  .mermaid-viewer { break-inside: avoid; }
+  .mermaid-viewer__toolbar, .mermaid-viewer__hint { display: none !important; }
+  .mermaid-viewer__canvas { height: auto !important; min-height: 0; overflow: visible; border: 0; }
+  .mermaid-viewer__stage { position: static; padding: 0 !important; transform: none !important; }
+  .mermaid-viewer__stage > svg { width: 100% !important; height: auto !important; max-width: 100% !important; }
+}
+</style></head><body><main><h1>Embedded Mermaid multi-viewer showcase</h1>
+<noscript><p>JavaScript is optional: diagrams remain readable as static SVG; pan and zoom controls are unavailable.</p></noscript>
+<figure class="mermaid-viewer" data-mermaid-viewer tabindex="0" aria-label="Authentication decision flow">
+  <div class="mermaid-viewer__toolbar" role="group" aria-label="Diagram zoom controls">
+    <button type="button" data-action="zoom-out" aria-label="Zoom out" title="Zoom out (−)">−</button>
+    <span class="mermaid-viewer__level" aria-live="polite">100%</span>
+    <button type="button" data-action="zoom-in" aria-label="Zoom in" title="Zoom in (+)">+</button>
+    <button type="button" data-action="fit" aria-label="Fit diagram" title="Fit diagram (f)">Fit</button>
+    <button type="button" data-action="reset" aria-label="Reset to 1:1" title="Reset to 1:1 (0)">1:1</button>
+  </div>
+  <div class="mermaid-viewer__canvas">
+    <div class="mermaid-viewer__stage"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 608.676375 827.5579999999999" width="608.676375" height="827.5579999999999" style="--bg:#FFFFFF;--fg:#27272A">
+<style>
+  
+  text { font-family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="mv-figure-1-arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+  <marker id="mv-figure-1-arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+</defs>
+<polyline class="edge" data-from="Start" data-to="Auth" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="483.2527083333334,414.6664999999999 483.2527083333334,464.3699999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#mv-figure-1-arrowhead)" />
+<polyline class="edge" data-from="Auth" data-to="Login" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="No" points="508.817375,592.1933333333333 508.817375,738.6579999999999 399.1192166666667,738.6579999999999 399.1192166666667,738.6579999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#mv-figure-1-arrowhead)" />
+<polyline class="edge" data-from="Auth" data-to="Dashboard" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Yes" points="457.68804166666666,592.1933333333332 457.68804166666666,714.6579999999999 229.29555,714.6579999999999 229.29555,738.6579999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#mv-figure-1-arrowhead)" />
+<polyline class="edge" data-from="Login" data-to="Validate" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="320.3462166666667,738.6579999999999 320.3462166666667,738.6579999999999 284.82875,738.6579999999999 284.82875,653.7579999999999 294.97925833333335,653.7579999999999 294.97925833333335,551.1614999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#mv-figure-1-arrowhead)" />
+<polyline class="edge" data-from="Validate" data-to="Error" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="No" points="338.3280083333334,507.81274999999994 338.3280083333334,585.458 351.26025,585.458 351.26025000000004,653.7579999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#mv-figure-1-arrowhead)" />
+<polyline class="edge" data-from="Validate" data-to="Dashboard" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Yes" points="251.63050833333335,507.81274999999994 251.63050833333335,646.358 236.651,646.358 236.651,702.6579999999999 205.63138333333336,702.6579999999999 205.63138333333336,738.6579999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#mv-figure-1-arrowhead)" />
+<polyline class="edge" data-from="Error" data-to="Login" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="351.26025000000004,690.6579999999999 351.26025000000004,738.6579999999999 359.7327166666667,738.6579999999999 359.7327166666667,738.6579999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#mv-figure-1-arrowhead)" />
+<polyline class="edge" data-from="Dashboard" data-to="Action" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="134.63888333333335,738.6579999999999 134.63888333333335,714.6579999999999 40.04,714.6579999999999 40.04,210.863 77.47920833333333,210.863 77.47920833333333,134.4041" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#mv-figure-1-arrowhead)" />
+<polyline class="edge" data-from="Action" data-to="Profile" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="View Profile" points="104.45180833333333,161.3767 104.45180833333333,210.863 107.95349999999999,210.863 107.95349999999999,653.7579999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#mv-figure-1-arrowhead)" />
+<polyline class="edge" data-from="Action" data-to="Settings" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Settings" points="131.42440833333333,161.3767 131.42440833333333,210.863 180.31300000000002,210.863 180.31300000000002,292.8665" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#mv-figure-1-arrowhead)" />
+<polyline class="edge" data-from="Action" data-to="Logout" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Logout" points="158.39700833333333,134.4041 158.39700833333333,198.863 483.2527083333334,198.863 483.2527083333334,292.8665" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#mv-figure-1-arrowhead)" />
+<polyline class="edge" data-from="Profile" data-to="Dashboard" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="107.95349999999999,690.6579999999999 107.95349999999999,702.6579999999999 158.30305,702.6579999999999 158.30305,738.6579999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#mv-figure-1-arrowhead)" />
+<polyline class="edge" data-from="Settings" data-to="Dashboard" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="180.31300000000002,329.76649999999995 180.31300000000002,714.6579999999999 181.96721666666667,714.6579999999999 181.96721666666667,738.6579999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#mv-figure-1-arrowhead)" />
+<polyline class="edge" data-from="Logout" data-to="Start" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="483.2527083333334,329.76649999999995 483.2527083333334,377.76649999999995" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#mv-figure-1-arrowhead)" />
+<g class="edge-label" data-from="Auth" data-to="Login" data-label="No">
+  <rect x="493.317375" y="701.358" width="30.718000000000004" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="508.676375" y="716.5079999999999" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">No</text>
+</g>
+<g class="edge-label" data-from="Auth" data-to="Dashboard" data-label="Yes">
+  <rect x="439.18804166666666" y="677.358" width="36.658" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="457.51704166666667" y="692.5079999999999" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Yes</text>
+</g>
+<g class="edge-label" data-from="Validate" data-to="Error" data-label="No">
+  <rect x="335.76025" y="592.458" width="30.718000000000004" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="351.11924999999997" y="607.608" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">No</text>
+</g>
+<g class="edge-label" data-from="Validate" data-to="Dashboard" data-label="Yes">
+  <rect x="218.151" y="653.358" width="36.658" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="236.48000000000002" y="668.5079999999999" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Yes</text>
+</g>
+<g class="edge-label" data-from="Action" data-to="Profile" data-label="View Profile">
+  <rect x="71.45349999999999" y="217.863" width="72.89200000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="107.89949999999999" y="233.013" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">View Profile</text>
+</g>
+<g class="edge-label" data-from="Action" data-to="Settings" data-label="Settings">
+  <rect x="152.31300000000002" y="217.863" width="55.666000000000004" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="180.14600000000002" y="233.013" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Settings</text>
+</g>
+<g class="edge-label" data-from="Action" data-to="Logout" data-label="Logout">
+  <rect x="457.7527083333334" y="221.26999999999992" width="50.91400000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="483.20970833333337" y="236.41999999999993" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Logout</text>
+</g>
+<g class="node" data-id="Start" data-label="User Opens App" data-shape="rectangle">
+  <rect x="414.1127083333334" y="377.76649999999995" width="138.28" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="483.2527083333334" y="396.21649999999994" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">User Opens App</text>
+</g>
+<g class="node" data-id="Auth" data-label="Authenticated?" data-shape="diamond">
+  <polygon points="483.2527083333334,464.36999999999983 559.9467083333334,541.0639999999999 483.2527083333334,617.7579999999998 406.55870833333336,541.0639999999999" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="483.2527083333334" y="541.0639999999999" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Authenticated?</text>
+</g>
+<g class="node" data-id="Login" data-label="Show Login Screen" data-shape="rectangle">
+  <rect x="280.9597166666667" y="738.6579999999999" width="157.546" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="359.73271666666665" y="757.108" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Show Login Screen</text>
+</g>
+<g class="node" data-id="Dashboard" data-label="Load Dashboard" data-shape="rectangle">
+  <rect x="110.97471666666667" y="738.6579999999999" width="141.985" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="181.96721666666667" y="757.108" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Load Dashboard</text>
+</g>
+<g class="node" data-id="Validate" data-label="Valid Credentials?" data-shape="diamond">
+  <polygon points="294.97925833333335,377.76649999999995 381.67675833333334,464.46399999999994 294.97925833333335,551.1614999999999 208.28175833333336,464.46399999999994" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="294.97925833333335" y="464.46399999999994" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Valid Credentials?</text>
+</g>
+<g class="node" data-id="Error" data-label="Show Error" data-shape="rectangle">
+  <rect x="295.82875" y="653.7579999999999" width="110.863" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="351.26025000000004" y="672.208" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Show Error</text>
+</g>
+<g class="node" data-id="Action" data-label="User Action" data-shape="diamond">
+  <polygon points="117.93810833333333,40 185.36960833333333,107.4315 117.93810833333333,174.863 50.50660833333333,107.4315" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="117.93810833333333" y="107.4315" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">User Action</text>
+</g>
+<g class="node" data-id="Profile" data-label="Profile Page" data-shape="rectangle">
+  <rect x="51.04" y="653.7579999999999" width="113.827" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="107.95349999999999" y="672.208" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Profile Page</text>
+</g>
+<g class="node" data-id="Settings" data-label="Settings Page" data-shape="rectangle">
+  <rect x="118.95349999999999" y="292.8665" width="122.71900000000001" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="180.313" y="311.31649999999996" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Settings Page</text>
+</g>
+<g class="node" data-id="Logout" data-label="Clear Session" data-shape="rectangle">
+  <rect x="420.4112083333334" y="292.8665" width="125.68299999999999" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="483.2527083333334" y="311.31649999999996" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Clear Session</text>
+</g>
+</svg></div>
+  </div>
+  <p class="mermaid-viewer__hint">Drag to pan · Ctrl/Cmd + wheel or pinch to zoom · focused: f / 0 / + / −</p>
+  <figcaption>Flowchart viewer: zooming or panning here must not change the sequence viewer.</figcaption>
+</figure>
+<figure class="mermaid-viewer" data-mermaid-viewer tabindex="0" aria-label="API request sequence">
+  <div class="mermaid-viewer__toolbar" role="group" aria-label="Diagram zoom controls">
+    <button type="button" data-action="zoom-out" aria-label="Zoom out" title="Zoom out (−)">−</button>
+    <span class="mermaid-viewer__level" aria-live="polite">100%</span>
+    <button type="button" data-action="zoom-in" aria-label="Zoom in" title="Zoom in (+)">+</button>
+    <button type="button" data-action="fit" aria-label="Fit diagram" title="Fit diagram (f)">Fit</button>
+    <button type="button" data-action="reset" aria-label="Reset to 1:1" title="Reset to 1:1 (0)">1:1</button>
+  </div>
+  <div class="mermaid-viewer__canvas">
+    <div class="mermaid-viewer__stage"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 575" width="560" height="575" style="--bg:#FFFFFF;--fg:#27272A">
+<style>
+  
+  text { font-family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="mv-figure-2-seq-arrow" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto-start-reverse">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" />
+  </marker>
+  <marker id="mv-figure-2-seq-arrow-open" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto-start-reverse">
+    <polyline points="0 0, 8 2.5, 0 5" fill="none" stroke="var(--_arrow)" stroke-width="1" />
+  </marker>
+</defs>
+<line class="lifeline" data-actor="Client" x1="70" y1="70" x2="70" y2="545" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="API" x1="210" y1="70" x2="210" y2="545" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="Database" x1="350" y1="70" x2="350" y2="545" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="Cache" x1="490" y1="70" x2="490" y2="545" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<rect class="activation" data-actor="Cache" x="485" y="130" width="10" height="40" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect class="activation" data-actor="Database" x="345" y="210" width="10" height="40" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect class="activation" data-actor="API" x="205" y="90" width="10" height="240" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect class="activation" data-actor="Cache" x="485" y="425" width="10" height="40" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect class="activation" data-actor="API" x="205" y="385" width="10" height="120" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<g class="message" data-from="Client" data-to="API" data-label="GET /user/123" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="70" y1="90" x2="210" y2="90" stroke="var(--_line)" stroke-width="1" marker-end="url(#mv-figure-2-seq-arrow)" />
+  <text x="140" y="80" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">GET /user/123</text>
+</g>
+<g class="message" data-from="API" data-to="Cache" data-label="Check cache" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="210" y1="130" x2="490" y2="130" stroke="var(--_line)" stroke-width="1" marker-end="url(#mv-figure-2-seq-arrow)" />
+  <text x="350" y="120" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">Check cache</text>
+</g>
+<g class="message" data-from="Cache" data-to="API" data-label="Cache miss" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="490" y1="170" x2="210" y2="170" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#mv-figure-2-seq-arrow)" />
+  <text x="350" y="160" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">Cache miss</text>
+</g>
+<g class="message" data-from="API" data-to="Database" data-label="SELECT * FROM users WHERE id=123" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="210" y1="210" x2="350" y2="210" stroke="var(--_line)" stroke-width="1" marker-end="url(#mv-figure-2-seq-arrow)" />
+  <text x="280" y="200" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">SELECT * FROM users WHERE id=123</text>
+</g>
+<g class="message" data-from="Database" data-to="API" data-label="User data" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="350" y1="250" x2="210" y2="250" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#mv-figure-2-seq-arrow)" />
+  <text x="280" y="240" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">User data</text>
+</g>
+<g class="message" data-from="API" data-to="Cache" data-label="Store in cache" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="210" y1="290" x2="490" y2="290" stroke="var(--_line)" stroke-width="1" marker-end="url(#mv-figure-2-seq-arrow)" />
+  <text x="350" y="280" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">Store in cache</text>
+</g>
+<g class="message" data-from="API" data-to="Client" data-label="200 OK + User data" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="210" y1="330" x2="70" y2="330" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#mv-figure-2-seq-arrow)" />
+  <text x="140" y="320" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">200 OK + User data</text>
+</g>
+<g class="message" data-from="Client" data-to="API" data-label="GET /user/123" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="70" y1="385" x2="210" y2="385" stroke="var(--_line)" stroke-width="1" marker-end="url(#mv-figure-2-seq-arrow)" />
+  <text x="140" y="375" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">GET /user/123</text>
+</g>
+<g class="message" data-from="API" data-to="Cache" data-label="Check cache" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="210" y1="425" x2="490" y2="425" stroke="var(--_line)" stroke-width="1" marker-end="url(#mv-figure-2-seq-arrow)" />
+  <text x="350" y="415" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">Check cache</text>
+</g>
+<g class="message" data-from="Cache" data-to="API" data-label="Cache hit" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="490" y1="465" x2="210" y2="465" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#mv-figure-2-seq-arrow)" />
+  <text x="350" y="455" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">Cache hit</text>
+</g>
+<g class="message" data-from="API" data-to="Client" data-label="200 OK + User data (cached)" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="210" y1="505" x2="70" y2="505" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#mv-figure-2-seq-arrow)" />
+  <text x="140" y="495" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">200 OK + User data (cached)</text>
+</g>
+<g class="note" data-position="over" data-actors="Client,Cache">
+  <polygon points="219.358,338 334.64200000000005,338 340.64200000000005,344 340.64200000000005,361 219.358,361" fill="var(--bg)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <polygon points="334.64200000000005,338 340.64200000000005,344 334.64200000000005,344" fill="var(--_inner-stroke)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="280" y="349.5" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">Subsequent request</text>
+</g>
+<g class="actor" data-id="Client" data-label="Client" data-type="participant">
+  <rect x="30" y="30" width="80" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="70" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Client</text>
+</g>
+<g class="actor" data-id="API" data-label="API" data-type="participant">
+  <rect x="170" y="30" width="80" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="210" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">API</text>
+</g>
+<g class="actor" data-id="Database" data-label="Database" data-type="participant">
+  <rect x="304.867" y="30" width="90.26599999999999" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="350" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Database</text>
+</g>
+<g class="actor" data-id="Cache" data-label="Cache" data-type="participant">
+  <rect x="450" y="30" width="80" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="490" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Cache</text>
+</g>
+</svg></div>
+  </div>
+  <p class="mermaid-viewer__hint">Drag to pan · Ctrl/Cmd + wheel or pinch to zoom · focused: f / 0 / + / −</p>
+  <figcaption>Sequence viewer: independent state and controls.</figcaption>
+</figure><div class="showcase-spacer" aria-hidden="true"></div></main><script>(function () {
+  'use strict';
+  var MIN = 0.1, MAX = 8, PAD = 24, STEP = 1.25;
+  var registry = window.__mermaidViewers = window.__mermaidViewers || [];
+
+  function clamp(value) { return Math.min(MAX, Math.max(MIN, value)); }
+  function initialize(root) {
+    if (root.dataset.viewerReady === 'true') return null;
+    var viewport = root.querySelector('.mermaid-viewer__canvas');
+    var stage = root.querySelector('.mermaid-viewer__stage');
+    var svg = stage && stage.querySelector('svg');
+    var label = root.querySelector('.mermaid-viewer__level');
+    if (!viewport || !stage || !svg || !label) return null;
+    root.dataset.viewerReady = 'true';
+
+    var vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
+    var baseW = parseFloat(svg.getAttribute('width')) || vb[2] || svg.clientWidth || 800;
+    var baseH = parseFloat(svg.getAttribute('height')) || vb[3] || svg.clientHeight || 600;
+    svg.removeAttribute('width');
+    svg.removeAttribute('height');
+
+    var scale = 1, baked = 1, tx = 0, ty = 0, bakeTimer = null;
+    function stageW(value) { return (baseW + 2 * PAD) * value; }
+    function stageH(value) { return (baseH + 2 * PAD) * value; }
+    function draw() {
+      var residual = scale / baked;
+      stage.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + residual + ')';
+      label.textContent = Math.round(scale * 100) + '%';
+    }
+    function bake() {
+      baked = scale;
+      svg.style.width = baseW * baked + 'px';
+      svg.style.height = baseH * baked + 'px';
+      stage.style.padding = PAD * baked + 'px';
+      stage.style.borderRadius = 8 * Math.min(baked, 2) + 'px';
+      draw();
+    }
+    function scheduleBake() {
+      if (bakeTimer) clearTimeout(bakeTimer);
+      bakeTimer = setTimeout(function () { bakeTimer = null; bake(); }, 90);
+    }
+    function zoomAt(next, cx, cy) {
+      var target = clamp(next);
+      if (target === scale) return;
+      var factor = target / scale;
+      tx = cx - factor * (cx - tx);
+      ty = cy - factor * (cy - ty);
+      scale = target;
+      draw();
+      scheduleBake();
+    }
+    function zoomBy(factor, cx, cy) {
+      zoomAt(scale * factor, cx == null ? viewport.clientWidth / 2 : cx, cy == null ? viewport.clientHeight / 2 : cy);
+    }
+    function fit() {
+      scale = clamp(Math.min((viewport.clientWidth - 16) / stageW(1), (viewport.clientHeight - 16) / stageH(1)));
+      tx = (viewport.clientWidth - stageW(scale)) / 2;
+      ty = (viewport.clientHeight - stageH(scale)) / 2;
+      bake();
+    }
+    function reset() {
+      scale = 1;
+      tx = Math.max(0, (viewport.clientWidth - stageW(1)) / 2);
+      ty = 0;
+      bake();
+    }
+    function state() { return { scale: scale, baked: baked, tx: tx, ty: ty, baseW: baseW, baseH: baseH }; }
+
+    viewport.addEventListener('wheel', function (event) {
+      var modifier = event.ctrlKey || event.metaKey;
+      if (!modifier) return;
+      event.preventDefault();
+      var rect = viewport.getBoundingClientRect();
+      zoomAt(scale * Math.exp(-event.deltaY * 0.01), event.clientX - rect.left, event.clientY - rect.top);
+    }, { passive: false });
+
+    var dragging = false, pointerId = null, lastX = 0, lastY = 0;
+    viewport.addEventListener('pointerdown', function (event) {
+      if (event.button !== 0 || event.pointerType === 'touch') return;
+      event.preventDefault();
+      root.focus({ preventScroll: true });
+      dragging = true; pointerId = event.pointerId; lastX = event.clientX; lastY = event.clientY;
+      viewport.classList.add('dragging');
+      if (viewport.setPointerCapture) viewport.setPointerCapture(pointerId);
+    });
+    viewport.addEventListener('pointermove', function (event) {
+      if (!dragging || event.pointerId !== pointerId) return;
+      tx += event.clientX - lastX; ty += event.clientY - lastY;
+      lastX = event.clientX; lastY = event.clientY; draw();
+    });
+    function endDrag(event) {
+      if (!dragging || (event && event.pointerId !== pointerId)) return;
+      dragging = false; viewport.classList.remove('dragging');
+      if (viewport.hasPointerCapture && viewport.hasPointerCapture(pointerId)) viewport.releasePointerCapture(pointerId);
+      pointerId = null;
+    }
+    viewport.addEventListener('pointerup', endDrag);
+    viewport.addEventListener('pointercancel', endDrag);
+
+    var pinchDistance = 0, pinchScale = 1;
+    function distance(touches) {
+      var dx = touches[0].clientX - touches[1].clientX;
+      var dy = touches[0].clientY - touches[1].clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+    viewport.addEventListener('touchstart', function (event) {
+      if (event.touches.length !== 2) return;
+      pinchDistance = distance(event.touches); pinchScale = scale;
+    }, { passive: true });
+    viewport.addEventListener('touchmove', function (event) {
+      if (event.touches.length !== 2 || !pinchDistance) return;
+      event.preventDefault();
+      var rect = viewport.getBoundingClientRect();
+      var cx = (event.touches[0].clientX + event.touches[1].clientX) / 2 - rect.left;
+      var cy = (event.touches[0].clientY + event.touches[1].clientY) / 2 - rect.top;
+      zoomAt(pinchScale * distance(event.touches) / pinchDistance, cx, cy);
+    }, { passive: false });
+    viewport.addEventListener('touchend', function (event) { if (event.touches.length < 2) pinchDistance = 0; }, { passive: true });
+
+    root.querySelector('[data-action="zoom-in"]').addEventListener('click', function () { zoomBy(STEP); });
+    root.querySelector('[data-action="zoom-out"]').addEventListener('click', function () { zoomBy(1 / STEP); });
+    root.querySelector('[data-action="fit"]').addEventListener('click', fit);
+    root.querySelector('[data-action="reset"]').addEventListener('click', reset);
+    root.addEventListener('keydown', function (event) {
+      if (!root.contains(document.activeElement) || /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)) return;
+      if (event.key === '+' || event.key === '=') zoomBy(STEP);
+      else if (event.key === '-' || event.key === '_') zoomBy(1 / STEP);
+      else if (event.key === '0') reset();
+      else if (event.key === 'f' || event.key === 'F') fit();
+      else return;
+      event.preventDefault();
+    });
+
+    var api = { element: root, state: state, fit: fit, reset: reset, zoomAt: zoomAt, zoomBy: zoomBy, bake: bake };
+    registry.push(api);
+    requestAnimationFrame(fit);
+    return api;
+  }
+
+  function initializeAll(scope) {
+    (scope || document).querySelectorAll('[data-mermaid-viewer]').forEach(initialize);
+    if (document.body && document.body.classList.contains('mermaid-standalone') && registry[0]) window.__mermaidViewer = registry[0];
+    return registry;
+  }
+  window.MermaidEmbeddedViewer = { init: initializeAll };
+  initializeAll(document);
+})();</script></body></html>

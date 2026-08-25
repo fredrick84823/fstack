@@ -282,22 +282,10 @@ Code | Meaning | Likely cause | What to do | Retryable
 - 每條箭頭標記 request、event、response 或 retry。
 - Sequence diagram 過長時拆成「happy path」與「failure path」。
 
-### Mermaid 方向
+### 外觀方向
 
-```javascript
-{
-  theme: "base",
-  themeVariables: {
-    primaryColor: "#eef2ff",
-    primaryTextColor: "#1f2937",
-    primaryBorderColor: "#818cf8",
-    lineColor: "#64748b",
-    secondaryColor: "#ffffff",
-    tertiaryColor: "#f2f5fa",
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
-  }
-}
-```
+Figure 使用淺色 surface、清楚邊框與單一藍紫 accent；節點名稱對應實際資源。
+Mermaid source 只寫語意，不放顏色。
 
 ---
 

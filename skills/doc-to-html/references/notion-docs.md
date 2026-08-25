@@ -314,22 +314,10 @@ References
 - 標籤可稍長於 Vercel 風格，但仍避免完整段落。
 - 一張圖後附上摘要、決策或 action items。
 
-### Mermaid 方向
+### 外觀方向
 
-```javascript
-{
-  theme: "base",
-  themeVariables: {
-    primaryColor: "#f7f7f5",
-    primaryTextColor: "#2f3437",
-    primaryBorderColor: "#d9d9d6",
-    lineColor: "#787774",
-    secondaryColor: "#e7f3f8",
-    tertiaryColor: "#edf3ec",
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
-  }
-}
-```
+Figure 像內容 block：暖白／淡灰 surface、極淡邊框與一種柔和 accent，不做控制台感。
+Mermaid source 只寫語意，不放顏色。
 
 ---
 

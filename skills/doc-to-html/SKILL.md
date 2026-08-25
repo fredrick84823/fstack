@@ -32,7 +32,22 @@ disable-model-invocation: true
 
 - **不創造事實**：保留原文的主張、數字、名稱、日期、程式碼與限制。可重排以提升閱讀性，但不改變原意；不確定的標「待確認」。
 - **資訊架構由內容決定**：只呈現實際存在的區塊，不要為了模板完整而生出空章節。
-- **有語意關係才畫圖**，一張圖只回答一個主要問題，節點標籤保持短句、細節放圖後。Mermaid 適合流程／sequence／state／ER 與簡單架構，高度客製的資訊圖用 inline SVG 或 CSS；用 Mermaid 時保留原始 source 與渲染失敗的文字 fallback。
+- **有語意關係才畫圖**，一張圖只回答一個主要問題，節點標籤保持短句、細節放圖後。流程、sequence、state、class、ER、XY chart 與簡單架構優先使用 Mermaid；只有 Mermaid 無法表達的高度客製 infographic 才用 inline SVG/CSS，並在產出紀錄說明例外原因。
+
+## Diagram interaction contract
+
+Mermaid family 可表達時 **MUST** 載入並使用 `beautiful-mermaid` 渲染，不得手寫等價
+inline SVG。單檔 HTML 中的 diagram 預設為 embedded interactive viewer；只有使用者明確
+要求 static、產出專供 print/PDF，或禁止 JavaScript 時才靜態化。
+
+唯一互動實作是 `../beautiful-mermaid/scripts/lib/html.js` 的 `embeddedFigure()`、
+`embeddedViewerCSS()`、`embeddedViewerScript()`；完整組頁可用 `embeddedDocument()`。
+不得在本 skill、產出頁或風格檔複製／改寫 viewer JS。需要組頁時先載入
+[`beautiful-mermaid` integration guide](../beautiful-mermaid/references/integration-guide.md#embedded-multi-instance-viewer)。
+三個 style reference 只決定 figure 的外觀與文件資訊層級，不改變互動行為。
+
+每張圖保留 package-rendered inline SVG、caption/accessible label 與 Mermaid source/failure
+文字（可放相鄰 `<details>`）；JS 關閉及 print 時 SVG 仍須可讀。
 
 ### C4 架構圖
 
@@ -72,4 +87,16 @@ rules: xxxx-xx-xx_page-name.html
 example: 2026-07-16_bigquery-mcp-architecture-design.html
 ```
 
-Mermaid 若從 CDN 載入，集中在一個 script 區塊，未載入時仍可讀 fallback。
+beautiful-mermaid runtime、CSS 與 SVG 全部內嵌，不依賴 CDN。
+
+## 驗證 completion criteria
+
+用 browser automation 執行後才算完成，不以目視代替：
+
+- [ ] `window.__mermaidViewers.length` 等於圖數，document IDs 無重複。
+- [ ] 操作 A 的 zoom/pan/toolbar/keyboard 後，B 的 `state()` 完全不變。
+- [ ] 普通 wheel 未被 `preventDefault` 且頁面可捲；Ctrl/Cmd+wheel 或 pinch 會 zoom。
+- [ ] 每圖 `Fit`、`1:1`、拖曳 pan 與 focused keyboard 均可操作。
+- [ ] 390px viewport 無全頁水平 overflow；單指 touch 未被 viewer 永久攔截。
+- [ ] 禁用 JS 後 SVG、caption、fallback 可讀；print 隱藏 controls 且保留靜態 SVG。
+- [ ] 無 remote dependency、console error；每張圖均由 beautiful-mermaid renderer 產出。

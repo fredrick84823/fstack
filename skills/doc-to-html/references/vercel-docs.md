@@ -295,22 +295,10 @@ Callout 應包含簡短標題。正文超過兩段時應改成一般 section，�
 
 ## 5. Diagram Treatment
 
-### Mermaid 主題方向
+### 外觀方向
 
-```javascript
-{
-  theme: "base",
-  themeVariables: {
-    primaryColor: "#ffffff",
-    primaryTextColor: "#18181b",
-    primaryBorderColor: "#d4d4d8",
-    lineColor: "#71717a",
-    secondaryColor: "#fafafa",
-    tertiaryColor: "#f4f4f5",
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
-  }
-}
-```
+Figure 使用淡灰 surface、細邊框與黑白節點；critical path 最多一種低飽和 accent。
+Mermaid source 只寫語意，不放顏色。
 
 ### 圖表選擇
 
@@ -336,7 +324,6 @@ Callout 應包含簡短標題。正文超過兩段時應改成一般 section，�
 - Sticky TOC 與 active section。
 - Copy code / copy Mermaid source。
 - `<details>` appendix。
-- 圖表 zoom（只在大型 diagram）。
 - Light / dark / system theme switch（使用者要求時）。
 
 避免：

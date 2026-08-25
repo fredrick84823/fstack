@@ -44,7 +44,7 @@ node scripts/render_mermaid.js -i diagram.mmd -o diagram.svg -p craft-dark
 # fully offline SVG (system fonts, no @import)
 node scripts/render_mermaid.js -i diagram.mmd -o diagram.svg --offline
 
-# interactive HTML viewer (pan/zoom, offline)
+# standalone interactive HTML viewer (pan/zoom, offline)
 node scripts/render_mermaid.js -i diagram.mmd -o diagram.html -f html
 
 # static HTML (no script)
@@ -143,35 +143,29 @@ Skill-side helpers live in `scripts/lib/presets.js` (`renderSVG`, `renderASCII`,
 
 Full reference: [api-reference.md](references/api-reference.md).
 
-## HTML output
+## HTML viewers
 
-`-f html` produces an **interactive viewer** by default. Zero dependencies, works from
-`file://`, no CDN, no remote fonts when combined with `--offline`.
+Two shells share one canonical implementation in `scripts/lib/html.js`:
 
-| Interaction | Behavior |
-|---|---|
-| wheel / trackpad pinch | zoom anchored at the cursor, 0.1x–8x |
-| left-drag | pan (pointer events + `setPointerCapture`) |
-| double-click | reset to 1:1 |
-| `f` | fit to window |
-| `0` | reset to 1:1 |
-| `+` / `-` | zoom about the viewport center |
-| HUD (top-right) | `−` / percentage / `+` / `Fit` / `1:1` |
+- **Standalone**: `-f html` creates a full-window single-diagram viewer. `--static` is only
+  for an explicit static/no-JS/print-only request.
+- **Embedded multi-instance**: doc pages compose `embeddedFigure()` fragments, include
+  `embeddedViewerCSS()` and `embeddedViewerScript()` exactly once, or call
+  `embeddedDocument()` for a complete self-contained page. Never copy the runtime into a
+  downstream skill.
 
-The diagram is auto-fitted on load; the hint strip sits bottom-left.
+Every embedded figure uses classes/data attributes, namespaces SVG-local IDs, auto-fits, and
+owns independent `scale` / `baked` / `tx` / `ty` state. Controls are `−`, `+`, `Fit`, `1:1`.
+Desktop drag pans; Ctrl/Cmd+wheel and two-finger pinch zoom. Plain wheel and one-finger mobile
+gestures remain page scrolling. Keyboard shortcuts (`f`, `0`, `+`, `−`) affect only the
+focused viewer. Static SVG remains readable with JavaScript disabled and is used for print.
 
-**Sharpness:** zoom is *baked* into the SVG's real layout size (`svg.style.width/height`,
-padding scaled to match), not only applied as a CSS `transform: scale()`. During a gesture a
-residual `scale(scale / baked)` transform gives instant feedback, then a ~90 ms debounce
-re-bakes so the browser re-rasterizes vectors at the new size. `will-change: transform` is
-applied only while dragging. See
-[integration-guide.md](references/integration-guide.md#為何-css-transform-縮放會模糊) for the rationale.
+The automation contract is `window.__mermaidViewers`, an array in document order. Each entry
+provides `state()`, `fit()`, `reset()`, `zoomAt()`, `zoomBy()`, and `bake()`. Standalone output
+also aliases the first entry as `window.__mermaidViewer` for compatibility.
 
-Use `--static` when the HTML is a build input rather than something a human pans around:
-embedding into another page, further post-processing, PDF/print pipelines, or diffing HTML text.
-
-Automation hook: the viewer exposes `window.__mermaidViewer`
-(`state()`, `fit()`, `reset()`, `zoomAt()`, `bake()`).
+The sharp bake + residual strategy, canonical markup/API example, and integration checks are
+disclosed in [integration-guide.md](references/integration-guide.md#embedded-multi-instance-viewer).
 
 ## Scripts
 
@@ -179,7 +173,8 @@ Automation hook: the viewer exposes `window.__mermaidViewer`
 |---|---|
 | `scripts/setup_check.js [--install]` | verify package + API + presets; `--install` runs `npm ci` |
 | `scripts/render_mermaid.js` | CLI renderer (svg / html / ascii) |
-| `scripts/build_showcase.js` | regenerate `assets/examples/all-diagrams-showcase.html` |
+| `scripts/build_showcase.js` | regenerate the preset gallery |
+| `scripts/build_embedded_showcase.js` | regenerate the canonical two-viewer integration fixture |
 | `assets/examples/batch-render.sh` | batch render a directory (`<in> <out> <preset> <format>`) |
 
 CLI options: `-i/--input` (`-` = stdin), `-o/--output` (omit → stdout), `-p/--preset`,
@@ -194,6 +189,7 @@ CLI options: `-i/--input` (`-` = stdin), `-o/--output` (omit → stdout), `-p/--
 - `flowchart.mmd`, `state.mmd`, `sequence.mmd`, `class.mmd`, `er.mmd`, `xychart.mmd` — one per family
 - `advanced-flowchart-subgraph.mmd` — subgraph staging, no color coding
 - `all-diagrams-showcase.html` — generated, offline, package-rendered, preset switcher
+- `embedded-viewer-showcase.html` — self-contained, two independent embedded viewers
 - `markdown-integration-example.md` — embedding patterns
 
 ## Tests
@@ -203,10 +199,9 @@ npm test                       # semantic SVG assertions + screenshot regression
 npm run test:update-baselines  # accept intended visual changes
 ```
 
-Covered: preset defaults, theme override precedence, hero structural parity, transparency,
-offline output, all six families, fixture hygiene (no emoji/inline colors), showcase
-self-containment, showcase freshness, CLI behavior, Chromium screenshot baselines
-(`tests/baselines/`, auto-skipped when no Chromium is present).
+Covered: rendering and CLI contracts plus embedded ID namespacing, independent state and
+controls, modifier/plain wheel policy, drag, fit/reset, focused keyboard, mobile touch policy,
+print/no-JS fallback, 390px overflow, automation API, and Chromium screenshots.
 
 ## Troubleshooting
 

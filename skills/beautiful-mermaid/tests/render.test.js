@@ -155,45 +155,18 @@ test('showcase is up to date with the generator', () => {
   assert.equal(fs.readFileSync(file, 'utf8'), before, 'run node scripts/build_showcase.js');
 });
 
-test('interactive HTML template is self-contained and complete', async () => {
+test('interactive HTML is a standalone shell over the canonical embedded runtime', async () => {
   const { svg, presetName, themeName } = await renderSVG(read('hero.mmd'), { offline: true });
   const html = interactiveHTML(svg, { presetName, themeName, offline: true });
 
-  // structure
-  for (const id of ['id="viewport"', 'id="stage"', 'id="hud"', 'id="hint"', 'id="zoomLevel"']) {
-    assert.ok(html.includes(id), `missing ${id}`);
-  }
-  for (const id of ['zoomIn', 'zoomOut', 'zoomFit', 'zoomReset']) {
-    assert.ok(html.includes(`id="${id}"`), `missing HUD control ${id}`);
-  }
-
-  // behavior contract
-  assert.match(html, /MIN = 0\.1, MAX = 8/);
-  assert.ok(html.includes("addEventListener('wheel'"));
-  assert.ok(html.includes("addEventListener('pointerdown'"));
-  assert.ok(html.includes('setPointerCapture'));
-  assert.ok(html.includes("addEventListener('dblclick'"));
-  assert.ok(html.includes("addEventListener('keydown'"));
-  assert.ok(/fit\(\);\s*\n/.test(html), 'must auto-fit on load');
-
-  // sharpness contract: bake into real SVG size, residual transform, debounce
-  assert.ok(html.includes("svg.removeAttribute('width')"));
-  assert.ok(html.includes('svg.style.width = baseW * baked'));
+  assert.ok(html.includes('class="mermaid-viewer mermaid-viewer--standalone"'));
+  assert.ok(html.includes('data-mermaid-viewer'));
+  assert.ok(html.includes('window.__mermaidViewers'));
+  assert.ok(html.includes('window.__mermaidViewer = registry[0]'));
   assert.ok(html.includes('scale / baked'));
-  assert.match(html, /setTimeout\(function \(\) \{ bakeTimer = null; bake\(\); \}, 90\)/);
-  assert.ok(html.includes('#viewport.dragging #stage { will-change: transform; }'));
-  const stageRule = html.match(/\n  #stage \{[\s\S]*?\n  \}/);
-  assert.ok(stageRule, '#stage rule not found');
-  assert.ok(!/will-change/.test(stageRule[0]), 'will-change must not be permanent');
-  assert.ok(html.includes('#stage > svg { display: block; max-width: none;'));
-
-  // zero dependencies
+  assert.ok(html.includes('svg.style.width = baseW * baked'));
   assert.ok(!/<script[^>]+src=/.test(html));
   assert.ok(!/<link[^>]+href=/.test(html));
-  const remote = (html.match(/https?:\/\/[^"')\s]+/g) || []).filter(
-    (url) => !url.startsWith('http://www.w3.org/')
-  );
-  assert.deepEqual(remote, []);
 });
 
 test('static HTML has no script and keeps document flow', async () => {

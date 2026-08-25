@@ -49,7 +49,7 @@ function findChrome() {
         'chrome-linux/chrome',
       ]) {
         const bin = path.join(root, rel);
-        if (fs.existsSync(bin)) candidates.unshift(bin);
+        if (fs.existsSync(bin)) candidates.push(bin);
       }
     }
   }
@@ -82,20 +82,26 @@ test('screenshot regression', { skip: chrome ? false : 'no Chromium/Chrome found
       const shot = path.join(tmp, `${name}.png`);
       fs.writeFileSync(html, page(svg, preset), 'utf8');
 
-      execFileSync(
-        chrome,
-        [
-          '--headless=new',
-          '--disable-gpu',
-          '--hide-scrollbars',
-          '--force-device-scale-factor=1',
-          '--window-size=1280,600',
-          `--screenshot=${shot}`,
-          `--user-data-dir=${path.join(tmp, `profile-${name}`)}`,
-          `file://${html}`,
-        ],
-        { stdio: 'ignore', timeout: 60_000 }
-      );
+      try {
+        execFileSync(
+          chrome,
+          [
+            '--headless=new',
+            '--disable-gpu',
+            '--hide-scrollbars',
+            '--force-device-scale-factor=1',
+            '--window-size=1280,600',
+            `--screenshot=${shot}`,
+            `--user-data-dir=${path.join(tmp, `profile-${name}`)}`,
+            `file://${html}`,
+          ],
+          { stdio: 'ignore', timeout: 10_000 }
+        );
+      } catch (error) {
+        // Some macOS Chrome builds write the requested screenshot but retain a
+        // background process. A completed artifact is success; any other error is real.
+        if (!fs.existsSync(shot)) throw error;
+      }
 
       assert.ok(fs.existsSync(shot), 'chrome produced no screenshot');
       const actual = fs.readFileSync(shot);

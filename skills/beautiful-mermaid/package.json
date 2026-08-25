@@ -10,7 +10,7 @@
     "bootstrap": "node scripts/setup_check.js --install",
     "check": "node scripts/setup_check.js",
     "render": "node scripts/render_mermaid.js",
-    "build:showcase": "node scripts/build_showcase.js",
+    "build:showcase": "node scripts/build_showcase.js && node scripts/build_embedded_showcase.js",
     "test": "node --test \"tests/*.test.js\"",
     "test:update-baselines": "BM_UPDATE_BASELINES=1 node --test \"tests/*.test.js\""
   },
