@@ -20,7 +20,7 @@ disable-model-invocation: true
 
 不明確時：工程決策 → `vercel`；開發者操作 → `stripe`；團隊協作與知識管理 → `notion`。不要混用三種視覺語言；只有使用者明確要求 `hybrid` 才混合，且仍須選一個主風格。
 
-可覆寫的參數：`style`、`layout`、`theme`（預設 `auto` / `auto` / `light`）。
+可覆寫的參數：`style`、`layout`、`theme`（預設 `auto` / `auto` / `light`）。`theme` 只決定初始色；每頁都帶深淺 toggle。寫 HTML 前讀 [references/theme-toggle.md](references/theme-toggle.md)，照抄 head script、dark tokens、`#theme-toggle`、click handler。
 
 ## 版面
 
@@ -70,6 +70,7 @@ MUST：
 - 自動目錄、目前章節提示、anchor links、複製程式碼按鈕。
 - `@media print` 隱藏導覽與互動控制；設計 token 集中在 CSS variables。
 - JS 不是閱讀的必要條件；關閉 JS 仍能讀完核心內容。
+- 深淺 toggle：head FOUC script、`:root[data-theme="dark"]` tokens、`#theme-toggle`、body 尾 click handler。點擊後 `data-theme` 與 `localStorage.theme` 同步。
 
 MUST NOT：
 

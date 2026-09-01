@@ -65,6 +65,8 @@
 }
 ```
 
+Dark：貼 [theme-toggle.md](theme-toggle.md) 的 `:root[data-theme="dark"]`。
+
 ### Typography
 
 | 元件 | 建議 |
@@ -330,7 +332,7 @@ Mermaid source 只寫語意，不放顏色。
 - Copy anchor / copy code。
 - 簡單 table filter（只有真的實作）。
 - Expand full row / full note。
-- Theme switch（使用者要求時）。
+- 深淺 toggle：見 [theme-toggle.md](theme-toggle.md)（預設必帶）。
 
 避免：
 
@@ -353,7 +355,7 @@ Mermaid source 只寫語意，不放顏色。
 3. 適度使用淡色 Callout、原生 details/summary、disabled checklist、decision log、properties grid 與垂直 timeline。
 4. PRD 顯示目標、non-goals、requirements、success metrics、risks 與 launch plan；會議文件顯示 decisions、action items 與 parking lot。
 5. Diagram 要像一個文件 block，使用柔和灰階與單一 accent；圖後整理 What this means 或 next actions。
-6. 預設輸出單一 index.html，支援列印、鍵盤操作、responsive tables 與 reduced motion。
+6. 預設輸出單一 index.html，支援列印、鍵盤操作、responsive tables、reduced motion 與深淺 toggle。
 7. 不使用品牌 logo、不逐像素複製網站、不模擬無法儲存的編輯功能，也不得補造 owner、日期、狀態或其他事實。
 ```
 

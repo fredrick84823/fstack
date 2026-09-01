@@ -46,7 +46,7 @@ C4 架構圖的分層規則沿用 [doc-to-html](../doc-to-html/SKILL.md#c4-架�
 
 ## 3. 寫頁面骨架
 
-版面、風格檔、語意化 HTML、MUST / MUST NOT 全部照 [doc-to-html](../doc-to-html/SKILL.md) 執行。差別是圖的位置改成佔位 figure，內容留空：
+版面、風格檔、語意化 HTML、MUST / MUST NOT、深淺 toggle 全部照 [doc-to-html](../doc-to-html/SKILL.md) 執行。差別是圖的位置改成佔位 figure，內容留空：
 
 ```html
 <figure class="viz" data-mmd="diagrams/ingest.mmd" data-h="460" data-alt="ingest pipeline">
@@ -66,8 +66,10 @@ C4 架構圖的分層規則沿用 [doc-to-html](../doc-to-html/SKILL.md#c4-架�
 ## 4. Inline
 
 ```bash
-node ~/.agents/skills/viz-it/scripts/inline_diagrams.mjs <file.html> [--preset=craft-dark]
+node ~/.agents/skills/viz-it/scripts/inline_diagrams.mjs <file.html> [--preset=craft]
 ```
+
+預設 `craft`（light bake）。Dark 由 runtime 跟 `data-theme` 走，不要用 `--preset=craft-dark` 當頁面主題。
 
 渲染每個 figure、把 SVG 塞進 `.viz-stage > .viz-canvas`、注入一次 viewer runtime（CSS + JS，`id="viz-runtime"`）。可重複執行：改完 .mmd 直接再跑一次會覆蓋舊 SVG。
 

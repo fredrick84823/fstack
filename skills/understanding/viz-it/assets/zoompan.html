@@ -8,14 +8,16 @@
     --viz-muted: #71717a;
     --viz-rule: #e4e4e7;
   }
-  @media (prefers-color-scheme: dark) {
-    .viz {
-      --viz-surface: #18181b;
-      --viz-page: #09090b;
-      --viz-ink: #e4e4e7;
-      --viz-muted: #a1a1aa;
-      --viz-rule: #3f3f46;
-    }
+  :root[data-theme="dark"] .viz {
+    --viz-surface: #2f343e;
+    --viz-page: #282c33;
+    --viz-ink: #c8ccd4;
+    --viz-muted: #838994;
+    --viz-rule: #464b57;
+  }
+  :root[data-theme="dark"] .viz svg {
+    --bg: #2f343e !important;
+    --fg: #c8ccd4 !important;
   }
   .viz-stage {
     position: relative;

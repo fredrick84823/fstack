@@ -67,6 +67,8 @@
 }
 ```
 
+Dark：貼 [theme-toggle.md](theme-toggle.md) 的 `:root[data-theme="dark"]`。
+
 ### Typography
 
 | 元件 | 建議 |
@@ -324,7 +326,7 @@ Mermaid source 只寫語意，不放顏色。
 - Sticky TOC 與 active section。
 - Copy code / copy Mermaid source。
 - `<details>` appendix。
-- Light / dark / system theme switch（使用者要求時）。
+- 深淺 toggle：見 [theme-toggle.md](theme-toggle.md)（預設必帶）。
 
 避免：
 
@@ -347,7 +349,7 @@ Mermaid source 只寫語意，不放顏色。
 2. 使用寬版 Hero、左側章節導覽、中央閱讀欄與右側 sticky TOC；手機版改成單欄。
 3. 使用低裝飾的 metric cards、decision cards、comparison matrix、risk table 與 timeline。
 4. Architecture、request flow、state 或 rollout 有明確關係時使用 Mermaid；圖前說明閱讀重點，圖後列出洞察。
-5. 預設輸出單一 index.html，內嵌 CSS 與少量 JS，支援列印、鍵盤操作與 reduced motion。
+5. 預設輸出單一 index.html，內嵌 CSS 與少量 JS，支援列印、鍵盤操作、reduced motion 與深淺 toggle。
 6. 不使用品牌 logo、不逐像素複製網站、不加入無意義漸層或動畫，也不得補造原文件沒有的事實。
 ```
 

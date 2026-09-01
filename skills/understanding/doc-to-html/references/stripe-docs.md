@@ -68,6 +68,8 @@
 }
 ```
 
+Dark：貼 [theme-toggle.md](theme-toggle.md) 的 `:root[data-theme="dark"]`。
+
 ### Typography
 
 | 元件 | 建議 |
@@ -302,6 +304,7 @@ Mermaid source 只寫語意，不放顏色。
 
 必須：
 
+- 深淺 toggle：見 [theme-toggle.md](theme-toggle.md)（預設必帶）。
 - Copy 後提供文字 feedback。
 - Tab 與 accordion 可鍵盤操作。
 - 不依賴 hover 才顯示參數必要資訊。
@@ -327,7 +330,7 @@ Mermaid source 只寫語意，不放顏色。
 3. 為程式碼加入語言 tabs、檔名或用途標籤、copy button、expected result 與錯誤處理。
 4. API endpoint 顯示 method、path、authentication、parameters、request、response 與 error cases；不得補造不存在的 endpoint 或欄位。
 5. 使用 sequence diagram、resource lifecycle 或 integration flow 幫助理解；每張圖都必須對應實際操作。
-6. 預設輸出單一 index.html，支援鍵盤操作、列印、responsive tables 與 reduced motion。
+6. 預設輸出單一 index.html，支援鍵盤操作、列印、responsive tables、reduced motion 與深淺 toggle。
 7. 不使用品牌 logo、不逐像素複製網站、不加入無功能的假 API console，也不得在範例中暴露真實 secret。
 ```
 
