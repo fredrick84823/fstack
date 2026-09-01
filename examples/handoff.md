@@ -23,7 +23,7 @@ last_updated: 2026-05-30
 
 - `README.md`: public entry point and workflow summary.
 - `docs/context-continuity.md`: detailed handoff/resume design.
-- `skills/resume-handoff/SKILL.md`: resume behavior contract.
+- `skills/continuity/resume-handoff/SKILL.md`: resume behavior contract.
 
 ## Recent Changes
 

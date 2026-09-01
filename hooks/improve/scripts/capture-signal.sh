@@ -25,7 +25,7 @@ fi
 
 ts=$(date -Iseconds)
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-memory_script="$repo_root/skills/improve/scripts/memory.sh"
+memory_script="$repo_root/skills/skill-evolution/improve/scripts/memory.sh"
 memory_dir="$(dirname "$queue")/memory"
 
 # Extract and append each <<GAP skill-name: description>> marker

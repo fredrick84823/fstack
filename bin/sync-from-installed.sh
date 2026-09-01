@@ -12,7 +12,7 @@
 set -euo pipefail
 
 SRC="${1:-$HOME/.claude/skills/generate-meeting-notes}"
-DST="$(cd "$(dirname "$0")/.." && pwd)/skills/generate-meeting-notes"
+DST="$(cd "$(dirname "$0")/.." && pwd)/skills/comms/generate-meeting-notes"
 
 [[ -d $SRC ]] || { echo "找不到安裝版：$SRC" >&2; exit 1; }
 
