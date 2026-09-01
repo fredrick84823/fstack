@@ -1,0 +1,245 @@
+<!-- viz runtime: per-figure pan/zoom. Injected by scripts/inline_diagrams.mjs. -->
+<style id="viz-runtime-css">
+  .viz {
+    margin: 32px 0;
+    --viz-surface: #ffffff;
+    --viz-page: #fafafa;
+    --viz-ink: #27272a;
+    --viz-muted: #71717a;
+    --viz-rule: #e4e4e7;
+  }
+  @media (prefers-color-scheme: dark) {
+    .viz {
+      --viz-surface: #18181b;
+      --viz-page: #09090b;
+      --viz-ink: #e4e4e7;
+      --viz-muted: #a1a1aa;
+      --viz-rule: #3f3f46;
+    }
+  }
+  .viz-stage {
+    position: relative;
+    overflow: hidden;
+    height: 420px;
+    min-height: 200px;
+    resize: vertical;
+    border: 1px solid var(--viz-rule);
+    border-radius: 10px;
+    background: var(--viz-page);
+    touch-action: none;
+    cursor: grab;
+    outline-offset: 2px;
+  }
+  .viz-stage.dragging { cursor: grabbing; }
+  .viz-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: 0 0;
+    padding: 24px;
+    background: var(--viz-surface);
+    border-radius: 8px;
+  }
+  .viz-stage.dragging .viz-canvas { will-change: transform; }
+  .viz-canvas > svg { display: block; max-width: none; height: auto; }
+  .viz-hud {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    padding: 4px 6px;
+    font: 12px/1 inherit;
+    color: var(--viz-ink);
+    background: var(--viz-surface);
+    border: 1px solid var(--viz-rule);
+    border-radius: 8px;
+    user-select: none;
+    z-index: 2;
+  }
+  .viz-hud button {
+    font: inherit;
+    min-width: 26px;
+    padding: 4px 6px;
+    color: inherit;
+    background: var(--viz-surface);
+    border: 1px solid var(--viz-rule);
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .viz-hud button:hover { background: var(--viz-page); }
+  .viz-level { min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
+  .viz-hint {
+    position: absolute;
+    bottom: 8px;
+    left: 10px;
+    font-size: 11px;
+    color: var(--viz-muted);
+    user-select: none;
+    pointer-events: none;
+  }
+  .viz figcaption { margin-top: 10px; font-size: 13px; color: var(--viz-muted); }
+  .viz-stage:fullscreen { height: 100%; border: 0; border-radius: 0; }
+  @media print {
+    .viz-stage { height: auto; overflow: visible; resize: none; border: 0; }
+    .viz-canvas { position: static; transform: none !important; padding: 0; }
+    .viz-canvas > svg { max-width: 100%; width: 100% !important; height: auto !important; }
+    .viz-hud, .viz-hint { display: none; }
+  }
+</style>
+<script id="viz-runtime">
+(function () {
+  var MIN = 0.1, MAX = 8, STEP = 1.25, PAD = 24;
+
+  function mount(fig) {
+    var stage = fig.querySelector('.viz-stage');
+    var canvas = stage && stage.querySelector('.viz-canvas');
+    var svg = canvas && canvas.querySelector('svg');
+    if (!svg) return;
+
+    var vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
+    var baseW = parseFloat(svg.getAttribute('width')) || vb[2] || 800;
+    var baseH = parseFloat(svg.getAttribute('height')) || vb[3] || 600;
+    svg.removeAttribute('width');
+    svg.removeAttribute('height');
+
+    var scale = 1, baked = 0, tx = 0, ty = 0, timer = null;
+
+    var hud = document.createElement('div');
+    hud.className = 'viz-hud';
+    hud.innerHTML = '<button data-viz="out" title="Zoom out (−)">−</button>' +
+      '<span class="viz-level">100%</span>' +
+      '<button data-viz="in" title="Zoom in (+)">+</button>' +
+      '<button data-viz="fit" title="Fit (f)">Fit</button>' +
+      '<button data-viz="reset" title="1:1 (0)">1:1</button>' +
+      '<button data-viz="full" title="Fullscreen">⤢</button>';
+    stage.appendChild(hud);
+
+    var hint = document.createElement('div');
+    hint.className = 'viz-hint';
+    hint.textContent = 'drag to pan · ⌘/ctrl + wheel or pinch to zoom · double-click fit';
+    stage.appendChild(hint);
+
+    var label = hud.querySelector('.viz-level');
+    stage.tabIndex = 0;
+
+    function stageW(s) { return (baseW + 2 * PAD) * s; }
+    function stageH(s) { return (baseH + 2 * PAD) * s; }
+
+    // Bake zoom into the SVG's real layout size so the browser re-rasterizes sharply.
+    function bake() {
+      baked = scale;
+      svg.style.width = baseW * baked + 'px';
+      svg.style.height = baseH * baked + 'px';
+      canvas.style.padding = PAD * baked + 'px';
+      draw();
+    }
+
+    function draw() {
+      canvas.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + (scale / baked) + ')';
+      label.textContent = Math.round(scale * 100) + '%';
+    }
+
+    function scheduleBake() {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function () { timer = null; bake(); }, 90);
+    }
+
+    function zoomAt(next, cx, cy) {
+      var s = Math.min(MAX, Math.max(MIN, next));
+      if (s === scale) return;
+      var k = s / scale;
+      tx = cx - k * (cx - tx);
+      ty = cy - k * (cy - ty);
+      scale = s;
+      draw();
+      scheduleBake();
+    }
+
+    function zoomCenter(f) { zoomAt(scale * f, stage.clientWidth / 2, stage.clientHeight / 2); }
+
+    function fit(allowUpscale) {
+      var s = Math.min(stage.clientWidth / stageW(1), stage.clientHeight / stageH(1));
+      scale = Math.min(MAX, Math.max(MIN, allowUpscale ? s : Math.min(s, 1)));
+      tx = (stage.clientWidth - stageW(scale)) / 2;
+      ty = (stage.clientHeight - stageH(scale)) / 2;
+      bake();
+    }
+
+    function reset() {
+      scale = 1;
+      tx = Math.max(0, (stage.clientWidth - stageW(1)) / 2);
+      ty = Math.max(0, (stage.clientHeight - stageH(1)) / 2);
+      bake();
+    }
+
+    // Plain wheel keeps scrolling the page; only pinch / ⌘ / ctrl zooms.
+    stage.addEventListener('wheel', function (e) {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      var r = stage.getBoundingClientRect();
+      zoomAt(scale * Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+    }, { passive: false });
+
+    var dragging = false, lastX = 0, lastY = 0, pid = null;
+
+    stage.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0 || e.target.closest('.viz-hud')) return;
+      dragging = true; pid = e.pointerId; lastX = e.clientX; lastY = e.clientY;
+      stage.classList.add('dragging');
+      if (stage.setPointerCapture) stage.setPointerCapture(pid);
+    });
+
+    stage.addEventListener('pointermove', function (e) {
+      if (!dragging || e.pointerId !== pid) return;
+      tx += e.clientX - lastX; ty += e.clientY - lastY;
+      lastX = e.clientX; lastY = e.clientY;
+      draw();
+    });
+
+    function endDrag(e) {
+      if (!dragging || (e && e.pointerId !== pid)) return;
+      dragging = false;
+      stage.classList.remove('dragging');
+      if (pid !== null && stage.hasPointerCapture && stage.hasPointerCapture(pid)) stage.releasePointerCapture(pid);
+      pid = null;
+    }
+    stage.addEventListener('pointerup', endDrag);
+    stage.addEventListener('pointercancel', endDrag);
+    stage.addEventListener('dblclick', function () { fit(false); });
+
+    hud.addEventListener('click', function (e) {
+      var b = e.target.closest('button');
+      if (!b) return;
+      var a = b.getAttribute('data-viz');
+      if (a === 'in') zoomCenter(STEP);
+      else if (a === 'out') zoomCenter(1 / STEP);
+      else if (a === 'fit') fit(true);
+      else if (a === 'reset') reset();
+      else if (a === 'full') {
+        if (document.fullscreenElement === stage) document.exitFullscreen();
+        else if (stage.requestFullscreen) stage.requestFullscreen();
+      }
+    });
+
+    stage.addEventListener('keydown', function (e) {
+      if (e.key === '+' || e.key === '=') zoomCenter(STEP);
+      else if (e.key === '-' || e.key === '_') zoomCenter(1 / STEP);
+      else if (e.key === '0') reset();
+      else if (e.key === 'f' || e.key === 'F') fit(true);
+      else return;
+      e.preventDefault();
+    });
+
+    stage.addEventListener('fullscreenchange', function () { fit(true); });
+    window.addEventListener('resize', function () { if (baked) draw(); });
+    new ResizeObserver(function () { if (!baked) fit(false); }).observe(stage);
+
+    fit(false);
+    fig.__viz = { state: function () { return { scale: scale, baked: baked, tx: tx, ty: ty, baseW: baseW, baseH: baseH }; }, fit: fit, reset: reset, zoomAt: zoomAt };
+  }
+
+  document.querySelectorAll('figure.viz').forEach(mount);
+})();
+</script>

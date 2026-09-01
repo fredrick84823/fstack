@@ -1,0 +1,41 @@
+{
+  "skill_name": "slack-rd",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "幫我傳 slack 給 RD team（#rd-team）sync 這次的變更：PR #201 把 image build 從 Cloud Build 換成 GitHub Actions，build 時間從 8 分鐘降到 2 分鐘；PR #204 順手把三個 service 的 base image 從 python:3.11 升到 3.12。另外大家改完 Dockerfile 之後要記得跑一次 make lint，不然 CI 會紅。下週三 RD 會議會談要不要把 staging 也切過去。",
+      "expected_output": "產出兩層：一則 6-8 行的公告（標題／TL;DR blockquote／連結一行／落地資訊）加一則展開論述的 thread；公告落成 Slack draft 或全文貼回，全程沒有送出任何訊息。",
+      "expectations": [
+        "產出明確分成母訊息（公告）與 thread（論述）兩段，且兩段內容不是同一段話的長短版本",
+        "母訊息本文不超過八行",
+        "母訊息含 `>` blockquote 的 TL;DR，其中每個 bullet 各佔一行且不含「因為」「理由是」這類理由句",
+        "母訊息含 `*TL;DR*` 標籤行",
+        "母訊息含一行 PR 連結（提到 #201 與 #204）",
+        "沒有呼叫 slack_send_message 把訊息送進頻道",
+        "若有 Slack 工具可用，公告是透過 slack_send_message_draft 產生 draft；否則公告全文貼在回覆中交給使用者審稿",
+        "回覆明說產出是待審稿／未送出，並指名 slack_send_message_draft 為送出前的落點"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "這段我想發給 RD team，幫我整理一下：「大家好，我想跟大家說明一下為什麼我們要把 monorepo 拆掉。我發現目前 CI 每次都要跑 40 分鐘，因為所有 service 的測試都綁在一起，這代表改一行 README 也要等 40 分鐘。所以我認為應該要拆成三個 repo。我已經在 PR #310 做了 POC。另外我發現以前的 test matrix 設定其實是壞的，會安靜地綠，這個也一起修了。」",
+      "expected_output": "把混在一起的事實與理由拆成兩層：事實與動作留在公告，why（40 分鐘 CI、拆 repo 的理由、test matrix 為何安靜地綠）搬進 thread；第一人稱包裝改成陳述。",
+      "expectations": [
+        "母訊息裡沒有出現「我認為」「我發現」這類第一人稱包裝，改為陳述事實",
+        "「為什麼要拆 monorepo」的論述出現在 thread 而不在母訊息",
+        "thread 有 `*…*` 小標題分段，並且只有一句用 `>` blockquote 標成關鍵句",
+        "沒有送出任何 Slack 訊息，產出是 draft 或貼回給使用者審稿的定稿"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "幫我把這則 RD sync 發到 #rd-team，我已經看過內容了，直接送出：「📢 RD sync — staging ingress 修好了。細節在 PR #129。」",
+      "expected_output": "使用者明說已審稿且要直接送出，此時才呼叫 slack_send_message；沒有再多做一輪 draft。",
+      "expectations": [
+        "呼叫 slack_send_message（而不是只產生 draft），因為使用者明確表示已審稿並要求直接送出",
+        "沒有把使用者已定稿的內容重寫成完全不同的訊息",
+        "沒有宣稱訊息「已發送」；Slack 工具不可用時如實說明實際沒有送出"
+      ]
+    }
+  ]
+}
