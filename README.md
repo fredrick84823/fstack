@@ -157,6 +157,7 @@ See [docs/skill-evolution-loop.md](docs/skill-evolution-loop.md),
 | `generate-meeting-notes` | Turn transcripts, captions, or audio into structured meeting notes in Google Docs + Slack |
 | `extract-skill` | Extract and build skills from candidate queue |
 | `grill-me` | Turn vague ideas into concrete PRDs through targeted questioning |
+| `describe-pr` | Describe a PR for a reviewer: problem, user-facing change, how, proof |
 | `heptabase-task-card` | Create Sprint-ready Heptabase task cards |
 | `implement-plan` | Execute phased plans with human checkpoints |
 | `implement-team-plan` | Execute team-plans with native agent teams |
