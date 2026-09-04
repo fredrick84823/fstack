@@ -65,10 +65,8 @@ INTERNAL = [
     "這題在 open sesame 提過",  # i：含空白的片語，大小寫不敏感
 ]
 
-# 長得像但不該被攔的。`Markdown` 是這裡唯一真正危險的近似字 —— 只要 guard 拿
-# `Mark` 當人名 pattern，整份繁中 markdown 語料每一頁都會誤報。
+# 長得像但不該被攔的。近似字全部靠 word boundary 與大小寫區分。
 LOOKALIKES = [
-    "這是一份 Markdown 文件",
     "Zorblaxian 不是人名",  # w 掉了 word boundary 就會誤報（真實對應：Mark ⊂ Markdown）
     "acmecorporation 的年報",  # iw 掉了 word boundary 就會誤報
     "zorblax 全小寫不是人名",  # w 改成大小寫不敏感就會誤報
@@ -124,11 +122,10 @@ def sandbox(tmp_path: Path) -> Path:
     """一份丟棄式的假 repo，`bin/` 裡是腳本的複本。回傳假 repo 根目錄。
 
     目的地由腳本自身位置推得，所以複製腳本是唯一能在不寫進真實工作樹的前提下
-    跑同步路徑的方法。範例設定檔也一起複製 —— 「未設定」的錯誤訊息會指向它們。
+    跑同步路徑的方法。
     """
     (tmp_path / "bin").mkdir()
-    for name in (SCRIPT.name, "guard-patterns.example.txt", "sanitize.example.sed"):
-        shutil.copy2(REPO / "bin" / name, tmp_path / "bin" / name)
+    shutil.copy2(SCRIPT, tmp_path / "bin" / SCRIPT.name)
     return tmp_path
 
 
