@@ -41,12 +41,13 @@ test -n "$SKILL_DIR" || { echo "generate-meeting-notes skill directory not found
 
 ## 版本來源檢查
 
-這個 skill 可能同時存在於安裝目錄與 repo 目錄，兩份是**獨立檔案**（不同 inode）。
-啟動前先確認當前 repo 內有沒有 `generate-meeting-notes/SKILL.md`：
+**canonical 是 fstack 的 `skills/comms/generate-meeting-notes/`。** 這個 skill 可能同時
+存在於安裝目錄與多個 repo，彼此是**獨立檔案**（不同 inode）：
 
-- 有 → 以 repo 版本為準，除非使用者明確要求用安裝版
-- 只有安裝版 → 用上面解析出的 `SKILL_DIR`
-- 兩份在流程上不一致 → **停下來**列出差異，由使用者決定跟哪一份
+- 當前 repo 是 fstack → 用 repo 版
+- 其他情況 → 用上面解析出的 `SKILL_DIR`（安裝版，與 fstack 手動掉齊）
+- 其他 repo 內的同名副本 → **不要跟**。那些凍結在 2026-06 重構之前，比安裝版舊
+- 安裝版與 fstack 在流程上不一致 → **停下來**列出差異，由使用者決定
 
 ## 流程選擇
 

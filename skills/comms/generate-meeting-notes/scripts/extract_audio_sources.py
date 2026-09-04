@@ -591,19 +591,39 @@ def get_google_credentials():
 
 # ─── Google Drive ──────────────────────────────────────────────────────────────
 
-def _parse_inline_bold(text: str) -> tuple[str, list[tuple[int, int]]]:
-    """解析 **bold** 標記，回傳 (純文字, [(start, end), ...])"""
+INLINE_CODE_STYLE = {
+    "weightedFontFamily": {"fontFamily": "Roboto Mono"},
+    "backgroundColor": {"color": {"rgbColor": {"red": .95, "green": .95, "blue": .95}}},
+    "foregroundColor": {"color": {"rgbColor": {"red": .78, "green": .12, "blue": .35}}},
+}
+
+
+def _parse_inline(
+    text: str,
+) -> tuple[str, list[tuple[int, int]], list[tuple[int, int]]]:
+    """解析 **bold** 與 `code`，回傳 (純文字, bold_ranges, code_ranges)"""
     plain = ""
-    bold_ranges = []
+    bold_ranges: list[tuple[int, int]] = []
+    code_ranges: list[tuple[int, int]] = []
     last_end = 0
-    for m in re.finditer(r"\*\*(.+?)\*\*", text):
+    for m in re.finditer(r"\*\*(.+?)\*\*|`([^`]+)`", text):
         plain += text[last_end:m.start()]
-        bs = len(plain)
-        plain += m.group(1)
-        bold_ranges.append((bs, len(plain)))
+        start = len(plain)
+        if m.group(1) is not None:
+            plain += m.group(1)
+            bold_ranges.append((start, len(plain)))
+        else:
+            plain += m.group(2)
+            code_ranges.append((start, len(plain)))
         last_end = m.end()
     plain += text[last_end:]
-    return plain, bold_ranges
+    return plain, bold_ranges, code_ranges
+
+
+def _parse_inline_bold(text: str) -> tuple[str, list[tuple[int, int]]]:
+    """相容包裝：只取 bold ranges"""
+    plain, bolds, _ = _parse_inline(text)
+    return plain, bolds
 
 
 def _parse_blocks(content: str) -> list[tuple[str, list[str]]]:
@@ -643,23 +663,23 @@ def _parse_table_rows(table_lines: list[str]) -> list[list[str]]:
     return rows
 
 
-def _classify_line(line: str) -> tuple[str, int, str, list]:
-    """解析單行 Markdown，回傳 (kind, level, plain_text, bold_ranges)"""
+def _classify_line(line: str) -> tuple[str, int, str, list, list]:
+    """解析單行 Markdown，回傳 (kind, level, plain_text, bold_ranges, code_ranges)"""
     m = re.match(r"^(#{1,6})\s+(.*)", line)
     if m:
-        plain, bolds = _parse_inline_bold(m.group(2))
-        return "heading", len(m.group(1)), plain, bolds
+        plain, bolds, codes = _parse_inline(m.group(2))
+        return "heading", len(m.group(1)), plain, bolds, codes
 
     m = re.match(r"^(\s*)[\*\-]\s+(.*)", line)
     if m:
-        plain, bolds = _parse_inline_bold(m.group(2))
-        return "bullet", len(m.group(1)), plain, bolds
+        plain, bolds, codes = _parse_inline(m.group(2))
+        return "bullet", len(m.group(1)), plain, bolds, codes
 
     if re.match(r"^[-\*_]{3,}\s*$", line):
-        return "normal", 0, "", []
+        return "normal", 0, "", [], []
 
-    plain, bolds = _parse_inline_bold(line)
-    return "normal", 0, plain, bolds
+    plain, bolds, codes = _parse_inline(line)
+    return "normal", 0, plain, bolds, codes
 
 
 def _markdown_to_gdocs(
@@ -690,7 +710,7 @@ def _markdown_to_gdocs(
             continue
 
         for line in block_lines:
-            kind, level, plain, bolds = _classify_line(line)
+            kind, level, plain, bolds, codes = _classify_line(line)
             line_start = 1 + char_pos
             line_end = line_start + len(plain)
             para_range = {"startIndex": line_start, "endIndex": line_end + 1}
@@ -730,6 +750,20 @@ def _markdown_to_gdocs(
                             },
                             "textStyle": {"bold": True},
                             "fields": "bold",
+                        }
+                    })
+
+            # `code` — Docs 無原生 code 樣式，以等寬字體＋淺灰底＋深紅字模擬
+            for cs, ce in codes:
+                if cs < ce:
+                    fmt_requests.append({
+                        "updateTextStyle": {
+                            "range": {
+                                "startIndex": line_start + cs,
+                                "endIndex": line_start + ce,
+                            },
+                            "textStyle": INLINE_CODE_STYLE,
+                            "fields": "weightedFontFamily,backgroundColor,foregroundColor",
                         }
                     })
 
