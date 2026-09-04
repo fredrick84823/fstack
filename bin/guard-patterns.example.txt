@@ -1,0 +1,25 @@
+# 內部指涉 guard 的 pattern 清單。複製到
+# ~/.config/generate-meeting-notes/guard-patterns.txt 再換成自己的值。
+#
+# 一行一個 ERE pattern，前綴決定比對方式：
+#
+#   w:   大小寫敏感 ＋ word boundary
+#        人名／專名。'Mark' 這種本身是英文常用字的名字不要收，會命中 'Markdown'；
+#        真名靠大寫專名寫法區分。
+#
+#   iw:  大小寫不敏感 ＋ word boundary
+#        公司名、GCP project、OAuth client —— 大小寫寫法不固定，但不能配到子字串。
+#
+#   i:   大小寫不敏感、無 word boundary
+#        路徑與含空白的片語。加了 boundary，'notes/' 後面接檔名就配不到。
+#
+# 空行與 # 開頭的行忽略。
+# 檔案不存在、或一個 pattern 都沒有 → guard 拒絕執行並回 1，不會靜默放行。
+
+w:<Colleague>
+w:<客戶名>
+iw:<your-company>
+iw:<your-gcp-project>
+iw:<your-oauth-client-name>
+i:<your-private-notes-dir>/
+i:<內部專案代號>

@@ -12,37 +12,64 @@
 #   sync-from-installed.sh [SRC]        同步 SRC（預設安裝版）到 repo，然後跑 guard
 #   sync-from-installed.sh --check [DIR] 只跑 guard，不動任何檔案（DIR 預設 repo 內的 skill）
 #
+# 設定（不進版控，見下方「設定」一節）
+#   ~/.config/generate-meeting-notes/guard-patterns.txt
+#   ~/.config/generate-meeting-notes/sanitize.sed
+#
 # 退出碼
 #   0  同步完成且 guard 乾淨 ／ --check 乾淨
-#   1  用法或環境錯誤（SRC 不存在、不像 skill 目錄）
+#   1  用法或環境錯誤（SRC 不存在、不像 skill 目錄、掃描目標不存在、設定檔未建立）
 #   2  guard 命中內部指涉 —— 不要 commit
 #
-# ponytail: SKILL.md 的「版本來源檢查」在 repo 側被改寫成 fstack canonical，安裝版
-#           還是舊文字，下次同步會蓋回去。靠上面那句「commit 前人眼看 git diff」擋。
-#           要根治得改安裝版那一份。
+# macOS 限定：`sed -i ''` 與 BSD `grep` 的旗標。
 set -euo pipefail
 
-DST="$(cd "$(dirname "$0")/.." && pwd)/skills/comms/generate-meeting-notes"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+DST="$(cd "$HERE/.." && pwd)/skills/comms/generate-meeting-notes"
+
+# ── 設定 ────────────────────────────────────────────────────────────────
+# fstack 是 public repo，而「內部指涉清單」本身就是一份同事名 ＋ 客戶名 ＋
+# GCP project ＋ OAuth client 的集合 —— 那正是這道 guard 要擋的東西。
+# 所以 repo 只留機制與佔位符範例，值放使用者自己的設定檔。
+CONF="$HOME/.config/generate-meeting-notes"
+PATTERNS="$CONF/guard-patterns.txt"
+SANITIZE="$CONF/sanitize.sed"
+
+need_conf() { # $1=設定檔 $2=repo 內的範例檔名
+  [[ -f $1 ]] && return 0
+  echo "未設定：$1 不存在。複製 $HERE/$2 過去並填上自己的值。" >&2
+  exit 1
+}
+
+# 設定檔一行一個 ERE pattern，前綴決定比對方式（見範例檔）。串成一條 alternation。
+# `..*` 要求至少一個字元：空的分支（只打了 `w:` 的一行）會配到所有東西。
+pats() { sed -n "s|^$1:\(..*\)|\1|p" "$PATTERNS" | paste -sd'|' -; }
+
+# guard 與 sanitize 掃同一組副檔名。
+INC=(--include='*.md' --include='*.py' --include='*.toml' --include='*.yaml')
 
 # ── guard：殘留內部指涉 ───────────────────────────────────────────────────
-# 兩段 pattern：人名／組織名要 word-boundary（否則 'mark' 命中 'Markdown'），
-# 路徑與含空白的片語不能加 -w。
 # BSD grep 不吃 \?，一律 -E / -F。
 guard() {
   local dir=$1
+  need_conf "$PATTERNS" guard-patterns.example.txt
+  [[ -d $dir ]] || { echo "掃描目標不存在：$dir" >&2; return 1; }
+
+  local w iw i
+  w="$(pats w)"; iw="$(pats iw)"; i="$(pats i)"
+  # 一個 pattern 都沒有就是沒設定。空的命中集合被讀成「內容乾淨」正是這道
+  # guard 要擋的失敗類別，不能靜默回 0。
+  [[ -n "$w$iw$i" ]] || { echo "未設定：$PATTERNS 一個 pattern 都沒有" >&2; return 1; }
+
   echo
   echo "── 殘留內部指涉（應為空）─────────────────────────"
   local leaks
   leaks="$(
     {
-      # 人名大小寫敏感：'Mark'/'Frank' 本身是英文常用字，不列入（改用大寫專名比對）
-      grep -rnwE 'Fredrick|Brian|Nina|家樂福|萬家福|熊寶貝|鮮乳坊' \
-        "$dir" --include='*.md' --include='*.py' --include='*.toml' --include='*.yaml'
-      grep -rniwE 'tagtoo|internal-cli-desktop' \
-        "$dir" --include='*.md' --include='*.py' --include='*.toml' --include='*.yaml'
-      grep -rniE 'thoughts/|Open Point|600 億' \
-        "$dir" --include='*.md' --include='*.py' --include='*.toml' --include='*.yaml'
-    } 2>/dev/null | sort -u || true
+      [[ -z $w  ]] || grep -rnwE  "$w"  "$dir" "${INC[@]}" || :
+      [[ -z $iw ]] || grep -rniwE "$iw" "$dir" "${INC[@]}" || :
+      [[ -z $i  ]] || grep -rniE  "$i"  "$dir" "${INC[@]}" || :
+    } 2>/dev/null | sort -u
   )"
   if [[ -n $leaks ]]; then
     echo "$leaks"
@@ -59,6 +86,8 @@ fi
 
 SRC="${1:-$HOME/.agents/skills/generate-meeting-notes}"
 [[ -f $SRC/SKILL.md ]] || { echo "SRC 不像 generate-meeting-notes 安裝目錄：$SRC" >&2; exit 1; }
+need_conf "$SANITIZE" sanitize.example.sed
+need_conf "$PATTERNS" guard-patterns.example.txt
 
 echo "⚠️  BETA：sanitize 是列舉式的，commit 前務必人眼看過 git diff"
 echo
@@ -71,16 +100,8 @@ rsync -a --delete -m --itemize-changes \
   "$SRC/" "$DST/"
 
 # ── sanitization：公司特定事實 → 佔位符 ──────────────────────────────────
-# 人名不做自動替換：'Mark' 會命中 'Markdown'。人名一律在安裝版就用
-# Alice / Bob / Carol，真名若重新出現由 guard 擋下來，人工處理。
+# 替換表同樣含真名，跟 guard pattern 一起放使用者設定檔。
 find "$DST" \( -name '*.md' -o -name '*.py' -o -name '*.toml' -o -name '*.yaml' \) -print0 |
-  xargs -0 sed -i '' \
-    -e 's/`internal-cli-desktop`/`<your-oauth-client-name>`/g' \
-    -e 's/`tagtoo-staging`/`<your-gcp-project>`/g' \
-    -e 's/tagtoo-staging/<your-gcp-project>/g' \
-    -e 's/「Tagtoo Line KMS」/「你的 consent screen 名稱」/g' \
-    -e 's/那是 staging 的 consent screen 名稱/那是該 GCP project 的 consent screen 名稱/g' \
-    -e 's/Admin console/Google Workspace 管理主控台/g' \
-    -e 's|^\([[:space:]]*>*[[:space:]]*\)背景見 `~/thoughts/.*$|\1背景與決策脈絡請記錄在你自己的團隊文件中。|'
+  xargs -0 sed -i '' -f "$SANITIZE"
 
 guard "$DST"
