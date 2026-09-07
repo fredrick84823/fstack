@@ -9,3 +9,12 @@ node_modules/
 thoughts/
 .system/
 .claude/
+
+# mutation / CRAP 的中間產物。一律綁在 repo root（開頭的斜線）—— 不綁的話 `.coverage`
+# 這種名字會在任何一層生效，把別的地方已經在版控的同名檔一起藏起來。
+/mutants/
+/.mutmut-cache
+/.mutmut-run.log
+/.coverage
+/.coverage.json
+/.radon-cc.json
