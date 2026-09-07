@@ -804,13 +804,11 @@ def create_gdoc_in_shared_drive(
     docs = build("docs", "v1", credentials=creds)
     drive = build("drive", "v3", credentials=creds)
 
+    from local_archive import note_title
+
     series_name = meeting["series_name"]
     series_folder_id = meeting["folder_id"]
-    doc_title = f"會議記錄_{series_name}_{date}"
-    if title_suffix:
-        cleaned_suffix = re.sub(r"[\\/:*?\"<>|]+", "-", title_suffix).strip(" -_")
-        if cleaned_suffix:
-            doc_title = f"{doc_title}_{cleaned_suffix}"
+    doc_title = note_title(series_name, date, title_suffix)
 
     # 在 Shared Drive 建立（或重用）日期子資料夾
     existing = drive.files().list(
