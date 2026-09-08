@@ -21,7 +21,8 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[2]
+from tests.unit.conftest import ROOT
+
 INTEGRATION_CONFTEST = ROOT / "tests" / "integration" / "conftest.py"
 PROBE = "def test_probe():\n    pass\n"
 

@@ -43,11 +43,18 @@ def test_bold_range_still_covers_the_unescaped_text():
 
 
 def test_escaped_asterisk_left_alone_so_bold_parsing_survives():
-    """`*` 與 backtick 刻意不還原：先還原會讓 `\\*\\*` 變成真的 bold 標記。"""
+    """`*` 與 backtick 刻意不還原：先還原會讓 `\\*\\*` 變成真的 bold 標記。
+
+    代價寫在下面那條斷言裡，不要只斷 `bolds == []` —— 那樣會把「反斜線漏進內文」
+    這個已知缺口靜靜釘住，看起來像沒有缺口。
+    """
     plain, bolds, codes = mod._parse_inline(r"\*\*不是粗體\*\*")
 
     assert bolds == []
     assert codes == []
+    # 已知缺口：這兩個反斜線會以字面樣貌進 Doc，正是這支修正要消滅的症狀。
+    # 修法是把還原移到 _parse_inline 的 span 切分**之後**逐段做，不在本票範圍。
+    assert plain == r"\*\*不是粗體\*\*"
 
 
 def test_table_cells_and_body_both_unescaped():

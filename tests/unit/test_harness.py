@@ -18,7 +18,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from . import conftest
-from .conftest import SCRIPTS, _qid, load_script, sent_body, sent_kwargs
+from .conftest import _qid, load_script, sent_body, sent_kwargs
 
 # --------------------------------------------------------------------------
 # sent_kwargs / sent_body —— 打在 request 上，沒有 call 就 raise
@@ -136,15 +136,6 @@ def test_load_script_returns_the_module():
     assert callable(module.extract_date)
 
 
-def test_load_script_reads_from_the_tree_this_file_lives_in():
-    """mutmut 下這裡是 `mutants/…`。載到 repo 原檔的話每顆 mutant 都會活下來，
-    而且症狀長得像「測試沒鑑別力」。"""
-    module = load_script("extract_audio_sources")
-
-    assert Path(module.__file__).resolve().parent == SCRIPTS
-    assert SCRIPTS.is_relative_to(Path(__file__).resolve().parents[2])
-
-
 def test_load_script_names_the_module_after_its_path():
     """`__name__` 必須等於 mutmut 從檔案路徑推出來的那個 key 前綴。
 
@@ -167,9 +158,8 @@ def test_load_script_raises_on_a_missing_script():
 def test_load_script_follows_the_conftest_into_a_copied_tree(tmp_path):
     """把 harness 複製到另一棵樹，載到的必須是**那棵樹**的腳本。
 
-    `test_load_script_reads_from_the_tree_this_file_lives_in` 只斷言 SCRIPTS 與本檔
-    同根 —— 那在 repo 裡恆真，`ROOT` 改寫死一個絕對路徑也照樣綠。真正會壞的場景是
-    mutmut：它把整棵樹複製進 `mutants/` 再跑，寫死路徑那一輪載到的是 repo 原檔，
+    斷「SCRIPTS 與本檔同根」不算數 —— 那在 repo 裡恆真，`ROOT` 改寫死一個絕對路徑
+    也照樣綠。真正會壞的場景是 mutmut：它把整棵樹複製進 `mutants/` 再跑，寫死路徑那一輪載到的是 repo 原檔，
     每顆 mutant 都活下來，症狀長得像「測試沒鑑別力」而不是「載錯檔」。所以這裡
     真的複製一棵樹出來，用它的 conftest 載，斷在只有複製品才有的 MARKER 上。
     """

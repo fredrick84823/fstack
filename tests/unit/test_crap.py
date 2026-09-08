@@ -16,7 +16,8 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[2]
+from tests.unit.conftest import ROOT
+
 CRAP = ROOT / "bin" / "crap.py"
 
 FILE = "pkg/mod.py"
@@ -59,9 +60,10 @@ def _block(name: str, lineno: int, endline: int, complexity: int, type_: str = "
 )
 def test_uncovered_share_is_cubed(tmp_path: Path, executed, missing, expected):
     """(1-cov) 是三次方。線性的話 50% 覆蓋會算成 60，紅線位置整個位移。"""
-    out = _run(tmp_path, [_block("f", 1, 4, 10)], executed, missing)
+    out = _run(tmp_path, [_block("only_one", 1, 4, 10)], executed, missing)
 
-    assert expected in out.split("\n")[1]
+    (row,) = [line for line in out.splitlines() if "only_one" in line]
+    assert row.split()[0] == expected
 
 
 def test_a_function_with_no_measured_lines_counts_as_covered(tmp_path: Path):

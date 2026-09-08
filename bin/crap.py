@@ -10,10 +10,15 @@ import sys
 
 RED = 30
 
-cc = json.load(open(sys.argv[1]))
+def _load(path):
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+cc = _load(sys.argv[1])
 cov = {
     path: (set(d["executed_lines"]), set(d["missing_lines"]))
-    for path, d in json.load(open(sys.argv[2]))["files"].items()
+    for path, d in _load(sys.argv[2])["files"].items()
 }
 
 rows = []
