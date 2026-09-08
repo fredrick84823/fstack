@@ -114,6 +114,19 @@ def test_invented_layer_name_is_red():
     _fails(GOOD.replace("#### 決策理由", "#### 結論與補充"), "自創層名")
 
 
+def test_required_layer_with_suffix_is_red():
+    """防：必出現層被加後綴（9/07 的 `#### 討論 —— 評測指標與更新機制`）。
+    後綴只有 `#### 議題因果鏈 · 承 M/D → M/D` 一種例外；放開會讓
+    `#### 狀態 —— 短期／長期` 跟著長出來，狀態值域的檢查就分裂了。"""
+    _fails(GOOD.replace("#### 討論\n", "#### 討論 —— 評測指標與更新機制\n", 1), "自創層名")
+
+
+def test_duplicated_layer_is_red():
+    """防：禁掉後綴之後，模型改用兩個一模一樣的 `#### 討論` 分段 —— 同一個退化換個殼。"""
+    md = GOOD.replace("* 甲說了話。", "* 甲說了話。\n\n#### 討論\n\n* 甲又說了話。")
+    _fails(md, "出現 2 次")
+
+
 def test_layer_order_swapped_is_red():
     """防：決策理由／狀態／風險被重排，讀者每個議題都要重新找狀態在哪。"""
     md = GOOD.replace(
@@ -135,8 +148,14 @@ def test_status_bullet_without_inline_code_is_red():
 
 
 def test_status_value_outside_domain_is_red():
-    """防：狀態值域擴散（`腦力激盪`、`已完成`…），下游沒辦法照固定值分流。"""
-    _fails(GOOD.replace("`執行中` 甲事", "`腦力激盪` 甲事"), "不在值域內")
+    """防：狀態值域擴散（`已完成`、`進行中`…），下游沒辦法照固定值分流。"""
+    _fails(GOOD.replace("`執行中` 甲事", "`已完成` 甲事"), "不在值域內")
+
+
+def test_腦力激盪_is_inside_domain():
+    """9/07 收進值域的第六值。它代表「本議題產出的想法，還不是承諾」——
+    五值裡沒有任何一個表達得出來（`待啟動` 是已定案未開工）。"""
+    assert check_layout(GOOD.replace("`執行中` 甲事", "`腦力激盪` 甲事"))["ok"]
 
 
 def test_inline_code_leaking_into_核心要點_is_red():
@@ -168,23 +187,28 @@ def test_optional_layers_may_be_absent():
     assert r["ok"], r["violations"]
 
 
-def test_status_values_are_exactly_five():
-    """防：值域被悄悄加值。值域是契約的一部分，改它要改這條。"""
-    assert STATUS_VALUES == ("已確認", "執行中", "待驗證", "待確認", "待啟動")
+def test_status_values_are_exactly_six():
+    """防：值域被悄悄加值。值域是契約的一部分，改它要改這條。
+    鑑別力來自「封閉集合」而不是集合大小 —— 但每次加值都必須經過這條。"""
+    assert STATUS_VALUES == ("已確認", "執行中", "待驗證", "待確認", "待啟動", "腦力激盪")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="契約寫死「議題因果鏈 在 討論 之前，順序不可調換」，但 8/31 目標樣本的議題六、"
-    "9/07 的議題六與議題十都把因果鏈排在討論之後。契約與實際輸出對不上，"
-    "由棒③ 裁定是改 prompt 還是改契約；在那之前 check_layout 只把它記進 advisories。",
-)
-def test_因果鏈_must_precede_討論():
+def test_因果鏈_either_side_of_討論_is_green():
+    """棒③ 裁決：因果鏈與討論同階，前後皆可。8/31 目標樣本的議題三是「因果鏈 → 討論」、
+    議題六是「討論 → 因果鏈」，兩種都是權威樣本自己的輸出，契約不能只認一種。"""
     md = GOOD.replace(
         "#### 議題因果鏈 · 承 8/20 → 8/24\n\n| 時間 | 事件 |\n| :---- | :---- |\n| 8/20 | 起因 |\n\n",
         "",
-    ).replace(
-        "#### 決策理由",
-        "#### 議題因果鏈\n\n* 起因 → 結果\n\n#### 決策理由",
-    )
-    assert not check_layout(md)["ok"], "因果鏈排在討論之後應判紅"
+    ).replace("#### 決策理由", "#### 議題因果鏈\n\n* 起因 → 結果\n\n#### 決策理由")
+    r = check_layout(md)
+    assert r["ok"], r["violations"]
+
+
+def test_因果鏈_after_狀態_is_red():
+    """放寬後仍要守住的那一半：因果鏈可以在討論前後，但不得晚於決策理由／狀態／風險。
+    少了這條，因果鏈就變成「擺哪都行」，R4 對它完全沒有鑑別力。"""
+    md = GOOD.replace(
+        "#### 議題因果鏈 · 承 8/20 → 8/24\n\n| 時間 | 事件 |\n| :---- | :---- |\n| 8/20 | 起因 |\n\n",
+        "",
+    ).replace("#### 風險", "#### 議題因果鏈\n\n* 起因 → 結果\n\n#### 風險")
+    _fails(md, "層順序錯亂")

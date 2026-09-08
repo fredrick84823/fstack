@@ -7,13 +7,14 @@ Seam ④「正式稿 Markdown」是這條 pipeline 唯一外部可觀察的東�
 
     ### 議題N：<標題>
     **TL;DR** — <一句話>            必出現，緊接 H3
-    #### 議題因果鏈[ · 承 M/D → M/D]  選填
+    #### 議題因果鏈[ · 承 M/D → M/D]  選填，與 #### 討論 同階（前後皆可）
     #### 討論                        必出現
     #### 決策理由                    選填
     #### 狀態                        必出現，每條 bullet 以 inline code 標記開頭
     #### 風險                        選填
 
 選填層沒內容時整層不輸出，不得出現空 H4 或「無」「N/A」填充。
+除 `#### 議題因果鏈` 的 ` · 承 M/D → M/D` 之外，層標題不得加後綴，同名層不得重複。
 
 純函式，str in → dict out。不建 markdown parser，行掃描 ＋ 正規表示式就夠。
 """
@@ -22,11 +23,12 @@ from __future__ import annotations
 
 import re
 
-LAYERS = ("議題因果鏈", "討論", "決策理由", "狀態", "風險")
+# 層名與相對順序的唯一來源。因果鏈與討論同階：8/31 目標樣本的議題三是「因果鏈 → 討論」、
+# 議題六是「討論 → 因果鏈」，兩種都是權威樣本自己的輸出。收斂到「因果鏈不得晚於決策理由」。
+LAYER_RANK = {"議題因果鏈": 0, "討論": 0, "決策理由": 1, "狀態": 2, "風險": 3}
+LAYERS = tuple(LAYER_RANK)
 REQUIRED_LAYERS = ("討論", "狀態")
-# 因果鏈刻意不納入順序檢查 —— 見 test_layout_contract.py 的 xfail 那條。
-ORDERED_LAYERS = ("討論", "決策理由", "狀態", "風險")
-STATUS_VALUES = ("已確認", "執行中", "待驗證", "待確認", "待啟動")
+STATUS_VALUES = ("已確認", "執行中", "待驗證", "待確認", "待啟動", "腦力激盪")
 
 _ISSUE_RE = re.compile(r"^###\s*議題")
 _H4_RE = re.compile(r"^####\s+(.+?)\s*$")
@@ -67,10 +69,8 @@ def _issue_spans(lines: list[str]) -> list[tuple[int, int, str]]:
     return spans
 
 
-def _check_issue(lines: list[str], s: int, e: int, title: str) -> tuple[list[str], list[str]]:
-    """回 (violations, advisories)。"""
+def _check_issue(lines: list[str], s: int, e: int, title: str) -> list[str]:
     v: list[str] = []
-    adv: list[str] = []
     body = lines[s + 1 : e]
 
     # R1 TL;DR 必出現且緊接 H3
@@ -91,16 +91,16 @@ def _check_issue(lines: list[str], s: int, e: int, title: str) -> tuple[list[str
         if req not in names:
             v.append(f"{title}：缺 `#### {req}`")
 
+    # R3b 同一議題不得出現兩個同名層（禁掉後綴之後，模型的下一個出口就是直接重複）
+    for name in dict.fromkeys(names):
+        if name in LAYERS and names.count(name) > 1:
+            v.append(f"{title}：`#### {name}` 在同一議題出現 {names.count(name)} 次")
+
     # R4 相對順序
-    seen = [n for n in names if n in ORDERED_LAYERS]
-    rank = [ORDERED_LAYERS.index(n) for n in seen]
+    seen = [n for n in names if n in LAYER_RANK]
+    rank = [LAYER_RANK[n] for n in seen]
     if rank != sorted(rank):
         v.append(f"{title}：層順序錯亂 {seen}")
-
-    # R9（advisory）因果鏈應在討論之前
-    if "議題因果鏈" in names and "討論" in names:
-        if names.index("議題因果鏈") > names.index("討論"):
-            adv.append(f"{title}：`議題因果鏈` 排在 `討論` 之後")
 
     for k, (i, raw) in enumerate(h4s):
         name = _layer_name(raw)
@@ -126,7 +126,7 @@ def _check_issue(lines: list[str], s: int, e: int, title: str) -> tuple[list[str
         if name in ("狀態", "風險") and count_tables(body[i + 1 : stop]):
             v.append(f"{title}：`#### {raw}` 底下出現表格")
 
-    return v, adv
+    return v
 
 
 def check_layout(md: str) -> dict:
@@ -135,16 +135,13 @@ def check_layout(md: str) -> dict:
     spans = _issue_spans(lines)
 
     violations: list[str] = []
-    advisories: list[str] = []
 
     # R0 沒有任何 `### 議題` 就不是這個版型
     if not spans:
         violations.append("整份文件沒有任何 `### 議題` 區塊")
 
     for s, e, title in spans:
-        v, a = _check_issue(lines, s, e, title)
-        violations += v
-        advisories += a
+        violations += _check_issue(lines, s, e, title)
 
     # R7 inline code 狀態標記不得外溢到議題以外（核心要點／行動項目維持方括號與純文字）
     inside = {i for s, e, _ in spans for i in range(s, e)}
@@ -156,7 +153,6 @@ def check_layout(md: str) -> dict:
     return {
         "ok": not violations,
         "violations": violations,
-        "advisories": advisories,
         "counts": {
             "issues": len(spans),
             "h4": sum(1 for ln in lines if _H4_RE.match(ln)),

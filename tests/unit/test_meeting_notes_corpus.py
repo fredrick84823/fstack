@@ -3,6 +3,11 @@
 一個永遠判綠的檢查器跟沒有檢查器一樣。這個檔案的全部意義是證明：
 **8/31 目標樣本判綠，其餘 72 份（四種會議、2 月到 9 月）全部判紅。**
 
+**已知的資料限制**：紅側四種會議都證明過（PM／RD／Data 內會／Data 教授各 ≥3 份），
+綠側只有 Data 內會 —— 全機只有 8/31 與 9/07 兩份新版型真實產出。PM／RD／教授三種
+會議在新 prompt 下的真實產出還不存在，等它們出現才補得上。低議題密度那一側由
+`test_layout_contract.py::test_optional_layers_may_be_absent` 在密封樣本上守著。
+
 語料在 `~/thoughts`，是真實資料、不進版控，所以整檔在沒有它的機器上 skip。
 版型規則本身的測試在 `test_layout_contract.py`，那份是密封的、CI 一定跑得動。
 """
@@ -69,15 +74,16 @@ def test_old_format_is_red(path: Path):
     assert not r["ok"], f"{path} 判綠了，檢查器對舊版型沒有鑑別力"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="9/07 是新 prompt 的第二份真實產出，三處與契約不符："
-    "(1) `#### 討論 —— 評測指標與更新機制` 給必出現層加了後綴，契約只允許因果鏈帶後綴；"
-    "(2)(3) 兩處狀態標記用 `腦力激盪`，不在五值值域內（該場文件層另有 `## 腦力激盪與風險項目`）。"
-    "由棒③ 裁定是收緊 prompt 還是放寬契約。",
-)
-def test_second_new_format_output_is_green():
-    """新版型不該只有目標樣本一份合格。這條轉綠之前，版型契約還沒真的收斂。"""
+def test_second_new_format_output_has_only_the_known_suffix_violation():
+    """9/07 是新版型的第二份真實產出。棒③ 裁決後它剩下**恰好一條**不合：
+    `#### 討論 —— 評測指標與更新機制` 給必出現層加了後綴（收緊 prompt，不放寬契約）。
+    另外兩處 `腦力激盪` 已收進值域。
+
+    斷言「恰好這一條」而不是 xfail：xfail 只記得住「有東西不合」，
+    多冒出一條新的不合它照樣綠。這條會紅。
+    """
     path = CORPUS / "週一週四_Data_內會/20260907/會議記錄_Data內會_20260907.md"
     r = check_layout(path.read_text(encoding="utf-8"))
-    assert r["ok"], r["violations"]
+    assert r["violations"] == [
+        "議題九：Tagtoo 內部知識庫與教授合作（Frank）：自創層名 `討論 —— 評測指標與更新機制`"
+    ]
