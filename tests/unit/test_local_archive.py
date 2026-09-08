@@ -1,0 +1,135 @@
+"""`scripts/local_archive.py` 的黑箱測試 —— 只碰公開介面，不碰網路。
+
+**每條測試都必須傳 `root=tmp_path`。** 不傳的話預設是 `LOCAL_ARCHIVE_ROOT`
+（`~/thoughts/…`），那是真實資料，測試跑一次就污染一次。`write_local_archive`
+有 `root=` 參數就是為了這件事。
+
+側檔的 JSON 形狀（`ensure_ascii=False` ＋ `indent=2` ＋ 結尾換行）被 #7 的歷史索引
+讀，所以下面用**逐字比對整個字串**，不是 `json.loads` 後比 dict —— 後者對縮排與
+跳脫完全無感，形狀漂掉也照樣綠。
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+SCRIPTS = Path(__file__).resolve().parents[2] / "skills/comms/generate-meeting-notes/scripts"
+sys.path.insert(0, str(SCRIPTS))
+
+from local_archive import (  # noqa: E402
+    LOCAL_ARCHIVE_ROOT,
+    SIDECAR_SUFFIX,
+    archive_paths,
+    clean_title_suffix,
+    note_title,
+    sidecar_content,
+    write_local_archive,
+)
+
+NOTE = "# 會議記錄\n\n中文內容，結尾沒有多餘換行"
+
+
+def test_archive_root_and_sidecar_suffix_are_the_documented_constants():
+    """#7 的索引照這個位置去找歷史。打錯字的症狀是「歸檔成功但沒人找得到」。"""
+    assert LOCAL_ARCHIVE_ROOT == Path.home() / "thoughts/global/shared/meeting-notes"
+    assert SIDECAR_SUFFIX == ".meta.json"
+
+
+def test_archive_paths_assembles_only_and_touches_no_filesystem(tmp_path: Path):
+    note, sidecar = archive_paths("週四_RD_會議", "20260521", "會議記錄_RD會議_20260521", root=tmp_path)
+
+    assert note == tmp_path / "週四_RD_會議/20260521/會議記錄_RD會議_20260521.md"
+    assert sidecar == tmp_path / "週四_RD_會議/20260521/會議記錄_RD會議_20260521.meta.json"
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_archive_paths_uses_date_verbatim_as_the_directory_name(tmp_path: Path):
+    """`date` 沒有格式驗證，也**不該**有 —— 但要確定它不會被剖析或正規化。
+
+    真實資料裡有 `20260521_pc` 這種資料夾（識別碼跑到資料夾名上）。本票定的形狀是
+    識別碼進檔名、日期資料夾就是日期，這條釘住「傳什麼就是什麼」，讓那種歷史遺留在
+    路徑層可重現而不是被悄悄改寫成別的目錄。
+    """
+    note, _ = archive_paths("週四_RD_會議", "20260521_pc", "T", root=tmp_path)
+    assert note.parent == tmp_path / "週四_RD_會議/20260521_pc"
+
+
+def test_write_local_archive_writes_note_and_sidecar(tmp_path: Path):
+    url = "https://docs.google.com/document/d/abc123/edit"
+
+    note, sidecar = write_local_archive(
+        "週三_PM_會議", "20260708", "會議記錄_PM會議_20260708_pm", NOTE, doc_url=url, root=tmp_path
+    )
+
+    assert (note, sidecar) == archive_paths(
+        "週三_PM_會議", "20260708", "會議記錄_PM會議_20260708_pm", root=tmp_path
+    )
+    assert note.read_text(encoding="utf-8") == NOTE
+    assert json.loads(sidecar.read_text(encoding="utf-8")) == {"doc_url": url}
+
+
+def test_write_local_archive_overwrites_and_clears_the_url(tmp_path: Path):
+    """覆寫是明訂語意，這條釘住它的代價：重跑發佈會把本機已修訂的正式稿蓋掉，
+    而且沒帶 `doc_url` 的那次會把側檔清成 `{}` —— URL 是發佈當下唯一拿得到的東西。
+    """
+    args = ("週三_PM_會議", "20260708", "會議記錄_PM會議_20260708")
+    note, sidecar = write_local_archive(*args, "第一版", doc_url="https://x", root=tmp_path)
+
+    write_local_archive(*args, "第二版", root=tmp_path)
+
+    assert note.read_text(encoding="utf-8") == "第二版"
+    assert sidecar.read_text(encoding="utf-8") == "{}\n"
+
+
+def test_sidecar_json_shape_is_indent2_utf8_and_trailing_newline(tmp_path: Path):
+    assert sidecar_content("https://x") == '{\n  "doc_url": "https://x"\n}\n'
+    # ensure_ascii=False：非 ASCII 原樣落地，不是 \uXXXX。
+    assert "會議" in sidecar_content("https://docs.google.com/會議")
+
+
+@pytest.mark.parametrize("doc_url", [None, ""], ids=["none", "empty-str"])
+def test_missing_url_omits_the_field_instead_of_writing_null(doc_url):
+    """`{"doc_url": null}` 會讓下游 agent 以為那是可用的值。空字串與 None 同一路。"""
+    assert sidecar_content(doc_url) == "{}\n"
+
+
+@pytest.mark.parametrize(
+    ("suffix", "expected"),
+    [
+        (None, "會議記錄_PM會議_20260708"),
+        ("", "會議記錄_PM會議_20260708"),
+        ("   ", "會議記錄_PM會議_20260708"),
+        (":::", "會議記錄_PM會議_20260708"),
+        ("pm", "會議記錄_PM會議_20260708_pm"),
+        ("a/b", "會議記錄_PM會議_20260708_a-b"),
+    ],
+    ids=["none", "empty", "blank", "all-illegal", "plain", "cleaned"],
+)
+def test_note_title(suffix, expected):
+    """標題不含副檔名，短識別碼清洗後非空才接上去 —— 空的時候不能留一條裸底線。"""
+    assert note_title("PM會議", "20260708", suffix) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("pm", "pm"),
+        ("第二場", "第二場"),
+        (r'a\/:*?"<>|b', "a-b"),
+        ("a//b", "a-b"),
+        ("a?b*c", "a-b-c"),
+        (" -pm_ ", "pm"),
+        ("_x_", "x"),
+        (None, ""),
+    ],
+    ids=["plain", "cjk", "all-illegal-chars", "runs-collapse", "two-groups", "trim", "trim-underscore", "none"],
+)
+def test_clean_title_suffix(raw, expected):
+    """連續非法字元收成單一 `-`，頭尾的空白／`-`／`_` 去掉。`第二場` 那條擋住
+    「順手把非 ASCII 也清掉」—— 繁中識別碼是合法檔名。
+    """
+    assert clean_title_suffix(raw) == expected
