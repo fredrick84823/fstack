@@ -84,6 +84,7 @@ def test_second_new_format_output_has_only_the_known_suffix_violation():
     """
     path = CORPUS / "週一週四_Data_內會/20260907/會議記錄_Data內會_20260907.md"
     r = check_layout(path.read_text(encoding="utf-8"))
-    assert r["violations"] == [
-        "議題九：Tagtoo 內部知識庫與教授合作（Frank）：自創層名 `討論 —— 評測指標與更新機制`"
-    ]
+    # 只比對違規的「種類」，不比對議題標題 —— 標題含公司名與同事名，fstack 是 public repo；
+    # 而且硬編標題會讓「該場記錄被編輯」變成版型測試紅，紅的原因與版型無關。
+    (violation,) = r["violations"]
+    assert "自創層名 `討論 —— 評測指標與更新機制`" in violation
