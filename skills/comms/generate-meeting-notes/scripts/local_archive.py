@@ -45,7 +45,7 @@ def archive_paths(
     folder_name: str,
     date: str,
     title: str,
-    root: Path | str = LOCAL_ARCHIVE_ROOT,
+    root: Path = LOCAL_ARCHIVE_ROOT,
 ) -> tuple[Path, Path]:
     """回傳 (正式稿路徑, 側檔路徑)。純路徑組裝，不碰檔案系統。
 
@@ -53,7 +53,7 @@ def archive_paths(
     `/`，原樣當檔名會把檔案寫進另一個目錄。`folder_name` 與 `date` **不清洗** ——
     前者來自本機 config（不是外部輸入），後者傳什麼就是什麼。
     """
-    directory = Path(root) / folder_name / date
+    directory = root / folder_name / date
     safe = clean_for_filename(title)
     return directory / f"{safe}.md", directory / f"{safe}{SIDECAR_SUFFIX}"
 
@@ -70,7 +70,7 @@ def write_local_archive(
     title: str,
     content: str,
     doc_url: str | None = None,
-    root: Path | str = LOCAL_ARCHIVE_ROOT,
+    root: Path = LOCAL_ARCHIVE_ROOT,
 ) -> tuple[Path, Path]:
     """寫入正式稿與側檔，回傳兩者的路徑。"""
     note_path, sidecar_path = archive_paths(folder_name, date, title, root)

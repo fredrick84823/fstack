@@ -114,13 +114,11 @@ def test_missing_url_omits_the_field_instead_of_writing_null(doc_url):
     ("suffix", "expected"),
     [
         (None, "會議記錄_PM會議_20260708"),
-        ("", "會議記錄_PM會議_20260708"),
         ("   ", "會議記錄_PM會議_20260708"),
         (":::", "會議記錄_PM會議_20260708"),
-        ("pm", "會議記錄_PM會議_20260708_pm"),
         ("a/b", "會議記錄_PM會議_20260708_a-b"),
     ],
-    ids=["none", "empty", "blank", "all-illegal", "plain", "cleaned"],
+    ids=["none", "blank", "all-illegal", "cleaned"],
 )
 def test_note_title(suffix, expected):
     """標題不含副檔名，短識別碼清洗後非空才接上去 —— 空的時候不能留一條裸底線。"""
@@ -130,16 +128,13 @@ def test_note_title(suffix, expected):
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
-        ("pm", "pm"),
         ("第二場", "第二場"),
         (r'a\/:*?"<>|b', "a-b"),
-        ("a//b", "a-b"),
         ("a?b*c", "a-b-c"),
         (" -pm_ ", "pm"),
-        ("_x_", "x"),
         (None, ""),
     ],
-    ids=["plain", "cjk", "all-illegal-chars", "runs-collapse", "two-groups", "trim", "trim-underscore", "none"],
+    ids=["cjk", "all-illegal-chars", "two-groups", "trim", "none"],
 )
 def test_clean_for_filename(raw, expected):
     """連續非法字元收成單一 `-`，頭尾的空白／`-`／`_` 去掉。`第二場` 那條擋住

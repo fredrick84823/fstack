@@ -128,19 +128,17 @@ def test_resolve_collisions_keeps_the_newest_of_the_docs_sharing_a_filename():
     resolved, decisions = resolve_collisions([old, new])
 
     assert [g["doc_url"] for g in resolved] == [new["doc_url"]]
-    assert resolved[0]["newest_wins"] is True
     assert len(decisions) == 1
     assert decisions[0]["chosen"] is new
     assert [c["doc_url"] for c in decisions[0]["candidates"]] == [new["doc_url"], old["doc_url"]]
 
 
 def test_resolve_collisions_leaves_uncontested_filenames_unmarked():
-    """沒撞名就不該標 `[newest-wins]` —— 每場都標等於這個標記沒有資訊。"""
+    """沒撞名就不該進 `[newest-wins]` 彙總 —— 每場都列等於這份彙總沒有資訊。"""
     resolved, decisions = resolve_collisions([
         _gap("甲.md", "2026-08-24T10:00:00.000Z", "a"),
         _gap("乙.md", "2026-08-25T10:00:00.000Z", "b"),
     ])
 
     assert decisions == []
-    assert [g["newest_wins"] for g in resolved] == [False, False]
     assert sorted(g["note_path"].name for g in resolved) == ["乙.md", "甲.md"]

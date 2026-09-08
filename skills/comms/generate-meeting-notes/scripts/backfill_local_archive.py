@@ -11,7 +11,7 @@ backfill_local_archive.py - 一次性補齊：把 Drive 上有、本機缺的正
     uv run scripts/backfill_local_archive.py                    # 看差集
     uv run scripts/backfill_local_archive.py --meeting data內會  # 只看單一系列
     uv run scripts/backfill_local_archive.py --apply            # 實際補齊
-    另有 --root（換歸檔根目錄，測試用）與 --max-pages（翻頁上限）。
+    另有 --root（換歸檔根目錄，測試用）。
 
 退出碼：
     0  完成（dry-run 或 --apply 都算）
@@ -29,9 +29,10 @@ from extract_audio_sources import get_google_credentials, load_config
 from local_archive import LOCAL_ARCHIVE_ROOT, archive_paths, sidecar_content
 
 DATE_DIR = re.compile(r"\d{8}")
+MAX_PAGES = 20
 
 
-def list_all(drive, query: str, max_pages: int) -> list[dict]:
+def list_all(drive, query: str, max_pages: int = MAX_PAGES) -> list[dict]:
     """翻完一個 Drive 查詢的所有頁。超過上限就炸，不要無聲繞圈。"""
     files: list[dict] = []
     page_token = None
@@ -51,8 +52,7 @@ def list_all(drive, query: str, max_pages: int) -> list[dict]:
     raise RuntimeError(
         f"翻頁超過上限 {max_pages} 頁仍未結束（已收 {len(files)} 筆）。\n"
         f"   query: {query}\n"
-        f"   Drive 一個系列不該有這麼多日期資料夾——先確認 query 是否選錯資料夾，"
-        f"或用 --max-pages 提高上限。"
+        f"   Drive 一個系列不該有這麼多日期資料夾——先確認 query 是否選錯資料夾。"
     )
 
 
@@ -62,7 +62,7 @@ def export_markdown(drive, doc_id: str) -> str:
     ).execute().decode("utf-8")
 
 
-def scan_meeting(drive, meeting: dict, root: Path, max_pages: int) -> list[dict]:
+def scan_meeting(drive, meeting: dict, root: Path) -> list[dict]:
     """回傳這個系列所有「本機缺東西」的場次。"""
     folder_name = meeting.get("folder_name", meeting["series_name"])
     gaps: list[dict] = []
@@ -71,7 +71,6 @@ def scan_meeting(drive, meeting: dict, root: Path, max_pages: int) -> list[dict]
         drive,
         f"'{meeting['folder_id']}' in parents "
         "and mimeType='application/vnd.google-apps.folder' and trashed=false",
-        max_pages,
     )
     for folder in sorted(date_folders, key=lambda f: f["name"]):
         date = folder["name"]
@@ -81,7 +80,6 @@ def scan_meeting(drive, meeting: dict, root: Path, max_pages: int) -> list[dict]
             drive,
             f"'{folder['id']}' in parents "
             "and mimeType='application/vnd.google-apps.document' and trashed=false",
-            max_pages,
         )
         for doc in docs:
             if not doc["name"].startswith("會議記錄"):
@@ -97,11 +95,6 @@ def scan_meeting(drive, meeting: dict, root: Path, max_pages: int) -> list[dict]
                 "sidecar_path": sidecar_path,
                 "need_note": not note_path.exists(),
                 "need_sidecar": not sidecar_path.exists(),
-                # 本機已有正式稿但檔名跟 Doc 名不同 → 補下去會多出一份
-                "renamed": sorted(
-                    p.name for p in note_path.parent.glob("會議記錄*.md")
-                    if p.name != note_path.name
-                ) if not note_path.exists() and note_path.parent.is_dir() else [],
             })
     return gaps
 
@@ -119,7 +112,6 @@ def resolve_collisions(gaps: list[dict]) -> tuple[list[dict], list[dict]]:
     resolved, decisions = [], []
     for candidates in by_path.values():
         ranked = sorted(candidates, key=lambda g: g["modified"], reverse=True)
-        ranked[0]["newest_wins"] = len(ranked) > 1
         resolved.append(ranked[0])
         if len(ranked) > 1:
             decisions.append({"chosen": ranked[0], "candidates": ranked})
@@ -134,8 +126,6 @@ def main() -> int:
                         help="實際寫入本機。省略時只印差集（dry-run）")
     parser.add_argument("--root", default=str(LOCAL_ARCHIVE_ROOT),
                         help=f"本機會議記錄根目錄（預設 {LOCAL_ARCHIVE_ROOT}）")
-    parser.add_argument("--max-pages", type=int, default=20,
-                        help="單次 Drive 查詢的翻頁上限，超過即中止（預設 20）")
     args = parser.parse_args()
 
     meetings = load_config().get("meetings", {})
@@ -162,7 +152,7 @@ def main() -> int:
     collisions: list[dict] = []
     for key, meeting in meetings.items():
         try:
-            gaps = scan_meeting(drive, meeting, root, args.max_pages)
+            gaps = scan_meeting(drive, meeting, root)
         except RuntimeError as exc:
             print(f"❌ {key}：{exc}")
             return 1
@@ -179,10 +169,7 @@ def main() -> int:
             missing = " + ".join(
                 ["正式稿"] * gap["need_note"] + ["側檔"] * gap["need_sidecar"]
             )
-            mark = " [newest-wins]" if gap["newest_wins"] else ""
-            print(f"   缺 {missing:<11} {gap['note_path'].parent.name}/{gap['note_path'].name}{mark}")
-            if gap["renamed"]:
-                print(f"      ⚠️  本機已有不同檔名的正式稿：{', '.join(gap['renamed'])}")
+            print(f"   缺 {missing:<11} {gap['note_path'].parent.name}/{gap['note_path'].name}")
         all_gaps.extend(gaps)
 
     if collisions:
