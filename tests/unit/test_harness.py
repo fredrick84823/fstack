@@ -10,11 +10,14 @@
 
 from __future__ import annotations
 
+import importlib.util
+import shutil
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
+from . import conftest
 from .conftest import SCRIPTS, _qid, load_script, sent_body, sent_kwargs
 
 # --------------------------------------------------------------------------
@@ -159,3 +162,29 @@ def test_load_script_names_the_module_after_its_path():
 def test_load_script_raises_on_a_missing_script():
     with pytest.raises((AssertionError, FileNotFoundError, ImportError)):
         load_script("no_such_script")
+
+
+def test_load_script_follows_the_conftest_into_a_copied_tree(tmp_path):
+    """把 harness 複製到另一棵樹，載到的必須是**那棵樹**的腳本。
+
+    `test_load_script_reads_from_the_tree_this_file_lives_in` 只斷言 SCRIPTS 與本檔
+    同根 —— 那在 repo 裡恆真，`ROOT` 改寫死一個絕對路徑也照樣綠。真正會壞的場景是
+    mutmut：它把整棵樹複製進 `mutants/` 再跑，寫死路徑那一輪載到的是 repo 原檔，
+    每顆 mutant 都活下來，症狀長得像「測試沒鑑別力」而不是「載錯檔」。所以這裡
+    真的複製一棵樹出來，用它的 conftest 載，斷在只有複製品才有的 MARKER 上。
+    """
+    scripts = tmp_path / "skills/comms/generate-meeting-notes/scripts"
+    scripts.mkdir(parents=True)
+    (scripts / "extract_audio_sources.py").write_text("MARKER = 'copy'\n")
+    unit = tmp_path / "tests/unit"
+    unit.mkdir(parents=True)
+    shutil.copy2(conftest.__file__, unit / "conftest.py")
+
+    spec = importlib.util.spec_from_file_location("copied_conftest", unit / "conftest.py")
+    copied = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(copied)
+
+    module = copied.load_script("extract_audio_sources")
+
+    assert module.MARKER == "copy"
+    assert Path(module.__file__).is_relative_to(tmp_path)
