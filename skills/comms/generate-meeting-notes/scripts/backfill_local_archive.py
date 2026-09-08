@@ -37,7 +37,7 @@ def list_all(drive, query: str, max_pages: int) -> list[dict]:
     for _ in range(max_pages):
         response = drive.files().list(
             q=query,
-            fields="nextPageToken, files(id,name,mimeType)",
+            fields="nextPageToken, files(id,name,mimeType,modifiedTime)",
             pageSize=100,
             supportsAllDrives=True,
             includeItemsFromAllDrives=True,
@@ -90,6 +90,7 @@ def scan_meeting(drive, meeting: dict, root: Path, max_pages: int) -> list[dict]
                 continue
             gaps.append({
                 "doc_id": doc["id"],
+                "modified": doc.get("modifiedTime", ""),
                 "doc_url": f"https://docs.google.com/document/d/{doc['id']}/edit",
                 "note_path": note_path,
                 "sidecar_path": sidecar_path,
@@ -104,14 +105,24 @@ def scan_meeting(drive, meeting: dict, root: Path, max_pages: int) -> list[dict]
     return gaps
 
 
-def split_collisions(gaps: list[dict]) -> tuple[list[dict], list[dict]]:
-    """把「多份 Doc 對到同一個本機檔名」的那些挑出來。回傳 (可補的, 撞名的)。"""
-    counts: dict[Path, int] = {}
+def resolve_collisions(gaps: list[dict]) -> tuple[list[dict], list[dict]]:
+    """多份 Doc 對到同一個本機檔名時，取 modifiedTime 最新的那份。
+
+    回傳 (每個本機檔名一筆, 被 newest-wins 解掉的決策紀錄)。
+    決策紀錄只進 stdout——側檔 schema 不動，#7 要依賴它。
+    """
+    by_path: dict[Path, list[dict]] = {}
     for gap in gaps:
-        counts[gap["note_path"]] = counts.get(gap["note_path"], 0) + 1
-    clean = [g for g in gaps if counts[g["note_path"]] == 1]
-    clashed = [g for g in gaps if counts[g["note_path"]] > 1]
-    return clean, clashed
+        by_path.setdefault(gap["note_path"], []).append(gap)
+
+    resolved, decisions = [], []
+    for candidates in by_path.values():
+        ranked = sorted(candidates, key=lambda g: g["modified"], reverse=True)
+        ranked[0]["newest_wins"] = len(ranked) > 1
+        resolved.append(ranked[0])
+        if len(ranked) > 1:
+            decisions.append({"chosen": ranked[0], "candidates": ranked})
+    return resolved, decisions
 
 
 def main() -> int:
@@ -157,10 +168,9 @@ def main() -> int:
         except Exception as exc:
             print(f"❌ {key}：Drive 查詢失敗 {type(exc).__name__}: {exc}")
             return 1
-        # 同一個 Drive 日期資料夾裡有兩份同名 Doc → 對到同一個本機檔名，
-        # 挑哪一個的 URL 都是猜的。寧可讓側檔缺席，也不要記一個可能錯的 URL。
-        gaps, clashed = split_collisions(gaps)
-        collisions.extend(clashed)
+        # 同一個 Drive 日期資料夾裡有多份同名 Doc → 對到同一個本機檔名，取最新那份
+        gaps, decisions = resolve_collisions(gaps)
+        collisions.extend(decisions)
 
         print(f"\n📋 {key}（{meeting.get('folder_name', meeting['series_name'])}）"
               f"：{len(gaps)} 場缺東西")
@@ -168,16 +178,22 @@ def main() -> int:
             missing = " + ".join(
                 ["正式稿"] * gap["need_note"] + ["側檔"] * gap["need_sidecar"]
             )
-            print(f"   缺 {missing:<11} {gap['note_path'].parent.name}/{gap['note_path'].name}")
+            mark = " [newest-wins]" if gap["newest_wins"] else ""
+            print(f"   缺 {missing:<11} {gap['note_path'].parent.name}/{gap['note_path'].name}{mark}")
             if gap["renamed"]:
                 print(f"      ⚠️  本機已有不同檔名的正式稿：{', '.join(gap['renamed'])}")
         all_gaps.extend(gaps)
 
     if collisions:
-        print(f"\n⚠️  {len(collisions)} 份 Doc 撞到同一個本機檔名，一律跳過（URL 挑哪個都是猜的）：")
-        for gap in collisions:
-            print(f"   {gap['note_path'].parent.name}/{gap['note_path'].name}  ← {gap['doc_url']}")
-        print("   要補的話：先在 Drive 上把同名 Doc 改名或刪掉重複的，再跑一次。")
+        print(f"\n[newest-wins] 彙總：{len(collisions)} 個本機檔名有多份同名 Doc，"
+              "取 modifiedTime 最新的")
+        for decision in collisions:
+            note = decision["chosen"]["note_path"]
+            print(f"   {note.parent.name}/{note.name}"
+                  f" ← {len(decision['candidates'])} 份候選中挑 {decision['chosen']['doc_url']}")
+            for cand in decision["candidates"]:
+                mark = "選用" if cand is decision["chosen"] else "落選"
+                print(f"        {mark}  {cand['modified']}  {cand['doc_url']}")
 
     print(f"\n合計 {len(all_gaps)} 場缺東西"
           f"（正式稿 {sum(g['need_note'] for g in all_gaps)}、"
