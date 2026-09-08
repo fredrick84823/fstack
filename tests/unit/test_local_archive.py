@@ -24,7 +24,7 @@ from local_archive import (  # noqa: E402
     LOCAL_ARCHIVE_ROOT,
     SIDECAR_SUFFIX,
     archive_paths,
-    clean_title_suffix,
+    clean_for_filename,
     note_title,
     sidecar_content,
     write_local_archive,
@@ -56,6 +56,19 @@ def test_archive_paths_uses_date_verbatim_as_the_directory_name(tmp_path: Path):
     """
     note, _ = archive_paths("週四_RD_會議", "20260521_pc", "T", root=tmp_path)
     assert note.parent == tmp_path / "週四_RD_會議/20260521_pc"
+
+
+def test_archive_paths_sanitizes_the_title_so_it_cannot_pick_its_own_directory(tmp_path: Path):
+    """補齊腳本餵進來的 `title` 是 Drive 上的 Doc 名，而 Drive 允許 `/`。
+
+    不清洗的症狀不是報錯，是檔案安靜地落在別的目錄裡（`mkdir(parents=True)` 會順手
+    幫它把目錄建出來），然後 #7 的索引在該在的地方找不到它。
+    """
+    note, sidecar = archive_paths("週四_RD_會議", "20260521", "會議記錄_RD會議/草稿", root=tmp_path)
+
+    assert note.parent == tmp_path / "週四_RD_會議/20260521"
+    assert note.name == "會議記錄_RD會議-草稿.md"
+    assert sidecar.name == "會議記錄_RD會議-草稿.meta.json"
 
 
 def test_write_local_archive_writes_note_and_sidecar(tmp_path: Path):
@@ -128,8 +141,8 @@ def test_note_title(suffix, expected):
     ],
     ids=["plain", "cjk", "all-illegal-chars", "runs-collapse", "two-groups", "trim", "trim-underscore", "none"],
 )
-def test_clean_title_suffix(raw, expected):
+def test_clean_for_filename(raw, expected):
     """連續非法字元收成單一 `-`，頭尾的空白／`-`／`_` 去掉。`第二場` 那條擋住
     「順手把非 ASCII 也清掉」—— 繁中識別碼是合法檔名。
     """
-    assert clean_title_suffix(raw) == expected
+    assert clean_for_filename(raw) == expected

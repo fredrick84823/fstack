@@ -20,17 +20,24 @@ LOCAL_ARCHIVE_ROOT = Path.home() / "thoughts" / "global" / "shared" / "meeting-n
 SIDECAR_SUFFIX = ".meta.json"
 
 
-def clean_title_suffix(title_suffix: str | None) -> str:
-    """把同日多場次的短識別碼清成可安全放進檔名／Doc 名的形式。"""
-    if not title_suffix:
+def clean_for_filename(text: str | None) -> str:
+    """把一段文字清成可安全放進檔名／Doc 名的形式。
+
+    ponytail: 這個對應不是單射的——`a/b`、`a:b`、`a//b` 全部收斂到 `a-b`，同日兩場
+    真的用這種識別碼就會撞成同一個檔名，而 `write_local_archive` 是覆寫語意，後寫的
+    蓋掉前寫的。實務上的識別碼是 `am`/`pm`/`pc`/`phone`，不會撞，所以先接受。
+    要升級的話是把對應改成單射（逐字元跳脫，例如 `%2F`），**不是**在寫入前偵測既有
+    檔——那個檢查分不出「撞名」與「重跑同一場發佈」，而後者必須照常覆寫。
+    """
+    if not text:
         return ""
-    return re.sub(r"[\\/:*?\"<>|]+", "-", title_suffix).strip(" -_")
+    return re.sub(r"[\\/:*?\"<>|]+", "-", text).strip(" -_")
 
 
 def note_title(series_name: str, date: str, title_suffix: str | None = None) -> str:
     """正式稿標題。Doc 名稱與本機檔名共用這個值，兩邊才不會漂開。"""
     title = f"會議記錄_{series_name}_{date}"
-    cleaned = clean_title_suffix(title_suffix)
+    cleaned = clean_for_filename(title_suffix)
     return f"{title}_{cleaned}" if cleaned else title
 
 
@@ -40,9 +47,15 @@ def archive_paths(
     title: str,
     root: Path | str = LOCAL_ARCHIVE_ROOT,
 ) -> tuple[Path, Path]:
-    """回傳 (正式稿路徑, 側檔路徑)。純路徑組裝，不碰檔案系統。"""
+    """回傳 (正式稿路徑, 側檔路徑)。純路徑組裝，不碰檔案系統。
+
+    `title` 過一次檔名清洗：補齊腳本餵進來的是 Drive 上的 Doc 名，而 Drive 允許
+    `/`，原樣當檔名會把檔案寫進另一個目錄。`folder_name` 與 `date` **不清洗** ——
+    前者來自本機 config（不是外部輸入），後者傳什麼就是什麼。
+    """
     directory = Path(root) / folder_name / date
-    return directory / f"{title}.md", directory / f"{title}{SIDECAR_SUFFIX}"
+    safe = clean_for_filename(title)
+    return directory / f"{safe}.md", directory / f"{safe}{SIDECAR_SUFFIX}"
 
 
 def sidecar_content(doc_url: str | None) -> str:

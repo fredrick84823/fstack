@@ -7,10 +7,11 @@ backfill_local_archive.py - 一次性補齊：把 Drive 上有、本機缺的正
 
 預設 dry-run，只印差集不寫檔；要真的寫入必須加 --apply。
 
-用法：
-    python3 scripts/backfill_local_archive.py                    # 看差集
-    python3 scripts/backfill_local_archive.py --meeting data內會  # 只看單一系列
-    python3 scripts/backfill_local_archive.py --apply            # 實際補齊
+用法（與 SKILL.md 一致，都從 skill 目錄用 uv 跑）：
+    uv run scripts/backfill_local_archive.py                    # 看差集
+    uv run scripts/backfill_local_archive.py --meeting data內會  # 只看單一系列
+    uv run scripts/backfill_local_archive.py --apply            # 實際補齊
+    另有 --root（換歸檔根目錄，測試用）與 --max-pages（翻頁上限）。
 
 退出碼：
     0  完成（dry-run 或 --apply 都算）

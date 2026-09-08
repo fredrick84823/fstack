@@ -221,10 +221,10 @@ cd "$SKILL_DIR" && uv run scripts/create_gdoc_from_md.py \
 
 ```
 RESULT_URL: https://docs.google.com/document/d/<doc_id>/edit
+RESULT_LOCAL_NOTE: <本機正式稿路徑>    # 兩行一起缺席 = 這次沒歸檔成功，Doc 仍已建立
+RESULT_LOCAL_SIDECAR: <本機側檔路徑>
 RESULT_DRIVE_PATH: <folder_name>/<YYYYMMDD>
 RESULT_SERIES_NAME / RESULT_DATE
-RESULT_LOCAL_NOTE: <本機正式稿路徑>
-RESULT_LOCAL_SIDECAR: <本機側檔路徑>
 RESULT_AUDIO_FILE: <drive_file_id>     # 只在有 --audio-file 時
 RESULT_LOCAL_AUDIO: deleted | kept     # kept 要告知使用者原因
 ```
