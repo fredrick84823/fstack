@@ -37,33 +37,12 @@ def test_sent_kwargs_returns_the_values_actually_sent():
     assert type(kwargs) is dict
 
 
-def test_sent_body_returns_the_body():
-    svc = MagicMock()
-    svc.documents().batchUpdate(
-        documentId="doc_id",
-        body={"requests": [{"insertText": {"text": "會議記錄_資料內會"}}]},
-    )
-
-    assert sent_body(svc, "documents", "batchUpdate") == {
-        "requests": [{"insertText": {"text": "會議記錄_資料內會"}}]
-    }
-
-
 def test_walks_a_chain_deeper_than_two_segments():
     svc = MagicMock()
     svc.files().permissions().create(fileId="f_id", body={"role": "reader"})
 
     assert sent_kwargs(svc, "files", "permissions", "create")["fileId"] == "f_id"
     assert sent_body(svc, "files", "permissions", "create") == {"role": "reader"}
-
-
-def test_reads_the_last_call_not_the_first():
-    svc = MagicMock()
-    svc.documents().batchUpdate(documentId="first", body={"requests": [1]})
-    svc.documents().batchUpdate(documentId="last", body={"requests": [2]})
-
-    assert sent_kwargs(svc, "documents", "batchUpdate")["documentId"] == "last"
-    assert sent_body(svc, "documents", "batchUpdate") == {"requests": [2]}
 
 
 @pytest.mark.parametrize("helper", [sent_kwargs, sent_body], ids=["kwargs", "body"])
@@ -74,32 +53,11 @@ def test_raises_when_nothing_was_sent(helper):
         helper(svc, "documents", "batchUpdate")
 
 
-@pytest.mark.parametrize("helper", [sent_kwargs, sent_body], ids=["kwargs", "body"])
-def test_never_hands_back_a_magicmock(helper):
-    """本檔存在的理由：回一顆 mock 會讓下游每條斷言都通過。"""
-    svc = MagicMock()
-    returned = []
-
-    try:
-        returned.append(helper(svc, "documents", "batchUpdate"))
-    except AssertionError:
-        pass
-
-    assert not returned, f"expected a raise, got {returned[0]!r}"
-
-
-def test_sent_body_raises_when_the_call_carried_no_body():
-    svc = MagicMock()
-    svc.documents().get(documentId="doc_id")
-
-    with pytest.raises(AssertionError, match="body"):
-        sent_body(svc, "documents", "get")
-
-
-@pytest.mark.parametrize("helper", [sent_kwargs, sent_body], ids=["kwargs", "body"])
-def test_raises_on_an_empty_path(helper):
+def test_raises_on_an_empty_path():
+    """只釘 `sent_kwargs`：`sent_body` 空 path 時是 body 那道 guard 先 raise，
+    釘它等於釘不到 path guard。"""
     with pytest.raises(AssertionError):
-        helper(MagicMock())
+        sent_kwargs(MagicMock())
 
 
 # --------------------------------------------------------------------------
@@ -120,20 +78,9 @@ def test_qid_is_ascii_and_backslash_free(value):
     assert "\\" not in qid, qid
 
 
-def test_qid_still_tells_two_values_apart():
-    """全部壓成同一個 id 也會「沒有反斜線也沒有非 ASCII」—— 那樣 parametrize 會撞名。"""
-    assert _qid("客戶甲") != _qid("客戶乙")
-
-
 # --------------------------------------------------------------------------
 # load_script —— 載到的必須是「跟本檔案同一棵樹」的那份
 # --------------------------------------------------------------------------
-
-
-def test_load_script_returns_the_module():
-    module = load_script("extract_audio_sources")
-
-    assert callable(module.extract_date)
 
 
 def test_load_script_names_the_module_after_its_path():

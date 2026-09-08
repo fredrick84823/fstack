@@ -2,7 +2,6 @@
 #   make test                      unit test
 #   make integration               明示才跑；吃本機安裝版，CI 上整包 skip
 #   make mutation                  mutmut，範圍是 setup.cfg 的檔案再交集 PURE
-#   make mutation FUNC=extract_date   只跑單一函式的 mutant
 #   make crap                      CRAP 基線（複雜度 × 未覆蓋率）
 
 PYTEST ?= python3 -m pytest
@@ -31,7 +30,7 @@ PURE := \
 
 # key 的形狀是 `<路徑轉點>.x_<函式名>__mutmut_<n>` —— `x_` 前綴是 mutmut 加的，
 # 少了它 fnmatch 一個都配不到，而配不到時 mutmut 是 assert 不是靜靜跳過。
-MUT_FILTER = $(if $(FUNC),'*.x_$(FUNC)__mutmut_*',$(foreach f,$(PURE),'*.x_$(f)__mutmut_*'))
+MUT_FILTER = $(foreach f,$(PURE),'*.x_$(f)__mutmut_*')
 
 .PHONY: test integration mutation crap
 
@@ -46,18 +45,27 @@ integration:
 # 選不到 → pytest exit 4 → BadTestExecutionCommandsException → child 以 exit 1 收場 →
 # mutmut 的 status_by_exit_code{1: "killed"} 把它記成 🎉。
 #
-# 所以清快取只是預防，事後的計數才是判準：**不是 0 就不能信這輪的數字**，而不是
-# 寫在文件裡靠人記得。gdoc-mcp 實測同一次改動前後分別印
+# 所以清快取只是預防，事後的計數才是判準 —— 但它是**單向**的：不是 0 就一定不能信，
+# 是 0 只表示沒踩到這一條路徑。gdoc-mcp 實測同一次改動前後分別印
 # `🎉 139 🙁 0`（278 次例外，假的）與 `🎉 136 🙁 3`（0 次例外，真的）。
+#
+# 另一條路徑例外計數看不見：覆蓋那些 mutant 的測試整支不見時 pytest 正常收尾、例外
+# 是 0，mutant 記成 🫥 no-tests。驗收條件本來就要求範圍內 🫥 為 0（實測拿掉
+# test_md_unescape 一條 → 🎉 59 🫥 83 而例外仍是 0），所以兩個都擋。
 mutation:
 	rm -rf mutants .mutmut-cache $(MUT_LOG)
 	@set -o pipefail; \
 	$(UVRUN) --with mutmut --with pytest mutmut run $(MUT_FILTER) 2>&1 | tee $(MUT_LOG); \
 	rc=$$?; \
 	n=$$(grep -c BadTestExecutionCommandsException $(MUT_LOG) || true); \
-	echo "BadTestExecutionCommandsException: $$n"; \
+	z=$$(grep -c '^🫥 ' $(MUT_LOG) || true); \
+	echo "BadTestExecutionCommandsException: $$n / 🫥 no-tests: $$z"; \
 	if [ "$$n" != "0" ]; then \
 		echo "→ mutmut 有 $$n 次選不到覆蓋測試，那些會被記成 killed。這輪的數字不能信。"; \
+		exit 1; \
+	fi; \
+	if [ "$$z" != "0" ]; then \
+		echo "→ 範圍內有 $$z 顆 mutant 沒有任何測試覆蓋。要嘛測試不見了，要嘛 PURE 掛了零測試的函式。"; \
 		exit 1; \
 	fi; \
 	exit $$rc
