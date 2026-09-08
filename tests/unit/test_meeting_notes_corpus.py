@@ -6,7 +6,7 @@
 **已知的資料限制**：紅側四種會議都證明過（PM／RD／Data 內會／Data 教授各 ≥3 份），
 綠側只有 Data 內會 —— 全機只有 8/31 與 9/07 兩份新版型真實產出。PM／RD／教授三種
 會議在新 prompt 下的真實產出還不存在，等它們出現才補得上。低議題密度那一側由
-`test_layout_contract.py::test_optional_layers_may_be_absent` 在密封樣本上守著。
+`test_layout_contract.py::test_good_sample_passes` 的議題二在密封樣本上守著。
 
 語料在 `~/thoughts`，是真實資料、不進版控，所以整檔在沒有它的機器上 skip。
 版型規則本身的測試在 `test_layout_contract.py`，那份是密封的、CI 一定跑得動。

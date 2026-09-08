@@ -11,11 +11,6 @@ import pytest
 from layout_contract import STATUS_VALUES, check_layout
 
 
-def _qid(value: str) -> str:
-    """繁中字串當 parametrize id 會變 unicode escape，改用 ASCII 序號。"""
-    return "".join(c if c.isascii() and (c.isalnum() or c in "-_") else "." for c in value)
-
-
 GOOD = """# **會議記錄：測試**
 
 ## 核心要點
@@ -72,10 +67,14 @@ GOOD = """# **會議記錄：測試**
 
 
 def test_good_sample_passes():
-    """基準線。這條紅了代表檢查器本身壞掉，下面所有紅燈都不可信。"""
+    """基準線。這條紅了代表檢查器本身壞掉，下面所有紅燈都不可信。
+
+    也是三個反向案例的載體：議題二只有 TL;DR ＋ 討論 ＋ 狀態，證明選填層缺席合格；
+    議題一的表格落在 TL;DR 之後、狀態之前，證明契約保留的表格用法不會被判紅；
+    狀態值走過 `執行中`／`待啟動`／`已確認`，證明值域內的值判綠。"""
     r = check_layout(GOOD)
     assert r["ok"], r["violations"]
-    assert r["counts"] == {"issues": 2, "h4": 7, "tldr": 2, "inline_status": 3, "tables": 2}
+    assert r["counts"] == {"issues": 2, "h4": 7, "inline_status": 3, "tables": 2}
 
 
 def _fails(md: str, needle: str):
@@ -90,19 +89,15 @@ def test_no_issue_heading_is_red():
     _fails(GOOD.replace("### 議題", "### "), "沒有任何 `### 議題`")
 
 
-def test_missing_tldr_is_red():
-    """防：TL;DR 消失，議題又變成一大段沒有頭條的敘述。"""
-    _fails(GOOD.replace("**TL;DR** — 一句話。\n\n", ""), "TL;DR 未緊接 H3")
-
-
 def test_tldr_pushed_below_討論_is_red():
-    """防：TL;DR 還在，但被塞到討論後面 —— 三分鐘讀不到結論。"""
+    """防：TL;DR 不在議題開頭 —— 三分鐘讀不到結論。整條刪掉（而不是搬走）也由這條擋著：
+    「TL;DR 不見了」是「TL;DR 不在第一行」的子集，分兩條測不會多抓到任何東西。"""
     md = GOOD.replace("**TL;DR** — 一句話。\n\n#### 議題因果鏈", "#### 議題因果鏈")
     md = md.replace("* 甲說了話。", "* 甲說了話。\n\n**TL;DR** — 一句話。")
     _fails(md, "TL;DR 未緊接 H3")
 
 
-@pytest.mark.parametrize("layer", ["討論", "狀態"], ids=_qid)
+@pytest.mark.parametrize("layer", ["討論", "狀態"], ids=["discussion", "status"])
 def test_missing_required_layer_is_red(layer):
     """防：必出現層被省略 —— 尤其是狀態，少了它就沒有機械可判定的收斂點。"""
     md = GOOD.replace(f"#### {layer}\n", "#### 補充\n")
@@ -136,7 +131,7 @@ def test_layer_order_swapped_is_red():
     _fails(md, "層順序錯亂")
 
 
-@pytest.mark.parametrize("filler", ["", "無", "N/A"], ids=lambda s: _qid(s) or "empty")
+@pytest.mark.parametrize("filler", ["", "無", "N/A"], ids=["empty", "none", "na"])
 def test_empty_or_filler_layer_is_red(filler):
     """防：選填層沒內容還硬輸出，用「無」湊層 —— 分層變裝飾，不再帶資訊。"""
     _fails(GOOD.replace("* 可能拖到交期", filler), "空層或填充層")
@@ -152,12 +147,6 @@ def test_status_value_outside_domain_is_red():
     _fails(GOOD.replace("`執行中` 甲事", "`已完成` 甲事"), "不在值域內")
 
 
-def test_腦力激盪_is_inside_domain():
-    """9/07 收進值域的第六值。它代表「本議題產出的想法，還不是承諾」——
-    五值裡沒有任何一個表達得出來（`待啟動` 是已定案未開工）。"""
-    assert check_layout(GOOD.replace("`執行中` 甲事", "`腦力激盪` 甲事"))["ok"]
-
-
 def test_inline_code_leaking_into_核心要點_is_red():
     """防：inline code 標記外溢到核心要點／行動項目 —— 契約明說那兩區維持純文字。"""
     md = GOOD.replace(
@@ -167,29 +156,18 @@ def test_inline_code_leaking_into_核心要點_is_red():
     _fails(md, "外溢到議題區塊之外")
 
 
-@pytest.mark.parametrize("layer", ["狀態", "風險"], ids=_qid)
+@pytest.mark.parametrize("layer", ["狀態", "風險"], ids=["status", "risk"])
 def test_table_under_狀態_or_風險_is_red(layer):
     """防：內容表格漂到狀態／風險底下 —— 契約限定表格只在 TL;DR 之後、狀態之前。"""
     md = GOOD.replace(f"#### {layer}\n\n", f"#### {layer}\n\n| a | b |\n| :-- | :-- |\n| 1 | 2 |\n\n")
     _fails(md, "底下出現表格")
 
 
-def test_table_between_tldr_and_狀態_is_green():
-    """R8 的反向案例：契約**保留**內容表格的用法，檢查器不得把它一律判紅。"""
-    assert check_layout(GOOD)["ok"]
-    assert check_layout(GOOD)["counts"]["tables"] == 2
-
-
-def test_optional_layers_may_be_absent():
-    """反向案例：選填層缺席是合格的。少了這條，檢查器會退化成「每議題五層」。"""
-    minimal = "## 討論過程\n\n### 議題一：甲\n\n**TL;DR** — 一句話。\n\n#### 討論\n\n* 話。\n\n#### 狀態\n\n* `已確認` 定案\n"
-    r = check_layout(minimal)
-    assert r["ok"], r["violations"]
-
-
 def test_status_values_are_exactly_six():
-    """防：值域被悄悄加值。值域是契約的一部分，改它要改這條。
-    鑑別力來自「封閉集合」而不是集合大小 —— 但每次加值都必須經過這條。"""
+    """防：值域被悄悄加值或減值。值域是契約的一部分，改它要改這條。
+    第六值 `腦力激盪`（9/07 收進來的）代表「本議題產出的想法，還不是承諾」，
+    五值裡沒有任何一個表達得出來（`待啟動` 是已定案未開工）。
+    鑑別力來自「封閉集合」而不是集合大小 —— 但每次加減值都必須經過這條。"""
     assert STATUS_VALUES == ("已確認", "執行中", "待驗證", "待確認", "待啟動", "腦力激盪")
 
 

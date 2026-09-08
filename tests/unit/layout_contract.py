@@ -22,11 +22,12 @@ Seam ④「正式稿 Markdown」是這條 pipeline 唯一外部可觀察的東�
 from __future__ import annotations
 
 import re
+from collections import Counter
+from itertools import groupby
 
 # 層名與相對順序的唯一來源。因果鏈與討論同階：8/31 目標樣本的議題三是「因果鏈 → 討論」、
 # 議題六是「討論 → 因果鏈」，兩種都是權威樣本自己的輸出。收斂到「因果鏈不得晚於決策理由」。
 LAYER_RANK = {"議題因果鏈": 0, "討論": 0, "決策理由": 1, "狀態": 2, "風險": 3}
-LAYERS = tuple(LAYER_RANK)
 REQUIRED_LAYERS = ("討論", "狀態")
 STATUS_VALUES = ("已確認", "執行中", "待驗證", "待確認", "待啟動", "腦力激盪")
 
@@ -34,7 +35,7 @@ _ISSUE_RE = re.compile(r"^###\s*議題")
 _H4_RE = re.compile(r"^####\s+(.+?)\s*$")
 _BULLET_RE = re.compile(r"^\s*[*-]\s+(.*)$")
 _STATUS_BULLET_RE = re.compile(r"^\s*[*-]\s+`([^`]+)`\s*\S")
-_FILLER = {"", "無", "n/a", "N/A", "待補", "（無）", "(無)", "-"}
+_FILLER = {"無", "N/A"}
 
 
 def _layer_name(heading: str) -> str:
@@ -44,15 +45,7 @@ def _layer_name(heading: str) -> str:
 
 def count_tables(lines: list[str]) -> int:
     """連續的 `|` 開頭行算一個表格。"""
-    n, inside = 0, False
-    for line in lines:
-        if line.lstrip().startswith("|"):
-            if not inside:
-                n += 1
-            inside = True
-        else:
-            inside = False
-    return n
+    return sum(k for k, _ in groupby(ln.lstrip().startswith("|") for ln in lines))
 
 
 def _issue_spans(lines: list[str]) -> list[tuple[int, int, str]]:
@@ -83,7 +76,7 @@ def _check_issue(lines: list[str], s: int, e: int, title: str) -> list[str]:
 
     # R3 層名白名單
     for raw, name in zip((h for _, h in h4s), names):
-        if name not in LAYERS:
+        if name not in LAYER_RANK:
             v.append(f"{title}：自創層名 `{raw}`")
 
     # R2 必出現層
@@ -92,9 +85,9 @@ def _check_issue(lines: list[str], s: int, e: int, title: str) -> list[str]:
             v.append(f"{title}：缺 `#### {req}`")
 
     # R3b 同一議題不得出現兩個同名層（禁掉後綴之後，模型的下一個出口就是直接重複）
-    for name in dict.fromkeys(names):
-        if name in LAYERS and names.count(name) > 1:
-            v.append(f"{title}：`#### {name}` 在同一議題出現 {names.count(name)} 次")
+    for name, n in Counter(names).items():
+        if name in LAYER_RANK and n > 1:
+            v.append(f"{title}：`#### {name}` 在同一議題出現 {n} 次")
 
     # R4 相對順序
     seen = [n for n in names if n in LAYER_RANK]
@@ -144,11 +137,16 @@ def check_layout(md: str) -> dict:
         violations += _check_issue(lines, s, e, title)
 
     # R7 inline code 狀態標記不得外溢到議題以外（核心要點／行動項目維持方括號與純文字）
+    marks = [
+        i
+        for i, ln in enumerate(lines)
+        for m in [_STATUS_BULLET_RE.match(ln)]
+        if m and m.group(1) in STATUS_VALUES
+    ]
     inside = {i for s, e, _ in spans for i in range(s, e)}
-    for i, ln in enumerate(lines):
-        m = _STATUS_BULLET_RE.match(ln)
-        if m and m.group(1) in STATUS_VALUES and i not in inside:
-            violations.append(f"第 {i + 1} 行：inline code 狀態標記外溢到議題區塊之外")
+    violations += [
+        f"第 {i + 1} 行：inline code 狀態標記外溢到議題區塊之外" for i in marks if i not in inside
+    ]
 
     return {
         "ok": not violations,
@@ -156,13 +154,7 @@ def check_layout(md: str) -> dict:
         "counts": {
             "issues": len(spans),
             "h4": sum(1 for ln in lines if _H4_RE.match(ln)),
-            "tldr": sum(1 for ln in lines if ln.strip().startswith("**TL;DR**")),
-            "inline_status": sum(
-                1
-                for ln in lines
-                for m in [_STATUS_BULLET_RE.match(ln)]
-                if m and m.group(1) in STATUS_VALUES
-            ),
+            "inline_status": len(marks),
             "tables": count_tables(lines),
         },
     }
