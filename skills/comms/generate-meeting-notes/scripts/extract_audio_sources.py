@@ -598,10 +598,25 @@ INLINE_CODE_STYLE = {
 }
 
 
+# Markdown 反斜線轉義還原。Google Docs 匯出 markdown 時會把 `[` 寫成 `\[`，
+# 歷史正式稿因此帶著轉義；agent 讀它們求連續性時會照抄，草稿就出現 `\[待確認\]`。
+# 不還原的話 Docs 會把反斜線當內文顯示。
+# 刻意排除 `*` 與 backtick —— 那兩個是本 parser 自己要辨識的標記，先還原會生出假的
+# bold/code range。
+# ponytail: 不處理 code span 內的轉義（``\[x]`` 會保留反斜線），CJK 會議記錄用不到；
+# 真的需要就改成在 _parse_inline 的 span 切分之後逐段還原。
+_MD_ESCAPE_RE = re.compile(r"\\([\[\]()#+\-.!_{}>|~=])")
+
+
+def _unescape_md(text: str) -> str:
+    return _MD_ESCAPE_RE.sub(r"\1", text)
+
+
 def _parse_inline(
     text: str,
 ) -> tuple[str, list[tuple[int, int]], list[tuple[int, int]]]:
     """解析 **bold** 與 `code`，回傳 (純文字, bold_ranges, code_ranges)"""
+    text = _unescape_md(text)
     plain = ""
     bold_ranges: list[tuple[int, int]] = []
     code_ranges: list[tuple[int, int]] = []

@@ -20,6 +20,7 @@ PURE := \
 	build_glossary_prompt \
 	is_non_content_extract \
 	extract_date \
+	_unescape_md \
 	_parse_inline \
 	_parse_inline_bold \
 	_parse_blocks \
