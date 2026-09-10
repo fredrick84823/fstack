@@ -20,5 +20,9 @@
 - **[doc-to-html](./doc-to-html/SKILL.md)** *(user-invoked)*: Convert RFCs, design docs, PRDs and research notes into readable single-page HTML
 - **[viz-it](./viz-it/SKILL.md)** *(user-invoked)*: Turn any content into a visual-first single-page HTML where every diagram is a pan/zoom canvas
 - **[beautiful-mermaid](./beautiful-mermaid/SKILL.md)** *(user-invoked)*: Render restrained, Craft-style Mermaid diagrams (SVG / interactive HTML / ASCII)
+- **[ascii](./ascii/SKILL.md)** *(user-invoked)*: 畫對齊的終端圖 —— grid 先行，CJK 寬度稽核判紅綠
 
 `beautiful-mermaid` 比另外兩支低一層 —— 它是圖的渲染元件，`doc-to-html` 與 `viz-it` 都會用到。
+
+`ascii` 與那三支不同層：它們的產出是 HTML／SVG，要開瀏覽器；`ascii` 的產出留在終端裡，
+所以它管的是等寬格線 —— `中` 佔兩欄而 `len()` 回一，那是 HTML 不會遇到的問題。
