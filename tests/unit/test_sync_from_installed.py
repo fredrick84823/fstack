@@ -25,6 +25,8 @@ from pathlib import Path
 
 import pytest
 
+from .conftest import _qid
+
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "bin" / "sync-from-installed.sh"
 DEST_REL = Path("skills/comms/generate-meeting-notes")
@@ -72,16 +74,6 @@ LOOKALIKES = [
     "zorblax 全小寫不是人名",  # w 改成大小寫不敏感就會誤報
     "完全乾淨的內容",
 ]
-
-
-def _qid(value: str) -> str:
-    """可被 pytest 再次選取的 node id。**不是** `repr(value)`。
-
-    自己供的 `ids=` 只要含反斜線或非 ASCII，pytest 就選不回來（exit 4），mutmut 會把
-    那個 exit 4 記成 `killed`，印出假的全綠。這個 skill 的語料是繁中 markdown，必踩。
-    完整實測紀錄見 gdoc-mcp `tests/unit/test_text.py::_qid`。
-    """
-    return repr(value).encode("ascii", "backslashreplace").decode().replace("\\", "-")
 
 
 def write_conf(

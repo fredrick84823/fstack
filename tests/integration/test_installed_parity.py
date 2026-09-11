@@ -1,7 +1,7 @@
 """驗收條件「fstack 與安裝版排除四類後比對無差異」—— 需要本機安裝版，故歸 integration。
 
 不打網路，但吃 `~/.agents/skills/generate-meeting-notes`，在別台機器與 CI 上不存在。
-放進預設 `pytest` 會變成一條靠環境決定顏色的測試，所以 `pytest.ini` 的 testpaths
+放進預設 `pytest` 會變成一條靠環境決定顏色的測試，所以 `setup.cfg` 的 testpaths
 只收 `tests/unit`，這支要明示 `pytest tests/integration` 才跑。
 
 作法：把腳本複製進 tmp_path 的假 repo，用真安裝版跑一次同步，再拿結果跟 repo 內的
