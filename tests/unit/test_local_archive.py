@@ -1,7 +1,7 @@
 """`scripts/local_archive.py` 的黑箱測試 —— 只碰公開介面，不碰網路。
 
-**每條測試都必須傳 `root=tmp_path`。** 不傳的話預設是 `LOCAL_ARCHIVE_ROOT`
-（`~/thoughts/…`），那是真實資料，測試跑一次就污染一次。`write_local_archive`
+**每條測試都必須傳 `root=tmp_path`。** 不傳的話預設是 `LOCAL_ARCHIVE_ROOT`，
+那指向使用者真實的筆記樹，測試跑一次就污染一次。`write_local_archive`
 有 `root=` 參數就是為了這件事。
 
 側檔的 JSON 形狀（`ensure_ascii=False` ＋ `indent=2` ＋ 結尾換行）被 #7 的歷史索引
@@ -21,8 +21,9 @@ SCRIPTS = Path(__file__).resolve().parents[2] / "skills/comms/generate-meeting-n
 sys.path.insert(0, str(SCRIPTS))
 
 from local_archive import (  # noqa: E402
-    LOCAL_ARCHIVE_ROOT,
+    DEFAULT_ARCHIVE_DIRNAME,
     SIDECAR_SUFFIX,
+    _configured_root,
     archive_paths,
     clean_for_filename,
     note_title,
@@ -33,10 +34,45 @@ from local_archive import (  # noqa: E402
 NOTE = "# 會議記錄\n\n中文內容，結尾沒有多餘換行"
 
 
-def test_archive_root_and_sidecar_suffix_are_the_documented_constants():
-    """#7 的索引照這個位置去找歷史。打錯字的症狀是「歸檔成功但沒人找得到」。"""
-    assert LOCAL_ARCHIVE_ROOT == Path.home() / "thoughts/global/shared/meeting-notes"
+def test_sidecar_suffix_is_the_documented_constant():
+    """#7 的索引照這個副檔名去找側檔。打錯字的症狀是「歸檔成功但沒人找得到」。"""
     assert SIDECAR_SUFFIX == ".meta.json"
+
+
+def _write_config(home: Path, **keys) -> None:
+    d = home / ".config" / "generate-meeting-notes"
+    d.mkdir(parents=True)
+    (d / "config.json").write_text(json.dumps(keys, ensure_ascii=False), encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "setup,expected",
+    [
+        (lambda h: _write_config(h, local_archive_root=str(h / "notes")), "configured"),
+        (lambda h: _write_config(h), "default"),
+        (lambda h: None, "default"),
+    ],
+    ids=["configured", "key-absent", "no-config-file"],
+)
+def test_archive_root_comes_from_config_never_from_a_hardcoded_personal_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, setup, expected
+):
+    """歸檔根目錄必須由設定決定。
+
+    刪掉這條 → 有人把自己的筆記路徑寫回模組常數，這支公開 skill 就又把個人路徑
+    烘進程式碼；別人裝了會寫進一個不屬於他的目錄，而 guard 只擋得到文件裡的字面路徑。
+    三格分別是「有設定」「有檔沒 key」「連檔都沒有」，後兩者都要退回預設。
+    """
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    setup(tmp_path)
+
+    root = _configured_root()
+
+    if expected == "configured":
+        assert root == tmp_path / "notes"
+    else:
+        assert root == tmp_path / DEFAULT_ARCHIVE_DIRNAME
 
 
 def test_archive_paths_assembles_only_and_touches_no_filesystem(tmp_path: Path):

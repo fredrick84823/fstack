@@ -5,7 +5,7 @@ local_archive.py - 發佈時在本機留一份正式稿，並把 Doc URL 記在�
 Doc URL 只有發佈當下拿得到，事後要靠檔名回頭去 Drive 找。側檔就是為了記住它。
 
 本機路徑與 Drive 路徑同形：
-    ~/thoughts/global/shared/meeting-notes/{folder_name}/{YYYYMMDD}/
+    {local_archive_root}/{folder_name}/{YYYYMMDD}/
         會議記錄_{series_name}_{YYYYMMDD}[_{suffix}].md          正式稿
         會議記錄_{series_name}_{YYYYMMDD}[_{suffix}].meta.json   側檔
 
@@ -16,7 +16,27 @@ import json
 import re
 from pathlib import Path
 
-LOCAL_ARCHIVE_ROOT = Path.home() / "thoughts" / "global" / "shared" / "meeting-notes"
+DEFAULT_ARCHIVE_DIRNAME = "meeting-notes"
+
+
+def _configured_root() -> Path:
+    """歸檔根目錄，由 config.json 的 local_archive_root 決定。
+
+    不寫死個人筆記路徑：這支 skill 是公開的，別人的筆記不會長在你的筆記樹底下。
+    設定檔讀不到或沒這個 key 就退回 ~/<DEFAULT_ARCHIVE_DIRNAME>。
+
+    home 在呼叫時才解析，不在 import 時 —— 綁成模組常數的話這支函式就不可測。
+    """
+    home = Path.home()
+    config = home / ".config" / "generate-meeting-notes" / "config.json"
+    try:
+        root = json.loads(config.read_text(encoding="utf-8")).get("local_archive_root")
+    except (OSError, ValueError):
+        root = None
+    return Path(root).expanduser() if root else home / DEFAULT_ARCHIVE_DIRNAME
+
+
+LOCAL_ARCHIVE_ROOT = _configured_root()
 SIDECAR_SUFFIX = ".meta.json"
 
 
