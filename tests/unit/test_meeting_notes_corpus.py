@@ -4,8 +4,8 @@
 **8/31 目標樣本判綠，其餘 72 份（四種會議、2 月到 9 月）全部判紅。**
 
 **已知的資料限制**：紅側四種會議都證明過（PM／RD／Data 內會／Data 教授各 ≥3 份），
-綠側只有 Data 內會 —— 全機只有 8/31 與 9/07 兩份新版型真實產出。PM／RD／教授三種
-會議在新 prompt 下的真實產出還不存在，等它們出現才補得上。低議題密度那一側由
+綠側有 Data 內會（8/31、9/07）與 RD（9/10）兩種會議。PM 與教授兩種會議在新 prompt 下
+的真實產出還不存在，等它們出現才補得上。低議題密度那一側由
 `test_layout_contract.py::test_good_sample_passes` 的議題二在密封樣本上守著。
 
 語料在 `~/thoughts`，是真實資料、不進版控，所以整檔在沒有它的機器上 skip。
@@ -28,7 +28,7 @@ SERIES = {
     "週三_Data_教授會議": "prof",
 }
 TARGET = CORPUS / "週一週四_Data_內會/20260831/會議記錄_Data內會_20260831.md"
-NEW_FORMAT = {"20260831", "20260907"}
+NEW_FORMAT = {"20260831", "20260907", "20260910"}
 
 pytestmark = pytest.mark.skipif(not CORPUS.is_dir(), reason=f"無語料：{CORPUS}")
 
@@ -72,6 +72,17 @@ def test_old_format_is_red(path: Path):
     """鑑別力的主體。舊版型沒有 TL;DR、沒有 H4 分層、狀態不是 inline code —— 一份都不准漏。"""
     r = check_layout(path.read_text(encoding="utf-8"))
     assert not r["ok"], f"{path} 判綠了，檢查器對舊版型沒有鑑別力"
+
+
+def test_rd_new_format_output_is_green():
+    """9/10 RD 是新 prompt 在 Data 內會以外的第一份真實產出，綠側從此不只一種會議。
+
+    只斷言判綠，不斷言 counts —— 這份記錄還有未解析的發言者待補，
+    補上去會動到字數與層數，那種改動不該讓版型測試紅。
+    """
+    path = CORPUS / "週四_RD_會議/20260910/會議記錄_RD會議_20260910.md"
+    r = check_layout(path.read_text(encoding="utf-8"))
+    assert r["ok"], r["violations"]
 
 
 def test_second_new_format_output_has_only_the_known_suffix_violation():
