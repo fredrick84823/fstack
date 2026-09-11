@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from layout_contract import STATUS_VALUES, check_layout
+from tests.unit.layout_contract import STATUS_VALUES, check_layout
 
 
 GOOD = """# **會議記錄：測試**

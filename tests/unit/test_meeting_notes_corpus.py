@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from layout_contract import check_layout
+from tests.unit.layout_contract import check_layout
 
 CORPUS = Path.home() / "thoughts/global/shared/meeting-notes"
 SERIES = {
