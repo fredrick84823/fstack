@@ -237,10 +237,12 @@ Doc、source artifacts 與原始音訊都落在 `{Shared Drive}/{系列資料夾
 發佈的同時在本機留一份，路徑與 Drive 同形：
 
 ```
-~/thoughts/global/shared/meeting-notes/{系列資料夾}/{YYYYMMDD}/
+{local_archive_root}/{系列資料夾}/{YYYYMMDD}/
     會議記錄_{series_name}_{YYYYMMDD}[_{suffix}].md          正式稿（與 Doc 同名）
     會議記錄_{series_name}_{YYYYMMDD}[_{suffix}].meta.json   側檔：{"doc_url": "..."}
 ```
+
+`local_archive_root` 由 `~/.config/generate-meeting-notes/config.json` 設定，未設定時預設 `~/meeting-notes`。
 
 **Doc URL 只有發佈當下拿得到**，事後只能靠檔名回頭去 Drive 找——側檔就是為了記住它。
 沒有 URL 時側檔寫 `{}`，`doc_url` 欄位缺席而不是寫 `None`。系列資料夾名沿用
