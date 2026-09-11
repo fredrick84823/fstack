@@ -221,6 +221,8 @@ cd "$SKILL_DIR" && uv run scripts/create_gdoc_from_md.py \
 
 ```
 RESULT_URL: https://docs.google.com/document/d/<doc_id>/edit
+RESULT_LOCAL_NOTE: <本機正式稿路徑>    # 兩行一起缺席 = 這次沒歸檔成功，Doc 仍已建立
+RESULT_LOCAL_SIDECAR: <本機側檔路徑>
 RESULT_DRIVE_PATH: <folder_name>/<YYYYMMDD>
 RESULT_SERIES_NAME / RESULT_DATE
 RESULT_AUDIO_FILE: <drive_file_id>     # 只在有 --audio-file 時
@@ -229,6 +231,27 @@ RESULT_LOCAL_AUDIO: deleted | kept     # kept 要告知使用者原因
 
 Doc 名稱 `會議記錄_{series_name}_{YYYYMMDD}`，多場次加 `_{meeting_instance}`。
 Doc、source artifacts 與原始音訊都落在 `{Shared Drive}/{系列資料夾}/{YYYYMMDD}/`。
+
+### 本機歸檔
+
+發佈的同時在本機留一份，路徑與 Drive 同形：
+
+```
+~/thoughts/global/shared/meeting-notes/{系列資料夾}/{YYYYMMDD}/
+    會議記錄_{series_name}_{YYYYMMDD}[_{suffix}].md          正式稿（與 Doc 同名）
+    會議記錄_{series_name}_{YYYYMMDD}[_{suffix}].meta.json   側檔：{"doc_url": "..."}
+```
+
+**Doc URL 只有發佈當下拿得到**，事後只能靠檔名回頭去 Drive 找——側檔就是為了記住它。
+沒有 URL 時側檔寫 `{}`，`doc_url` 欄位缺席而不是寫 `None`。系列資料夾名沿用
+`folder_name`，與 Drive 同一個值，不另外設定。
+
+過去只在 Drive 的場次用一次性補齊：
+
+```bash
+uv run scripts/backfill_local_archive.py            # dry-run，只印差集
+uv run scripts/backfill_local_archive.py --apply    # 實際寫入
+```
 
 ### 原始音訊歸檔
 

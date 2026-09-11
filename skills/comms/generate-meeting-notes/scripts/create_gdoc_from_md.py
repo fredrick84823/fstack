@@ -58,6 +58,7 @@ from extract_audio_sources import (
     inject_attendees,
     load_config,
 )
+from local_archive import note_title, write_local_archive
 
 
 def extract_date_from_str(s: str) -> str:
@@ -288,8 +289,27 @@ def main():
     elif args.delete_local_audio:
         print("⚠️  指定了 --delete-local-audio 但沒有 --audio-file，不做任何事")
 
+    # 本機留一份正式稿 + 記著 Doc URL 的側檔。URL 只有現在拿得到。
+    # Doc 這時已經建好了，寫檔失敗不能把 RESULT_URL 一起帶走——那才是真的丟資料。
+    note_path = sidecar_path = None
+    try:
+        note_path, sidecar_path = write_local_archive(
+            folder_name,
+            date_str,
+            note_title(series_name, date_str, args.title_suffix),
+            content,
+            doc_url=doc_url,
+        )
+        print(f"\n🗄️  本機歸檔：{note_path}")
+    except OSError as exc:
+        print(f"\n⚠️  本機歸檔失敗：{type(exc).__name__}: {exc}")
+        print("   Doc 已建立，URL 見下方 RESULT_URL——請自行留存，補齊腳本補得回檔案但補不回 URL。")
+
     drive_path = f"{folder_name}/{date_str}"
     print(f"\nRESULT_URL: {doc_url}")
+    if note_path and sidecar_path:
+        print(f"RESULT_LOCAL_NOTE: {note_path}")
+        print(f"RESULT_LOCAL_SIDECAR: {sidecar_path}")
     print(f"RESULT_DRIVE_PATH: {drive_path}")
     print(f"RESULT_SERIES_NAME: {series_name}")
     print(f"RESULT_DATE: {date_str}")
