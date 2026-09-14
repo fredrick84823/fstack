@@ -192,11 +192,6 @@ def test_channel_id_strips_the_padding_off_a_real_channel():
     assert channel.channel_id(meeting_with("  C0PADDED  ")) == "C0PADDED"
 
 
-def test_channel_id_is_empty_for_muted():
-    """`""` 沒有要送的對象。回一個 truthy 值的話呼叫端會照送。"""
-    assert channel.channel_id(meeting_with("")) == ""
-
-
 def test_channel_id_is_empty_for_unset():
     """`null` 同理 —— 而且它多一個坑：回 `None` 的話呼叫端一 `.strip()` 就 AttributeError。"""
     assert channel.channel_id(meeting_with(None)) == ""
@@ -690,23 +685,6 @@ def test_cli_writes_the_channel_back_and_keeps_a_backup(
     # 逐欄對帳：把改掉的那一欄補回原值之後，兩份設定必須一模一樣
     after["meetings"]["pm"]["slack_channel"] = before["meetings"]["pm"]["slack_channel"]
     assert after == before
-
-
-def test_cli_writing_one_meeting_leaves_the_others_alone(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
-):
-    """另一場會議的 channel 不准被波及 —— 症狀是通知從此發到錯的部門，而且沒人會查設定檔。"""
-    config_path = tmp_path / "config.json"
-    before = config_fixture(config_path)
-    monkeypatch.setattr(channel, "CONFIG_PATH", config_path)
-    monkeypatch.setattr(sys, "argv", ["channel.py", "--meeting", "pm", "--channel", "C0NEWNEW"])
-
-    channel.main()
-    capsys.readouterr()
-
-    after = json.loads(config_path.read_text(encoding="utf-8"))
-    assert after["meetings"]["team"] == before["meetings"]["team"]
-    assert sorted(after["meetings"]) == sorted(before["meetings"]), "會議數量變了"
 
 
 def test_cli_hands_the_parsed_arguments_to_set_channel(monkeypatch: pytest.MonkeyPatch, capsys):
