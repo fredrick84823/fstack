@@ -53,6 +53,16 @@ _FENCE = re.compile(r"^\s*(```|~~~)")
 # 大綱多一堆 `**`，對「掃過去判斷以前談過沒有」沒有幫助。
 _INLINE_MARK = re.compile(r"\*\*|__|`")
 
+# 索引檔開頭那幾句是**資料不是邏輯**，所以放在模組層而不是 render() 裡面。
+# 擺在函式裡的話 mutation 會把每一句都變異一次，而「這句話少了一個字」殺不掉也不該
+# 殺得掉 —— 要殺就得寫逐字釘死版面的測試，那正是棒④會刪掉的裝飾性測試。
+INDEX_HEADER = (
+    "**這是索引不是語料**：只有各場的 heading 大綱與指標，沒有內容行。\n"
+    "本次議題延伸自過去議題時，才沿「本機」路徑去讀那一場的全文。\n"
+    "接地優先序低於 `transcript.md`：歷史不能長出本次會議沒講過的事實。"
+)
+EMPTY_NOTICE = "（本機歸檔沒有早於 {before_date} 的同系列場次。）"
+
 
 class Session(NamedTuple):
     """索引裡的一場。`doc_url` 是 None 表示側檔缺席或沒記 URL。"""
@@ -150,16 +160,9 @@ def read_session(note_path: Path, series_name: str, max_depth: int = MAX_DEPTH) 
 
 def render(series_name: str, before_date: str, sessions: list[Session]) -> str:
     """索引的 Markdown。沒有任何場次時說明為什麼，不留一份空白檔讓人以為壞了。"""
-    lines = [
-        f"# 歷史會議索引：{series_name}",
-        "",
-        "**這是索引不是語料**：只有各場的 heading 大綱與指標，沒有內容行。",
-        "本次議題延伸自過去議題時，才沿「本機」路徑去讀那一場的全文。",
-        "接地優先序低於 `transcript.md`：歷史不能長出本次會議沒講過的事實。",
-        "",
-    ]
+    lines = [f"# 歷史會議索引：{series_name}", "", INDEX_HEADER, ""]
     if not sessions:
-        lines.append(f"（本機歸檔沒有早於 {before_date} 的同系列場次。）")
+        lines.append(EMPTY_NOTICE.format(before_date=before_date))
         return "\n".join(lines) + "\n"
 
     lines.append(f"近 {len(sessions)} 場，全部早於 {before_date}（不含本次與之後的日期）。")
