@@ -169,11 +169,16 @@ def test_corpus_can_tell_the_two_unit_systems_apart(inserted, span, astral_befor
     `astral_before` 是該段之前的 emoji 顆數，也就是兩種算法的差距（emoji 在 UTF-16 是
     2 個 code unit、在 Python 是 1 個字元）。差距歸零代表有人把 emoji 從語料裡刪掉了，
     這時整份檔案就再也擋不住「用 Python 字元算」那種寫法。
+
+    尺**不能是 `mod._u16len`** —— 那是被測的東西，拿它量它自己的話，`_u16len` 退回
+    `len` 時這條會跟著紅，看起來像「語料壞了」而不是「換算壞了」，而語料其實沒動。
+    所以這裡就地展開 UTF-16 的定義，跟產品碼零共用。
     """
     text, _ = inserted
     prefix = text[: text.index(span)]
+    u16_units = len(prefix.encode("utf-16-le")) // 2
 
-    assert mod._u16len(prefix) - len(prefix) == astral_before
+    assert u16_units - len(prefix) == astral_before
 
 
 def test_no_style_request_points_outside_the_inserted_text(inserted, docs_service):
