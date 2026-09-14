@@ -36,7 +36,9 @@ PURE := \
 	validate_merged \
 	prune_local \
 	keys_to_push \
-	summary_line
+	summary_line \
+	entry_id \
+	_buckets
 
 # key 的形狀是 `<路徑轉點>.x_<函式名>__mutmut_<n>` —— `x_` 前綴是 mutmut 加的，
 # 少了它 fnmatch 一個都配不到，而配不到時 mutmut 是 assert 不是靜靜跳過。

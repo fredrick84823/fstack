@@ -8,13 +8,10 @@ push_shared_glossary.py - 把本機 glossary 的新條目回寫共用檔，並�
     └─ pull 形同半殘 → 本機是共用檔的舊複本，同 id 本機勝，
                        同事對既有條目的改動被本機的舊值壓過
 
-**不整檔覆蓋。** Drive 上傳是覆蓋語意，把本機整份推上去會讓同事這期間對既有條目的
-改動無聲消失。所以流程是 read-merge-write：讀共用檔 → 只把要推的條目疊上去 → 寫回。
-
-**已改動的既有條目預設不推。** 那些「差異」多半是共用檔往前走、本機沒跟上，推上去
-等於幫同事回滾。要推必須明示 `--include-modified`，而且 dry-run 已經把 diff 印出來。
-
-**不掛進產會議記錄的流程**，只能明示執行 —— 共用詞彙表被無聲改動比詞彙錯誤更難查。
+所以流程是 read-merge-write（不整檔覆蓋，Drive 上傳是覆蓋語意），已改動的既有條目
+預設不推，且**不掛進產會議記錄的流程**，只能明示執行 —— 共用詞彙表被無聲改動比詞彙
+錯誤更難查。每條規則背後的理由與五條驗證的代號表在 `references/glossary.md`，這裡不
+複述第二份。
 
 用法（與 SKILL.md 一致，都從 skill 目錄用 uv 跑）：
     uv run scripts/push_shared_glossary.py                       # dry-run，看 diff
@@ -25,7 +22,8 @@ push_shared_glossary.py - 把本機 glossary 的新條目回寫共用檔，並�
 退出碼：
     0  完成（dry-run、或 --push 成功、或沒東西可推）
     1  中止：憑證／Drive API 失敗、樂觀鎖偵測到共用檔被改、五條驗證未過
-    2  參數或設定錯誤：未設定 shared_glossary.file_id、--prune-local 沒配 --push
+    2  參數或設定錯誤：未設定 shared_glossary.file_id、--prune-local 沒配 --push、
+       本機 glossary 讀不到或解析失敗
 """
 
 import argparse
@@ -59,32 +57,41 @@ def _norm(entry: dict) -> str:
     return json.dumps(normalized, ensure_ascii=False, sort_keys=True)
 
 
+def entry_id(entry: dict) -> str:
+    """條目的識別碼。`id` 缺席時退回 `canonical`，與 pull 端 dedup 同一個取法。
+
+    四個地方要用同一把尺（flatten／merge／prune_local 與 pull 端），不同把的話這裡
+    判成 new 的條目在下游會與既有條目撞成同一筆。兩個都空時回空字串，由呼叫端決定
+    怎麼辦 —— 這裡不吞掉條目，缺欄位是 `validate_merged` 要擋下的事。
+    """
+    return str(entry.get("id") or entry.get("canonical") or "").strip()
+
+
+def _buckets(doc: dict) -> list:
+    """[(scope, terms)]。scope 是 "global" 或 meeting_key。terms 不是 list 的略過。"""
+    raw = [(GLOBAL_SCOPE, doc.get("global_terms"))]
+    raw += list((doc.get("meeting_terms") or {}).items())
+    return [(scope, terms) for scope, terms in raw if isinstance(terms, list)]
+
+
 def flatten(doc: dict) -> dict:
     """把一份 glossary 攤成 {(scope, id): entry}。
 
-    scope 是 "global" 或 meeting_key —— 同一個 id 在 global 與某場會議底下是**兩筆**
-    不同的條目（下游 load_glossary_entries 也是這樣取的），不能壓成一筆。
-    key 的取法與 pull 端的 dedup 同一把（`id` 缺席時退回 `canonical`）—— 兩邊不同把
-    尺的話，這裡判成「new」的條目在下游會與既有條目撞成同一筆。兩個都空才略過，
-    而那種條目照樣進得了 `validate_merged` 的 `fields_incomplete`：在這裡被略過的是
-    key，不是條目本身，缺欄位是驗證要擋下的事，不是這裡要靜靜吞掉的事。
-    條目不是 dict 的略過。
+    scope 是 "global" 或 meeting_key —— 這裡不能把同 id 跨 scope 壓成一筆，merge 要靠
+    scope 才知道寫進哪個 bucket。
+
+    ponytail: pull 端（`extract_audio_sources.load_glossary_entries`）是**只按 id** 去重，
+    global 與當次會議共用一個命名空間，跟這裡的 `(scope, id)` 不是同一把尺。後果是
+    本機 meeting scope 的 `px` 對這裡是 new、推上去之後在下游會與共用 global 的 `px`
+    撞成一筆被吃掉。要收斂的話是加第六條驗證「同一個 id 不得同時在 global 與某場
+    會議底下」，不是把這裡改成只按 id —— 那會讓 merge 寫錯 bucket。本票的驗收條件
+    明列五條，先不動。
     """
     out: dict = {}
-    buckets = [(GLOBAL_SCOPE, doc.get("global_terms") or [])]
-    for meeting_key, terms in (doc.get("meeting_terms") or {}).items():
-        buckets.append((meeting_key, terms or []))
-
-    for scope, terms in buckets:
-        if not isinstance(terms, list):
-            continue
+    for scope, terms in _buckets(doc):
         for entry in terms:
-            if not isinstance(entry, dict):
-                continue
-            entry_id = str(entry.get("id") or entry.get("canonical") or "").strip()
-            if not entry_id:
-                continue
-            out.setdefault((scope, entry_id), entry)
+            if isinstance(entry, dict) and (eid := entry_id(entry)):
+                out.setdefault((scope, eid), entry)
     return out
 
 
@@ -114,9 +121,9 @@ def classify(local_doc: dict, shared_doc: dict) -> dict:
 
 def diff_lines(change: dict) -> list[str]:
     """單筆的逐欄 diff。new 印全欄，modified 只印有差的欄。"""
-    scope, entry_id = change["key"]
+    scope, key_id = change["key"]
     local, shared = change["local"], change["shared"]
-    head = f"  [{scope}] {entry_id}"
+    head = f"  [{scope}] {key_id}"
 
     if shared is None:
         return [head] + [f"      + {k}: {json.dumps(v, ensure_ascii=False)}"
@@ -145,7 +152,7 @@ def merge(shared_doc: dict, local_doc: dict, keys, now: str) -> dict:
         entry = local_flat.get(key)
         if entry is None:
             continue
-        scope, entry_id = key
+        scope, key_id = key
         if scope == GLOBAL_SCOPE:
             terms = merged["global_terms"]
         else:
@@ -155,8 +162,7 @@ def merge(shared_doc: dict, local_doc: dict, keys, now: str) -> dict:
         for i, existing in enumerate(terms):
             if not isinstance(existing, dict):
                 continue
-            existing_id = str(existing.get("id") or existing.get("canonical") or "").strip()
-            if existing_id == entry_id:
+            if entry_id(existing) == key_id:
                 terms[i] = copy.deepcopy(entry)
                 replaced = True
                 break
@@ -170,12 +176,8 @@ def merge(shared_doc: dict, local_doc: dict, keys, now: str) -> dict:
 def _all_entries(doc: dict) -> list[tuple[str, dict]]:
     """(scope, entry) 逐筆列出，**不去重**。驗證要看的是原樣，去重會把重複 id 藏掉。"""
     out: list[tuple[str, dict]] = []
-    buckets = [(GLOBAL_SCOPE, doc.get("global_terms") or [])]
-    for meeting_key, terms in (doc.get("meeting_terms") or {}).items():
-        buckets.append((meeting_key, terms or []))
-    for scope, terms in buckets:
-        if isinstance(terms, list):
-            out.extend((scope, e) for e in terms if isinstance(e, dict))
+    for scope, terms in _buckets(doc):
+        out.extend((scope, e) for e in terms if isinstance(e, dict))
     return out
 
 
@@ -202,12 +204,12 @@ def validate_merged(merged: dict, original: dict) -> list[tuple[str, str]]:
     seen: set[tuple[str, str]] = set()
     dups: list[str] = []
     for scope, entry in entries:
-        entry_id = str(entry.get("id") or "").strip()
-        if not entry_id:
+        eid = str(entry.get("id") or "").strip()
+        if not eid:
             continue
-        if (scope, entry_id) in seen:
-            dups.append(f"[{scope}] {entry_id}")
-        seen.add((scope, entry_id))
+        if (scope, eid) in seen:
+            dups.append(f"[{scope}] {eid}")
+        seen.add((scope, eid))
     if dups:
         problems.append((V_DUP_ID, "id 重複：" + "、".join(dups)))
 
@@ -249,8 +251,7 @@ def prune_local(local_doc: dict, shared_doc: dict) -> dict:
     def keep(scope: str, entry) -> bool:
         if not isinstance(entry, dict):
             return True
-        entry_id = str(entry.get("id") or entry.get("canonical") or "").strip()
-        upstream = shared_flat.get((scope, entry_id))
+        upstream = shared_flat.get((scope, entry_id(entry)))
         return upstream is None or _norm(upstream) != _norm(entry)
 
     # 先整份深拷貝，之後只在**拷貝**上篩 —— 留下來的條目也必須是新物件。
@@ -365,16 +366,16 @@ def main() -> int:
     buckets = classify(local_doc, shared_doc)
     print(summary_line(buckets))
 
-    for bucket, label in (("new", "new（會推）"), ("modified", "modified"), ("same", "same")):
-        if not buckets[bucket]:
-            continue
-        print(f"\n── {label} ──")
-        if bucket == "same":
-            print("  " + "、".join(f"[{s}] {i}" for s, i in
-                                   (c["key"] for c in buckets["same"])))
-            continue
-        for change in buckets[bucket]:
-            print("\n".join(diff_lines(change)))
+    for bucket, label in (("new", "new（會推）"), ("modified", "modified")):
+        if buckets[bucket]:
+            print(f"\n── {label} ──")
+            for change in buckets[bucket]:
+                print("\n".join(diff_lines(change)))
+
+    # same 不印 diff —— 沒有差可印，只列出是哪幾筆。
+    if buckets["same"]:
+        print("\n── same ──")
+        print("  " + "、".join(f"[{c['key'][0]}] {c['key'][1]}" for c in buckets["same"]))
 
     if buckets["modified"] and not args.include_modified:
         print(f"\n⚠️  {len(buckets['modified'])} 筆既有條目本機與共用檔不同，預設不推。"
@@ -401,6 +402,12 @@ def main() -> int:
             return 1
 
         # 樂觀鎖：Drive 沒有 CAS，只能在寫入前再讀一次版本，變了就中止。
+        #
+        # ponytail: 重讀與 upload 之間仍有一個 TOCTOU 窗 —— 同事剛好在這幾百毫秒內
+        # 寫入的話，Drive 的 last-write-wins 會讓他的版本被蓋掉。窗關不掉（Drive 沒有
+        # 條件式寫入），所以改成事後抓：寫完回讀一次，內容不是我們送出去的就報出來，
+        # 讓人去 Drive 版本歷史把那一版救回來。要真正關掉窗得換成有 CAS 的儲存
+        # （GCS 的 generation-match），代價是每個人重新授權一次 scope。
         try:
             _, version_recheck = read_shared(drive, file_id)
         except Exception as e:
@@ -417,6 +424,16 @@ def main() -> int:
         except Exception as e:
             print(f"❌ 寫回共用檔失敗：{e}", file=sys.stderr)
             return 1
+
+        # 寫入後那次讀不是只拿來印數字：回讀的內容不是我們送出去的，就表示上面那個
+        # TOCTOU 窗真的被踩到了。不報的話這件事完全無聲。
+        if shared_doc != merged:
+            print(f"❌ 寫入後回讀的內容與送出的不同（版本 {version_before} → "
+                  f"{version_after}）。這段期間有人也寫了共用檔，其中一邊被蓋掉。"
+                  "\n   去 Drive 的版本歷史比對，把被蓋掉的那一版救回來再重跑。",
+                  file=sys.stderr)
+            return 1
+
         print(f"\n✅ 已推 {len(push_keys)} 筆，共用檔現在 "
               f"{len(_all_entries(shared_doc))} 筆（版本 {version_before} → {version_after}）")
 

@@ -381,14 +381,6 @@ def test_diff_lines_names_a_field_only_one_side_has():
     assert "legacy_note" in text, "共用檔才有、本機沒有的欄位"
 
 
-def test_diff_lines_returns_strings():
-    change = {"key": (GLOBAL, "cac"), "local": copy.deepcopy(CAC), "shared": None}
-
-    lines = mod.diff_lines(change)
-
-    assert lines and all(isinstance(line, str) for line in lines)
-
-
 # --------------------------------------------------------------------------- #
 # merge
 # --------------------------------------------------------------------------- #
@@ -455,16 +447,6 @@ def test_merge_stamps_the_given_now():
     out = mod.merge(original(), local_for_merge(), [(GLOBAL, "cac")], NEW_STAMP)
 
     assert out["last_updated"] == NEW_STAMP
-
-
-def test_merge_does_not_touch_its_arguments():
-    """就地改參數的話樂觀鎖那一輪拿去比對的「原本」已經被改過，比了等於沒比。"""
-    shared, local = original(), local_for_merge()
-
-    mod.merge(shared, local, [(GLOBAL, "cac"), (GLOBAL, "roas")], NEW_STAMP)
-
-    assert shared == original()
-    assert local == local_for_merge()
 
 
 @pytest.mark.parametrize(
@@ -630,6 +612,11 @@ def test_each_break_lights_exactly_its_own_check(break_it, expected):
     assert codes(break_it(merged_ok())) == {expected}
 
 
+# 以下三條在 mutant kill-set 裡沒有唯一擊殺，但**不刪**：它們守的東西 mutation 量不到。
+# · 五個代號互異：V_* 是模組層常數，不在 `PURE` 的函式裡，mutmut 不產它們的 mutant。
+#   兩個代號不小心相同的話，上面每一條 `== {那一條}` 都會為了錯的理由變綠。
+# · 兩條「不該紅」的反向釘：擋的是**偽陽性**，而「只有那條紅」正是本票的核心要求。
+#   目前被別的 case 連帶涵蓋，但刪掉之後那條要求就只剩隱含的，沒有任何一條測試在講它。
 def test_the_five_codes_are_five_distinct_strings():
     assert len({mod.V_FIELDS, mod.V_DUP_ID, mod.V_ALIAS, mod.V_COUNT, mod.V_STALE}) == 5
 
@@ -850,31 +837,9 @@ def test_prune_local_returns_a_doc_that_shares_no_nested_object_with_its_input()
     assert local["global_terms"][1]["aliases"] == ["羅阿斯", "投報率"]
 
 
-def test_prune_local_does_not_touch_its_arguments():
-    local, shared = original(), original()
-
-    mod.prune_local(local, shared)
-
-    assert local == original()
-    assert shared == original()
-
-
 # --------------------------------------------------------------------------- #
 # summary_line
 # --------------------------------------------------------------------------- #
-
-
-def test_summary_line_carries_all_three_counts():
-    buckets = {
-        "new": [{"key": (GLOBAL, "a")}, {"key": (GLOBAL, "b")}],
-        "modified": [{"key": (GLOBAL, "c")}],
-        "same": [],
-    }
-
-    line = mod.summary_line(buckets)
-
-    assert "\n" not in line
-    assert "2" in line and "1" in line and "0" in line
 
 
 def test_summary_line_moves_with_the_buckets():
@@ -949,12 +914,59 @@ def test_the_note_pipeline_does_not_reach_for_the_push_script(script):
     assert "push_shared_glossary" not in source
 
 
-def test_the_push_script_is_in_the_mutation_scope():
-    """純函式加了卻沒掛進 `PURE` 就是量不到它 —— Makefile 的註解自己說了。"""
-    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
-    setup_cfg = (ROOT / "setup.cfg").read_text(encoding="utf-8")
+#: 這支腳本裡**不是**純函式的 top-level def：Drive I/O 與 CLI 進入點。
+#: 手抄清單只剩這一份，而且抄的是不會長的那側 —— 純函式那側（會長的）改成從
+#: Makefile 與原始碼各自算出來再對帳，加了新函式忘了掛 `PURE` 會直接紅。
+IO_AND_CLI = {
+    "read_shared",
+    "write_shared",
+    "_drive",
+    "main",
+    "build_parser",
+    # `_shared_module`：依名字判定是載模組的 helper（有 import 副作用），不是純函式。
+    # 判錯的話它該掛進 `PURE` 而不是列在這裡 —— 見 PR 討論。
+    "_shared_module",
+}
 
-    assert "push_shared_glossary.py" in setup_cfg
-    for func in ("flatten", "classify", "diff_lines", "merge", "validate_merged",
-                 "prune_local", "keys_to_push", "summary_line"):
-        assert f"\t{func} \\" in makefile or f"\t{func}\n" in makefile
+
+def makefile_pure_names() -> set[str]:
+    """Makefile 裡 `PURE := \\` 那塊列出的函式名。"""
+    block = (ROOT / "Makefile").read_text(encoding="utf-8").split("PURE := \\", 1)[1]
+    names = {line.strip(" \t\\") for line in block.split("\n\n", 1)[0].splitlines()}
+    return names - {""}
+
+
+def push_script_defs() -> set[str]:
+    source = (SCRIPTS / "push_shared_glossary.py").read_text(encoding="utf-8")
+    return {n.name for n in ast.parse(source).body if isinstance(n, ast.FunctionDef)}
+
+
+def test_the_push_script_is_in_the_mutation_scope():
+    assert "push_shared_glossary.py" in (ROOT / "setup.cfg").read_text(encoding="utf-8")
+
+
+#: mutmut 把原始碼與測試一起複製進 `mutants/` 再從那裡跑，而複本裡的 top-level `def`
+#: 已被改寫成 `x_<函式名>__mutmut_<N>`。拿那份去跟 Makefile 的 `PURE` 對帳必紅 ——
+#: 整輪 stats collection 掛掉，而 `BadTestExecutionCommandsException` 與 `🫥` 都還是 0，
+#: 正是 `setup.cfg` 註解警告的那條兩個判準都看不見的靜默路徑。
+#:
+#: 偵測看的是**成因本身**（原始碼是不是已被改寫），不是路徑長相：`mutants/` 這個
+#: 目錄名猜錯只會讓它從此永遠 skip，那是個不會紅的洞。
+MUTATED_COPY = any("__mutmut_" in name for name in push_script_defs())
+
+
+@pytest.mark.skipif(
+    MUTATED_COPY,
+    reason="mutmut 的 mutants/ 複本：這條量的是 repo 佈線，不是模組行為",
+)
+def test_every_pure_function_in_the_push_script_is_in_the_mutation_scope():
+    """純函式加了卻沒掛進 `PURE` 就是量不到它 —— Makefile 的註解自己說了。
+
+    兩側都算出來再比，不手抄要守的那份清單：手抄的清單漏一支，那支哪天被人從
+    `PURE` 拿掉也不會紅 —— 守門測試自己開的洞比它擋下的還大。
+
+"""
+    defined = push_script_defs()
+    assert defined, "AST 解不出 def，這條測試量的是空集合"
+
+    assert makefile_pure_names() & defined == defined - IO_AND_CLI
