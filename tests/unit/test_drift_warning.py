@@ -38,16 +38,14 @@ def items(text: str) -> list[str]:
 
 
 def test_the_public_strings_are_what_the_interface_promises():
-    """`DRIFT_HEADER` / `SYNC_SCRIPT` / `SKILL_REL` / `GUARD_HIT` 是被斷言的介面。
+    """`DRIFT_HEADER` / `SYNC_SCRIPT` / `SKILL_REL` 是被斷言的介面。
 
     下面每條測試都拿 `DRIFT_HEADER` 當期望值，所以常數本身要有一條把值釘死的測試 ——
     少了這條，把 header 整個改掉（或改成空字串）不會有任何一條變紅。
-    `GUARD_HIT` 是 `bin/sync-from-installed.sh` 命中內部指涉的退出碼，腳本的介面明訂是 2。
     """
     assert parity.DRIFT_HEADER == "⚠️  安裝版與 fstack 已經漂移"
     assert str(parity.SYNC_SCRIPT) == "bin/sync-from-installed.sh"
     assert str(parity.SKILL_REL) == "skills/comms/generate-meeting-notes"
-    assert parity.GUARD_HIT == 2
 
 
 def test_no_difference_means_an_empty_string_not_none():

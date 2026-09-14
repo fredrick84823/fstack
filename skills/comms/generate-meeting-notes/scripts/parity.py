@@ -12,7 +12,8 @@ canonical 是 fstack，實際被編輯的是安裝版。中間那段「改了安
 都算成差異。
 
 **不擋流程。** Doc 這時已經發出去了，回非零沒有意義，只會讓人學會忽略它。
-`report_drift()` 只印字，任何異常都吞掉。
+`report_drift()` 只印字 —— 比對成功就報漂移，比對自己壞掉就報「跳過」，兩種情況
+都不拋例外。
 """
 
 from __future__ import annotations
@@ -30,10 +31,6 @@ SKILL_REL = Path("skills/comms/generate-meeting-notes")
 
 # 警告的第一行。發佈流程的輸出是交棒契約的一部分，這個字串會被斷言。
 DRIFT_HEADER = "⚠️  安裝版與 fstack 已經漂移"
-
-# 同步腳本的 guard 命中內部指涉時的退出碼。此時 rsync 已經跑完，比對照樣成立
-# —— 那是另一件事，不是「沒同步到」。
-GUARD_HIT = 2
 
 
 def drift_warning(paths: Sequence[str]) -> str:
@@ -64,8 +61,10 @@ def sync_diff(installed: Path, repo: Path) -> list[str]:
     比不了的時候回空清單（`installed` 不像安裝目錄、repo 內沒有同步腳本）——
     「沒有安裝版」與「安裝版一致」在呼叫端是同一件事：沒東西要講。
 
-    同步**跑不完**則 raise `RuntimeError`。這裡回空清單的話，一支壞掉的腳本會讓
-    所有比對永遠通過 —— 連 integration test 都會跟著變成永遠綠。
+    同步**沒有乾淨收尾**（退出碼不是 0）則 raise `RuntimeError`。這裡回空清單的話，
+    一支壞掉的腳本會讓所有比對永遠通過 —— 連 integration test 都會跟著變成永遠綠。
+    退出碼 2（guard 命中內部指涉）也算沒收乾淨：檔案雖然同步到了，但那條 integration
+    測試原本就是靠「退出碼 0」在守那件事，放行等於把它交出去。
     """
     script = repo / SYNC_SCRIPT
     if not (installed / "SKILL.md").is_file() or not script.is_file():
@@ -81,14 +80,15 @@ def sync_diff(installed: Path, repo: Path) -> list[str]:
             text=True,
             cwd="/",
         )
-        if done.returncode not in (0, GUARD_HIT):
+        if done.returncode != 0:
+            why = (done.stderr or done.stdout).strip().splitlines()
             raise RuntimeError(
-                f"{SYNC_SCRIPT.name} exit {done.returncode}\n{done.stdout}{done.stderr}"
+                f"{SYNC_SCRIPT.name} exit {done.returncode}: {why[-1] if why else ''}"
             )
         return _differs(filecmp.dircmp(stage / SKILL_REL, repo / SKILL_REL))
 
 
-def report_drift(config: dict | None = None, installed: Path = SKILL_DIR) -> None:
+def report_drift(config: dict, installed: Path = SKILL_DIR) -> None:
     """發佈流程結束時叫一次。有漂移就印警告，其餘情況什麼都不印。
 
     fstack 的位置只認 config 的 `fstack_repo`，沒有自動往上找 —— 從安裝版跑的時候
@@ -96,13 +96,16 @@ def report_drift(config: dict | None = None, installed: Path = SKILL_DIR) -> Non
     **每一條碰到 `main()` 的 unit test 與每一顆 mutant 都會真的跑一次 rsync**。
     一個只在其中一種跑法下生效的 fallback，換來的是測試裡的真實 I/O。
 
-    比對本身失敗時也什麼都不印：這支是發佈的附屬品，不該把一個已經成功的發佈
-    變成看起來失敗的樣子。
+    比對本身失敗時印一行「跳過」並繼續：這支是發佈的附屬品，不該把一個已經成功的
+    發佈變成看起來失敗的樣子 —— 但也不能連「這次沒比成」都不講。
     """
-    repo = (config or {}).get("fstack_repo")
+    repo = config.get("fstack_repo")
     if not repo:
         return
     try:
         print(drift_warning(sync_diff(installed, Path(repo).expanduser())), end="")
-    except (OSError, RuntimeError):
-        pass
+    except (OSError, RuntimeError) as exc:
+        # 比對自己壞掉時**要講一聲**。整個吞掉的話，一台沒有 guard 設定的機器
+        # （同步腳本會以 1 收場）就是漂移偵測永遠不叫，而且沒有任何測試會紅
+        # —— #14 點名的「驗收腳本的靜默失敗沒人守」就是這個形狀。
+        print(f"\nℹ️  漂移比對跳過：{type(exc).__name__}: {exc}")
