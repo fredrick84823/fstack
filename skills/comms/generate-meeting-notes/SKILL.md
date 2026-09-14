@@ -22,7 +22,13 @@ disable-model-invocation: true
 
   ```
   RESULT_SOURCE_DIR  RESULT_TRANSCRIPT  RESULT_EXTRACT  RESULT_CONTEXT  RESULT_DATE
+  RESULT_HISTORY_INDEX
   ```
+
+- **歷史索引** —— `history-index.md`，和上面三個檔放在同一個 source artifacts 目錄。
+  同系列近三場的 **heading 大綱 ＋ 指標**（本機正式稿路徑、Doc URL），**不含內容行**。
+  日期嚴格早於本次，所以不會讀到自己的產出。用法是掃大綱判斷「這個議題以前談過」，
+  再決定要不要沿指標去讀那一場的全文 —— 不要整包讀進來。
 
 ## Skill 目錄解析
 
@@ -122,7 +128,19 @@ mkdir -p /tmp/meeting_sources/<meeting_key>_<YYYYMMDD>[_<meeting_instance>]
 讀 `~/.config/generate-meeting-notes/config.json` 的 `custom_prompt`、`attendees`
 與 glossary，產出 `meeting-context.md`。只放脈絡，不放 transcript 沒支持的本次會議事實。
 
-完成後印出**交棒契約**的五行，進流程 C。
+### Step 5：產歷史索引
+
+```bash
+cd "$SKILL_DIR" && uv run scripts/history_index.py \
+  --meeting <meeting_key> \
+  --date <YYYYMMDD> \
+  --output-dir /tmp/meeting_sources/<meeting_key>_<YYYYMMDD>[_<meeting_instance>]
+```
+
+`--date` 一定給**本次**日期 —— 索引只收嚴格早於它的場次。另有 `--sessions N`（預設 3）。
+本機歸檔沒有更早的場次時照樣寫出索引檔並以 0 收場，那是合法結果不是錯誤。
+
+完成後印出**交棒契約**（含 `RESULT_HISTORY_INDEX`），進流程 C。
 
 ## 流程 B：Audio Source Extraction
 
@@ -173,6 +191,9 @@ cd "$SKILL_DIR" && uv run scripts/extract_audio_sources.py <audio_file> \
 `meeting-context.md`，用途只有人名／專案名正規化、縮寫展開與錯字修正
 （例 `NCP` → `MCP`）、口語別名對齊 canonical name。glossary 不是會議事實來源。
 
+腳本同時產 `history-index.md`（同系列近三場的大綱索引），不必另外執行
+`history_index.py`。
+
 從 stdout 解析**交棒契約**（另有 `RESULT_SERIES_NAME`），進流程 C。
 不要拿 NotebookLM 內容直接當正式稿。
 
@@ -186,7 +207,11 @@ A 與 B 都收在這裡。main agent 讀：
 | `RESULT_EXTRACT` | 議題／決策／行動／風險 checklist |
 | `RESULT_CONTEXT` | 人名、專案名、縮寫、會議類型脈絡 |
 | `references/default-prompt.md` 或 config 指定的 prompt | 格式 |
-| 同類型歷史會議記錄 | 連續性：前次決策的延續、未完成待辦、術語演進、已知命名 |
+| `RESULT_HISTORY_INDEX` | 連續性：前次決策的延續、未完成待辦、術語演進、已知命名 |
+
+歷史索引**先讀索引本身**（它很短，只有大綱）。本次議題明顯延伸自索引裡的某個議題時，
+才沿那一場的「本機」路徑讀全文；沒有延伸關係就不要讀 —— 那是白燒 context，還多一條
+把上週決策寫進本週記錄的路。
 
 證據優先序：`transcript.md` > `extract.md` > `meeting-context.md` > 歷史會議記錄。
 歷史記錄與 glossary 都受**接地**約束。

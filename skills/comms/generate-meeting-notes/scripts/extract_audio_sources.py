@@ -30,6 +30,9 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from history_index import build_index
+
 CONFIG_DIR = Path.home() / ".config" / "generate-meeting-notes"
 CONFIG_PATH = CONFIG_DIR / "config.json"
 DEFAULT_GLOSSARY_PATH = CONFIG_DIR / "glossary.json"
@@ -1058,11 +1061,21 @@ async def main(
     extract_path.write_text(extract, encoding="utf-8")
     context_path.write_text(context, encoding="utf-8")
 
+    # 歷史索引與三個 source artifacts 一起產：流程 C 的第四個來源從此也是交棒契約上的
+    # 一條路徑，不再是「同類型歷史會議記錄」那句沒有取得方式的散文。
+    history_path = build_index(
+        source_dir,
+        meeting.get("folder_name", meeting["series_name"]),
+        meeting["series_name"],
+        date,
+    )
+
     print(f"\n{'=' * 50}")
     print("✅ Source extraction 完成")
     print(f"📄 Transcript：{transcript_path}")
     print(f"🧾 Extract：{extract_path}")
     print(f"🧭 Context：{context_path}")
+    print(f"🕰️  History index：{history_path}")
     print(f"{'=' * 50}")
     print(f"RESULT_TRANSCRIPT: {transcript_path}")
     print(f"RESULT_EXTRACT: {extract_path}")
@@ -1070,6 +1083,7 @@ async def main(
     print(f"RESULT_SOURCE_DIR: {source_dir}")
     print(f"RESULT_SERIES_NAME: {meeting['series_name']}")
     print(f"RESULT_DATE: {date}")
+    print(f"RESULT_HISTORY_INDEX: {history_path}")
     print("\n💡 下一步：Agent 讀取 transcript.md + extract.md + meeting-context.md，依 default prompt 生成 meeting_notes.md，然後執行 create_gdoc_from_md.py 發佈。")
 
     cleanup_segments(segments, auto_delete=delete_segments)

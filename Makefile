@@ -18,7 +18,15 @@ MUT_LOG := .mutmut-run.log
 # 沒列進來的純函式：build_glossary_prompt / is_non_content_extract / inject_attendees。
 # 它們現在零測試，掛進去是 147 顆 🫥 no-tests —— 跟掛 NotebookLM／Drive I/O 同一種
 # 稀釋，只是走函式那道門。有測試了再加回來（glossary 那兩支是 #10，attendees 是 #9）。
+# history_index.py 的那五支碰檔案系統，但碰的是測試自己建的 tmp 目錄 —— 不是
+# NotebookLM／Drive 那種要憑證與網路的 I/O，所以照樣掛。日期邊界（`>=` vs `>`）正是
+# 最該被 mutant 問一次的地方。
 PURE := \
+	outline \
+	render \
+	doc_url \
+	find_notes \
+	read_session \
 	extract_date \
 	_unescape_md \
 	_parse_inline \
