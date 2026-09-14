@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Documentation HTML Styles
 
-把既有文件轉換為高品質 HTML，而不是只替 Markdown 套一層 CSS。先理解內容的資訊結構，再選擇版面、元件與圖表，盡可能用互動與視覺化呈現，輸出可閱讀、可導覽、可列印、桌機與手機都能用的單頁文件。
+把既有文件轉換為高品質 HTML，而不是只替 Markdown 套一層 CSS。先理解內容的資訊結構，再以文字為骨架，按需加入可追溯的視覺化、計算與互動，讓難懂的關係可以被直接探索。輸出仍須可閱讀、可導覽、可列印，並在桌機與手機上使用。
 
 ## 選風格
 
@@ -20,7 +20,11 @@ disable-model-invocation: true
 
 不明確時：工程決策 → `vercel`；開發者操作 → `stripe`；團隊協作與知識管理 → `notion`。不要混用三種視覺語言；只有使用者明確要求 `hybrid` 才混合，且仍須選一個主風格。
 
-可覆寫的參數：`style`、`layout`、`theme`（預設 `auto` / `auto` / `light`）。
+可覆寫的參數：`style`、`layout`、`theme`、`enrichment`（預設 `auto` / `auto` / `light` / `auto`）。`enrichment` 是跨風格的語意互動層，不是第四種視覺風格：
+
+- `static`：只有導覽、copy、toggle 與 diagram viewer 等文件操作。
+- `auto`：僅在來源具有可驗證的 input、state、rule 或 output 關係時加入語意互動。
+- `explorable`：主動尋找適合操作的關係，但仍不得補造資料、公式或因果。
 
 ## 版面
 
@@ -33,6 +37,27 @@ disable-model-invocation: true
 - **不創造事實**：保留原文的主張、數字、名稱、日期、程式碼與限制。可重排以提升閱讀性，但不改變原意；不確定的標「待確認」。
 - **資訊架構由內容決定**：只呈現實際存在的區塊，不要為了模板完整而生出空章節。
 - **有語意關係才畫圖**，一張圖只回答一個主要問題，節點標籤保持短句、細節放圖後。流程、sequence、state、class、ER、XY chart 與簡單架構優先使用 Mermaid；只有 Mermaid 無法表達的高度客製 infographic 才用 inline SVG/CSS，並在產出紀錄說明例外原因。
+
+## Dynamic enrichment contract
+
+Dynamic enrichment 的目的不是讓頁面看起來會動，而是讓讀者透過直接操作理解來源中的關係。每個候選互動在實作前都必須回答：
+
+1. 讀者要理解哪一個問題？
+2. 哪些 inputs、states、rules 與 outputs 明確存在於來源？
+3. 直接操作是否比 prose、table 或 static diagram 更容易建立直覺？
+4. JS 關閉或列印時，哪個 fallback 能保留同一個結論？
+
+通過以上檢查才可選擇最小必要 primitive：
+
+- **Parameter explorer**：調整來源已有的參數，觀察可驗證的輸出。
+- **Scenario switcher**：以相同維度比較來源已有的方案、狀態或 failure path。
+- **Step-through explainer**：依序理解 lifecycle、sequence、migration 或 code execution。
+- **Linked views**：讓 table、chart、diagram 等多個 views 共享同一份 page-local state。
+- **Comprehension check**：只在文件有明確 learning objective 與可由來源驗證的答案時使用。
+
+每個 semantic interaction 前先說明「要操作什麼、要觀察什麼」，後方再寫出 observation 與它對原文件的意義。互動只補強 prose，不取代背景、限制、決策與結論。
+
+狀態預設只存在目前頁面 session，必須提供 Reset。除非使用者明確要求，否則不得使用 `localStorage`、外部 API、database 或 analytics；不得顯示實際不會保存或同步的 Save、Edit、Sync、collaboration controls。無足夠來源證據時降級為 static representation。
 
 ## Diagram interaction contract
 
@@ -100,3 +125,8 @@ beautiful-mermaid runtime、CSS 與 SVG 全部內嵌，不依賴 CDN。
 - [ ] 390px viewport 無全頁水平 overflow；單指 touch 未被 viewer 永久攔截。
 - [ ] 禁用 JS 後 SVG、caption、fallback 可讀；print 隱藏 controls 且保留靜態 SVG。
 - [ ] 無 remote dependency、console error；每張圖均由 beautiful-mermaid renderer 產出。
+- [ ] 每個 semantic interaction 都有明確 reader question，且 inputs、defaults、rules、outputs 可追溯到來源。
+- [ ] 至少以一組已知 input 驗證 output；linked views 顯示相同 state，Reset 恢復初始值。
+- [ ] 不存在無作用、假裝可儲存或必須依賴 hover 才能操作的 controls。
+- [ ] 390px viewport 可完成核心操作；鍵盤操作與滑鼠等價，reduced motion 下仍能辨識 state change。
+- [ ] JS 關閉與 print 時保留互動所回答的問題、初始狀態與主要結論。
