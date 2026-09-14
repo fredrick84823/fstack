@@ -115,7 +115,7 @@ Plaude 只是常見來源之一，不是必要條件。
 2. Main agent 建立 `/tmp/meeting_sources/<meeting_key>_<YYYYMMDD>/`。
 3. Main agent spawn source-preparation subagent。
 4. Subagent 只根據文字輸入產出 `transcript.md` 與 `extract.md`。
-5. Main agent 產出 `meeting-context.md`。
+5. Main agent 產出 `meeting-context.md`，並執行 `history_index.py` 產出 `history-index.md`。
 6. Main agent 讀取 source artifacts、default prompt 與同類型歷史會議記錄作為連續性 context，產生正式 `meeting_notes.md`。
 7. Agent 執行 `create_gdoc_from_md.py --source-dir <RESULT_SOURCE_DIR>` 建立 Google Doc，並把 source artifacts 上傳到同一個日期資料夾。
 8. 若設定了 Slack channel，會發送通知。
@@ -141,7 +141,7 @@ Plaude 只是常見來源之一，不是必要條件。
 1. 腳本用 `ffmpeg` 切音訊片段。
 2. 上傳到指定 NotebookLM Notebook。
 3. 等 NotebookLM 處理音訊 source。
-4. 腳本輸出 `transcript.md`、`extract.md`、`meeting-context.md`。
+4. 腳本輸出 `transcript.md`、`extract.md`、`meeting-context.md`、`history-index.md`。
 5. Main agent 讀取 source artifacts、default prompt 與歷史會議記錄作為連續性 context，產生正式 Markdown 會議記錄。
 6. Agent 執行 `create_gdoc_from_md.py --source-dir <RESULT_SOURCE_DIR>` 建立 Google Doc，並把 source artifacts 上傳到同一個日期資料夾。
 7. 若設定了 Slack channel，會發送通知。
@@ -355,6 +355,7 @@ meeting-context.md
 | `meetings.<key>.notebook_name` | `extract_audio_sources.py --meeting <key>` 查 config | 錄音輸入的 NotebookLM notebook |
 | `prompt_path` | main agent 讀取 | 成稿 prompt |
 | `glossary_path` | main agent / `extract_audio_sources.py` 讀取 | naming-only glossary |
+| `fstack_repo` | `parity.py` 讀取 | fstack 工作樹位置；發佈結束比對安裝版有沒有漂移。沒設定就不比 |
 
 `glossary.json` 空範本：
 
@@ -501,6 +502,27 @@ RESULT_CONTEXT: /tmp/meeting_sources/<meeting_key>_<date>/meeting-context.md
 RESULT_SOURCE_DIR: /tmp/meeting_sources/<meeting_key>_<date>
 RESULT_SERIES_NAME: <series_name>
 RESULT_DATE: <YYYYMMDD>
+RESULT_HISTORY_INDEX: /tmp/meeting_sources/<meeting_key>_<date>/history-index.md
+```
+
+### 3b. history_index.py
+
+產同系列近 N 場的歷史索引。流程 B 由 `extract_audio_sources.py` 自動呼叫；流程 A 由
+agent 明示執行。
+
+```bash
+uv run scripts/history_index.py --meeting <meeting_key> --date <YYYYMMDD> \
+  --output-dir /tmp/meeting_sources/<meeting_key>_<date>
+```
+
+索引只含各場的 heading 大綱（層級上限 Heading 3）與指標：本機正式稿路徑，以及側檔裡
+記著的 Doc URL。沒有 URL 時該欄位缺席，不會寫 `None`。日期**嚴格早於** `--date`，
+所以 agent 不會讀到自己的產出。來源是 `create_gdoc_from_md.py` 寫下的本機歸檔。
+
+Output：
+
+```text
+RESULT_HISTORY_INDEX: /tmp/meeting_sources/<meeting_key>_<date>/history-index.md
 ```
 
 ### 4. Main Synthesis

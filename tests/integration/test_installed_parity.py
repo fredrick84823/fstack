@@ -4,22 +4,26 @@
 放進預設 `pytest` 會變成一條靠環境決定顏色的測試，所以 `setup.cfg` 的 testpaths
 只收 `tests/unit`，這支要明示 `pytest tests/integration` 才跑。
 
-作法：把腳本複製進 tmp_path 的假 repo，用真安裝版跑一次同步，再拿結果跟 repo 內的
-版本比對。全程不寫真實工作樹。
+比對邏輯本身已經搬進 `scripts/parity.py`（發佈流程結束後也要跑同一份，#17），所以這裡
+只呼叫 `parity.sync_diff`，不再自己 rsync ＋ `filecmp`。**兩份比對邏輯是這條測試最糟的
+失敗方式**：發佈流程那邊漂掉了，這裡照樣綠。
+
+作法沒變 —— 用真安裝版跑一次同步到暫存目錄，再拿結果跟 repo 內的版本比對，全程不寫
+真實工作樹。
 """
 
 from __future__ import annotations
 
-import filecmp
-import shutil
-import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 REPO = Path(__file__).resolve().parents[2]
-SCRIPT = REPO / "bin" / "sync-from-installed.sh"
-DEST_REL = Path("skills/comms/generate-meeting-notes")
+sys.path.insert(0, str(REPO / "skills/comms/generate-meeting-notes/scripts"))
+
+import parity  # noqa: E402
+
 INSTALLED = Path.home() / ".agents" / "skills" / "generate-meeting-notes"
 
 pytestmark = pytest.mark.skipif(
@@ -27,24 +31,6 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _differs(cmp: filecmp.dircmp, prefix: str = "") -> list[str]:
-    out = [prefix + n for n in cmp.left_only + cmp.right_only + cmp.diff_files]
-    for name, sub in cmp.subdirs.items():
-        out += _differs(sub, f"{prefix}{name}/")
-    return out
-
-
-def test_repo_copy_equals_a_fresh_sync_of_the_installed_copy(tmp_path: Path):
+def test_repo_copy_equals_a_fresh_sync_of_the_installed_copy():
     """repo 版 == 對安裝版重跑一次同步的結果。不等就是有人只改了其中一邊。"""
-    (tmp_path / "bin").mkdir()
-    shutil.copy2(SCRIPT, tmp_path / "bin" / SCRIPT.name)
-
-    result = subprocess.run(
-        [str(tmp_path / "bin" / SCRIPT.name), str(INSTALLED)],
-        capture_output=True,
-        text=True,
-        cwd="/",
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-
-    assert _differs(filecmp.dircmp(tmp_path / DEST_REL, REPO / DEST_REL)) == []
+    assert parity.sync_diff(INSTALLED, REPO) == []

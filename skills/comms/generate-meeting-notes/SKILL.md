@@ -11,10 +11,11 @@ disable-model-invocation: true
 
 貫穿全流程，先讀懂再往下：
 
-- **source artifacts** —— 一個目錄裡的三個檔：`transcript.md`（本次會議的事實）、
+- **source artifacts** —— 一個目錄裡的四個檔：`transcript.md`（本次會議的事實）、
   `extract.md`（議題／決策／行動／風險索引）、`meeting-context.md`（會議類型、與會者、
-  custom prompt、active glossary terms、來源與日期）。所有 source 流程的產物都是這個，
-  **不是正式稿**。目錄位置：`/tmp/meeting_sources/<meeting_key>_<YYYYMMDD>[_<meeting_instance>]`。
+  custom prompt、active glossary terms、來源與日期）、`history-index.md`（同系列近三場的
+  heading 大綱與指標，日期嚴格早於本次；**是索引不是語料**，不含內容行）。
+  所有 source 流程的產物都是這個，**不是正式稿**。目錄位置：`/tmp/meeting_sources/<meeting_key>_<YYYYMMDD>[_<meeting_instance>]`。
 - **接地** —— 正式稿的每個事實都指得回 `transcript.md`。`extract.md`、`meeting-context.md`、
   glossary、歷史會議記錄只提升可讀性與連續性，不能長出 transcript 沒講過的決策、
   待辦、數字或時間。無法接地的寫 `[待確認]`。衝突時 `transcript.md` 勝。
@@ -22,6 +23,7 @@ disable-model-invocation: true
 
   ```
   RESULT_SOURCE_DIR  RESULT_TRANSCRIPT  RESULT_EXTRACT  RESULT_CONTEXT  RESULT_DATE
+  RESULT_HISTORY_INDEX
   ```
 
 ## Skill 目錄解析
@@ -48,6 +50,9 @@ test -n "$SKILL_DIR" || { echo "generate-meeting-notes skill directory not found
 - 其他情況 → 用上面解析出的 `SKILL_DIR`（安裝版，與 fstack 手動掉齊）
 - 其他 repo 內的同名副本 → **不要跟**。那些凍結在 2026-06 重構之前，比安裝版舊
 - 安裝版與 fstack 在流程上不一致 → **停下來**列出差異，由使用者決定
+
+發佈流程結束會自己比對一次（`⚠️  安裝版與 fstack 已經漂移`），印完照樣回 `0` ——
+Doc 那時已經發出去了，擋下來沒有意義。看到就跑 `bin/sync-from-installed.sh` 掉齊。
 
 ## 流程選擇
 
@@ -122,7 +127,19 @@ mkdir -p /tmp/meeting_sources/<meeting_key>_<YYYYMMDD>[_<meeting_instance>]
 讀 `~/.config/generate-meeting-notes/config.json` 的 `custom_prompt`、`attendees`
 與 glossary，產出 `meeting-context.md`。只放脈絡，不放 transcript 沒支持的本次會議事實。
 
-完成後印出**交棒契約**的五行，進流程 C。
+### Step 5：產歷史索引
+
+```bash
+cd "$SKILL_DIR" && uv run scripts/history_index.py \
+  --meeting <meeting_key> \
+  --date <YYYYMMDD> \
+  --output-dir /tmp/meeting_sources/<meeting_key>_<YYYYMMDD>[_<meeting_instance>]
+```
+
+`--date` 一定給**本次**日期 —— 索引只收嚴格早於它的場次。另有 `--sessions N`（預設 3）。
+本機歸檔沒有更早的場次時照樣寫出索引檔並以 0 收場，那是合法結果不是錯誤。
+
+完成後印出**交棒契約**（含 `RESULT_HISTORY_INDEX`），進流程 C。
 
 ## 流程 B：Audio Source Extraction
 
@@ -172,6 +189,9 @@ cd "$SKILL_DIR" && uv run scripts/extract_audio_sources.py <audio_file> \
 腳本自動把該 `meeting_key` 相關且 `status=active` 的 glossary entries 寫進
 `meeting-context.md`，用途只有人名／專案名正規化、縮寫展開與錯字修正
 （例 `NCP` → `MCP`）、口語別名對齊 canonical name。glossary 不是會議事實來源。
+
+腳本同時產 `history-index.md`（同系列近三場的大綱索引），不必另外執行
+`history_index.py`。
 
 從 stdout 解析**交棒契約**（另有 `RESULT_SERIES_NAME`），進流程 C。
 不要拿 NotebookLM 內容直接當正式稿。
