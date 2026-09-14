@@ -644,6 +644,17 @@ def _parse_inline_bold(text: str) -> tuple[str, list[tuple[int, int]]]:
     return plain, bolds
 
 
+def _u16len(text: str) -> int:
+    """Docs API 的 index 單位是 **UTF-16 code unit**，不是 Python 字元。
+
+    BMP 內（含繁中、全形標點）兩者一致，所以現行語料一直沒炸。emoji 這類
+    surrogate pair 一顆算兩個 code unit、Python 只算一個 —— 而 index 是整份文件
+    累加的，差 1 不會只壞那一段：那顆 emoji 之後**所有**樣式範圍整體前移一格，
+    越後面偏越多。
+    """
+    return len(text.encode("utf-16-le")) // 2
+
+
 def _parse_blocks(content: str) -> list[tuple[str, list[str]]]:
     """將 Markdown 拆成 ('text', lines) 和 ('table', lines) 交替的 block 列表"""
     blocks: list[tuple[str, list[str]]] = []
@@ -730,7 +741,8 @@ def _markdown_to_gdocs(
         for line in block_lines:
             kind, level, plain, bolds, codes = _classify_line(line)
             line_start = 1 + char_pos
-            line_end = line_start + len(plain)
+            line_len = _u16len(plain)
+            line_end = line_start + line_len
             para_range = {"startIndex": line_start, "endIndex": line_end + 1}
 
             if kind == "heading":
@@ -758,35 +770,27 @@ def _markdown_to_gdocs(
                     }
                 })
 
-            for bs, be in bolds:
-                if bs < be:
+            # `bolds` / `codes` 的 offset 是 `plain` 的 Python 字元位置 —— 解析層用字元
+            # 是對的，換算成 Docs 的 UTF-16 index 是**這一層**的事。
+            # code 沒有原生樣式，以等寬字體＋淺灰底＋深紅字模擬，三個屬性缺一不可，
+            # 所以 fields 直接由 INLINE_CODE_STYLE 的 key 算出來，不另外手抄一份。
+            # ponytail: 每個 range 重切一次前綴，同一行是 O(n²)；會議記錄一行幾十字，
+            # 真的變長再改成掃一次就把 offset 對照表建好。
+            for ranges, style in ((bolds, {"bold": True}), (codes, INLINE_CODE_STYLE)):
+                for start, end in ranges:
                     fmt_requests.append({
                         "updateTextStyle": {
                             "range": {
-                                "startIndex": line_start + bs,
-                                "endIndex": line_start + be,
+                                "startIndex": line_start + _u16len(plain[:start]),
+                                "endIndex": line_start + _u16len(plain[:end]),
                             },
-                            "textStyle": {"bold": True},
-                            "fields": "bold",
-                        }
-                    })
-
-            # `code` — Docs 無原生 code 樣式，以等寬字體＋淺灰底＋深紅字模擬
-            for cs, ce in codes:
-                if cs < ce:
-                    fmt_requests.append({
-                        "updateTextStyle": {
-                            "range": {
-                                "startIndex": line_start + cs,
-                                "endIndex": line_start + ce,
-                            },
-                            "textStyle": INLINE_CODE_STYLE,
-                            "fields": "weightedFontFamily,backgroundColor,foregroundColor",
+                            "textStyle": style,
+                            "fields": ",".join(style),
                         }
                     })
 
             plain_parts.append(plain + "\n")
-            char_pos += len(plain) + 1
+            char_pos += line_len + 1
 
     full_text = "".join(plain_parts)
     return full_text, fmt_requests, tables

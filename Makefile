@@ -8,6 +8,12 @@ PYTEST ?= python3 -m pytest
 # repo 沒有 pyproject.toml，`--no-project` 讓 uv 不要往上找一個不存在的專案。
 UVRUN := uv run --no-project
 
+# mutmut 跑測試用的那道 env 跟 `make test` 的 system python **不是同一個**，只有這裡
+# `--with` 列出來的套件。google-api-python-client 是 tests/unit 的 request-side 測試
+# （Seam ②）建假 Docs client 用的；少了它那些測試在這道 env 裡是 error 而不是 fail，
+# 而 error 一樣讓 pytest 以 exit 1 收場 → mutmut 每顆 mutant 都記成 killed。
+MUTENV := $(UVRUN) --with mutmut --with pytest --with google-api-python-client
+
 SCRIPTS := skills/comms/generate-meeting-notes/scripts
 MUT_LOG := .mutmut-run.log
 
@@ -15,9 +21,12 @@ MUT_LOG := .mutmut-run.log
 # NotebookLM／Drive I/O 混在同一支。所以範圍在這裡再切一層到函式：只掛 Seam ① 的純
 # 函式。I/O 那些現在零測試，掛進去只會噴一牆 🫥 no-tests，數字沒有意義。
 # 新增純函式時把名字加進來 —— 不加就是量不到它。
+# parity.py 同理只掛 drift_warning：sync_diff / report_drift 碰檔案系統與子行程，
+# 是 I/O 那一層，不是 Seam ①（它們有自己的測試，只是不該拿 mutation 去量）。
 # 沒列進來的純函式：build_glossary_prompt / is_non_content_extract / inject_attendees。
 # 它們現在零測試，掛進去是 147 顆 🫥 no-tests —— 跟掛 NotebookLM／Drive I/O 同一種
-# 稀釋，只是走函式那道門。有測試了再加回來（glossary 那兩支是 #10，attendees 是 #9）。
+# 稀釋，只是走函式那道門。有測試了再加回來（glossary 那支是 #8；is_non_content_extract
+# 與 inject_attendees 目前沒有對應的票）。
 # history_index.py 的那六支碰檔案系統，但碰的是測試自己建的 tmp 目錄 —— 不是
 # NotebookLM／Drive 那種要憑證與網路的 I/O，所以照樣掛。日期邊界（`>=` vs `>`）正是
 # 最該被 mutant 問一次的地方。
@@ -35,10 +44,13 @@ PURE := \
 	_unescape_md \
 	_parse_inline \
 	_parse_inline_bold \
+	_u16len \
+	_markdown_to_gdocs \
 	_parse_blocks \
 	_parse_table_rows \
 	_classify_line \
-	preprocess_content
+	preprocess_content \
+	drift_warning
 
 # key 的形狀是 `<路徑轉點>.x_<函式名>__mutmut_<n>` —— `x_` 前綴是 mutmut 加的，
 # 少了它 fnmatch 一個都配不到，而配不到時 mutmut 是 assert 不是靜靜跳過。
@@ -64,10 +76,20 @@ integration:
 # 另一條路徑例外計數看不見：覆蓋那些 mutant 的測試整支不見時 pytest 正常收尾、例外
 # 是 0，mutant 記成 🫥 no-tests。驗收條件本來就要求範圍內 🫥 為 0（實測拿掉
 # test_md_unescape 一條 → 🎉 59 🫥 83 而例外仍是 0），所以兩個都擋。
+#
+# 第三條路徑兩個事後計數都看不見，所以擋在**事前**：測試在這道 env 裡 error（缺套件、
+# collection 失敗）時，pytest 照樣 exit 1、mutmut 照樣記成 killed，而
+# BadTestExecutionCommandsException 與 🫥 都是 0 —— 印出來的是滿分假綠。實測：
+# test_inline_style_requests 需要 google-api-python-client，少了它那道 env 是
+# 「271 passed, 13 errors」而 `make test` 是「284 passed」，唯一含 emoji 的語料在
+# mutation 那輪一條都沒執行 —— 整票要擋的那顆雷剛好量不到。所以先跑一次基線，
+# 紅了就停在這裡，不要產生任何數字。
 mutation:
 	rm -rf mutants .mutmut-cache $(MUT_LOG)
+	@echo "── 基線：mutmut 那道 env 底下 tests/unit 必須全綠 ──"
+	$(MUTENV) python -m pytest tests/unit -q
 	@set -o pipefail; \
-	$(UVRUN) --with mutmut --with pytest mutmut run $(MUT_FILTER) 2>&1 | tee $(MUT_LOG); \
+	$(MUTENV) mutmut run $(MUT_FILTER) 2>&1 | tee $(MUT_LOG); \
 	rc=$$?; \
 	n=$$(grep -c BadTestExecutionCommandsException $(MUT_LOG) || true); \
 	z=$$(grep -c '^🫥 ' $(MUT_LOG) || true); \
