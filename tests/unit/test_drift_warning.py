@@ -57,16 +57,14 @@ def test_no_difference_means_an_empty_string_not_none():
     assert parity.drift_warning([]) == ""
 
 
-def test_the_warning_opens_with_a_blank_line():
-    """警告接在發佈輸出後面，前面要空一行才看得出是另一段。
+def test_the_warning_opens_with_a_blank_line_then_the_header(warning: str):
+    """第 0 行空、第 1 行是 `DRIFT_HEADER` —— 前面空一行才看得出是另一段。
 
-    刪掉這條 → 開頭的 `\\n` 掉了，警告黏在 Slack／歸檔那幾行的尾巴上。
+    兩件事併成一條：開頭的換行掉了，行號就整個位移，「空行」與「header 在第二行」
+    必定同時變紅。拆成兩條只是同一個缺陷報兩次（mutant kill-set 上也沒有一顆是
+    只有其中一條殺得掉的）。
     """
-    assert parity.drift_warning(PATHS).split("\n")[0] == ""
-
-
-def test_the_header_line_says_it_has_drifted(warning: str):
-    """第二行是 `DRIFT_HEADER` 開頭 —— 那是使用者唯一會掃到的字串。"""
+    assert warning.split("\n")[0] == ""
     assert warning.split("\n")[1].startswith(parity.DRIFT_HEADER)
 
 

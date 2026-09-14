@@ -81,10 +81,8 @@ def sync_diff(installed: Path, repo: Path) -> list[str]:
             cwd="/",
         )
         if done.returncode != 0:
-            why = (done.stderr or done.stdout).strip().splitlines()
-            raise RuntimeError(
-                f"{SYNC_SCRIPT.name} exit {done.returncode}: {why[-1] if why else ''}"
-            )
+            why = (done.stderr or done.stdout).strip().rsplit("\n", 1)[-1]
+            raise RuntimeError(f"{SYNC_SCRIPT.name} exit {done.returncode}: {why}")
         return _differs(filecmp.dircmp(stage / SKILL_REL, repo / SKILL_REL))
 
 
