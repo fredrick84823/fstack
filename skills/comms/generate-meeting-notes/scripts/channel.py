@@ -118,8 +118,11 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # `CONFIG_PATH` 在呼叫當下才取，不吃 `set_channel` 的預設參數 —— 預設參數在 import
+    # 當下就綁死了，於是這條路徑只能對著使用者真實的設定檔跑：測 CLI 等於拿自己的
+    # config.json 當測試資料，key 剛好撞上就直接覆寫掉它。
     try:
-        backup = set_channel(args.meeting, args.channel)
+        backup = set_channel(args.meeting, args.channel, CONFIG_PATH)
     except KeyError:
         print(f"❌ 設定檔裡沒有這個會議類型：{args.meeting!r}")
         sys.exit(1)
