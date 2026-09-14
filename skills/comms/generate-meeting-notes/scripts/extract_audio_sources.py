@@ -641,6 +641,17 @@ def _parse_inline_bold(text: str) -> tuple[str, list[tuple[int, int]]]:
     return plain, bolds
 
 
+def _u16len(text: str) -> int:
+    """Docs API 的 index 單位是 **UTF-16 code unit**，不是 Python 字元。
+
+    BMP 內（含繁中、全形標點）兩者一致，所以現行語料一直沒炸。emoji 這類
+    surrogate pair 一顆算兩個 code unit、Python 只算一個 —— 而 index 是整份文件
+    累加的，差 1 不會只壞那一段：那顆 emoji 之後**所有**樣式範圍整體前移一格，
+    越後面偏越多。
+    """
+    return len(text.encode("utf-16-le")) // 2
+
+
 def _parse_blocks(content: str) -> list[tuple[str, list[str]]]:
     """將 Markdown 拆成 ('text', lines) 和 ('table', lines) 交替的 block 列表"""
     blocks: list[tuple[str, list[str]]] = []
@@ -727,7 +738,8 @@ def _markdown_to_gdocs(
         for line in block_lines:
             kind, level, plain, bolds, codes = _classify_line(line)
             line_start = 1 + char_pos
-            line_end = line_start + len(plain)
+            line_len = _u16len(plain)
+            line_end = line_start + line_len
             para_range = {"startIndex": line_start, "endIndex": line_end + 1}
 
             if kind == "heading":
@@ -755,13 +767,15 @@ def _markdown_to_gdocs(
                     }
                 })
 
+            # `bolds` / `codes` 的 offset 是 `plain` 的 Python 字元位置 —— 解析層用字元
+            # 是對的，換算成 Docs 的 UTF-16 index 是**這一層**的事。
             for bs, be in bolds:
                 if bs < be:
                     fmt_requests.append({
                         "updateTextStyle": {
                             "range": {
-                                "startIndex": line_start + bs,
-                                "endIndex": line_start + be,
+                                "startIndex": line_start + _u16len(plain[:bs]),
+                                "endIndex": line_start + _u16len(plain[:be]),
                             },
                             "textStyle": {"bold": True},
                             "fields": "bold",
@@ -774,8 +788,8 @@ def _markdown_to_gdocs(
                     fmt_requests.append({
                         "updateTextStyle": {
                             "range": {
-                                "startIndex": line_start + cs,
-                                "endIndex": line_start + ce,
+                                "startIndex": line_start + _u16len(plain[:cs]),
+                                "endIndex": line_start + _u16len(plain[:ce]),
                             },
                             "textStyle": INLINE_CODE_STYLE,
                             "fields": "weightedFontFamily,backgroundColor,foregroundColor",
@@ -783,7 +797,7 @@ def _markdown_to_gdocs(
                     })
 
             plain_parts.append(plain + "\n")
-            char_pos += len(plain) + 1
+            char_pos += line_len + 1
 
     full_text = "".join(plain_parts)
     return full_text, fmt_requests, tables

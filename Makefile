@@ -17,12 +17,14 @@ MUT_LOG := .mutmut-run.log
 # 新增純函式時把名字加進來 —— 不加就是量不到它。
 # 沒列進來的純函式：build_glossary_prompt / is_non_content_extract / inject_attendees。
 # 它們現在零測試，掛進去是 147 顆 🫥 no-tests —— 跟掛 NotebookLM／Drive I/O 同一種
-# 稀釋，只是走函式那道門。有測試了再加回來（glossary 那兩支是 #10，attendees 是 #9）。
+# 稀釋，只是走函式那道門。有測試了再加回來。
 PURE := \
 	extract_date \
 	_unescape_md \
 	_parse_inline \
 	_parse_inline_bold \
+	_u16len \
+	_markdown_to_gdocs \
 	_parse_blocks \
 	_parse_table_rows \
 	_classify_line \
