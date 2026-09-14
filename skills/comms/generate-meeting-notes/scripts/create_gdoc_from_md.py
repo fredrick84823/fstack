@@ -52,6 +52,7 @@ from pathlib import Path
 
 # 從同目錄的 extract_audio_sources.py import 可重用函式
 sys.path.insert(0, str(Path(__file__).parent))
+from channel import SEND, UNSET, channel_state, dm_reminder
 from extract_audio_sources import (
     create_gdoc_in_shared_drive,
     get_google_credentials,
@@ -322,14 +323,19 @@ def main():
         print(f"RESULT_AUDIO_FILE: {audio_file_id}")
         print(f"RESULT_LOCAL_AUDIO: {'deleted' if audio_deleted else 'kept'}")
 
-    # Slack 通知
+    # Slack 通知。三態見 channel.py：還沒設定要 DM 提醒，刻意不發要安靜。
     if not args.no_slack:
-        slack_channel = meeting.get("slack_channel", "").strip()
-        if slack_channel:
+        state = channel_state(meeting)
+        if state == SEND:
             from send_slack_notification import send_notification
-            send_notification(slack_channel, doc_url, drive_path, series_name, date_str)
-        else:
-            print(f"⚠️  未設定 slack_channel，跳過通知")
+            send_notification(
+                meeting["slack_channel"].strip(), doc_url, drive_path, series_name, date_str
+            )
+        elif state == UNSET:
+            from send_slack_notification import send_dm
+            reminder = dm_reminder(args.meeting, series_name, doc_url, note_path)
+            print(f"\n{reminder}")
+            send_dm(reminder)
 
     # 發佈結束才比對安裝版與 fstack。此刻編輯已經停了，漂移是真漂移（#17）。
     # 不擋流程：Doc 已經發出去，回非零只會讓人學會忽略它。

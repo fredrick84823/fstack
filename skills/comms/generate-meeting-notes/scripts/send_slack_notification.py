@@ -20,18 +20,28 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
-from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
+# slack_sdk 在函式裡才 import。這支模組的斷言層（誰該被通知、誰不該）必須在 CI 與
+# mutmut 那道 env 底下 import 得起來，而那兩個地方都沒有 slack_sdk —— module-level
+# import 會讓那些測試變成 collection error，而 error 跟 fail 一樣是 exit 1，mutmut
+# 會把每顆 mutant 都記成 killed（setup.cfg 警告的第三條靜默路徑）。
 
 CONFIG_PATH = Path.home() / ".config" / "generate-meeting-notes" / "config.json"
 
 
+def load_config() -> dict:
+    """設定檔內容。讀不到就回空 dict —— 呼叫端各自決定那算不算致命。"""
+    try:
+        with open(CONFIG_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
 def load_token() -> str:
-    if not CONFIG_PATH.exists():
+    config = load_config()
+    if not config:
         print("❌ 尚未設定。請先執行 setup.py")
         sys.exit(1)
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        config = json.load(f)
     token = config.get("slack_bot_token", "").strip()
     if not token:
         print("❌ config.json 中沒有 slack_bot_token，請重新執行 setup.py")
@@ -66,6 +76,9 @@ def send_notification(channel: str, doc_url: str, drive_path: str, series_name: 
     token = load_token()
     message = build_message(series_name, date_str, doc_url, drive_path)
 
+    from slack_sdk import WebClient
+    from slack_sdk.errors import SlackApiError
+
     client = WebClient(token=token)
     try:
         client.chat_postMessage(channel=channel, text=message)
@@ -73,6 +86,32 @@ def send_notification(channel: str, doc_url: str, drive_path: str, series_name: 
         return True
     except SlackApiError as e:
         print(f"⚠️  Slack 發送失敗：{e.response['error']}")
+        return False
+
+
+def send_dm(text: str) -> bool:
+    """把提醒 DM 給設定檔裡的 `slack_dm_user`，回傳是否真的送出去了。
+
+    **不 sys.exit。** 這條路徑跑在 Doc 已經建好之後，用一個「提醒你去設 channel」
+    把一次成功的發佈變成非零退出，只會讓人學會忽略它（同 `report_drift`）。沒 token
+    或沒設 DM 對象時印一行就回 False —— 提醒本身已經印在 stdout 上，沒有跟著消失。
+    """
+    config = load_config()
+    token = config.get("slack_bot_token", "").strip()
+    user = (config.get("slack_dm_user") or "").strip()
+    if not token or not user:
+        print("⚠️  沒有 slack_bot_token 或 slack_dm_user，提醒只留在上面這段輸出裡")
+        return False
+
+    from slack_sdk import WebClient
+    from slack_sdk.errors import SlackApiError
+
+    try:
+        WebClient(token=token).chat_postMessage(channel=user, text=text)
+        print("✅ 提醒已 DM")
+        return True
+    except SlackApiError as e:
+        print(f"⚠️  DM 發送失敗：{e.response['error']}")
         return False
 
 
