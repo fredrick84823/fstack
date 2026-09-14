@@ -534,7 +534,7 @@ Input：
 - `RESULT_EXTRACT`
 - `RESULT_CONTEXT`
 - `prompt_path`
-- `RESULT_HISTORY_INDEX`（同系列近 N 場的大綱索引；要全文再沿索引裡的指標去讀）
+- 同類型歷史會議記錄
 
 歷史會議記錄用途是連續性 context：
 

@@ -11,10 +11,11 @@ disable-model-invocation: true
 
 貫穿全流程，先讀懂再往下：
 
-- **source artifacts** —— 一個目錄裡的三個檔：`transcript.md`（本次會議的事實）、
+- **source artifacts** —— 一個目錄裡的四個檔：`transcript.md`（本次會議的事實）、
   `extract.md`（議題／決策／行動／風險索引）、`meeting-context.md`（會議類型、與會者、
-  custom prompt、active glossary terms、來源與日期）。所有 source 流程的產物都是這個，
-  **不是正式稿**。目錄位置：`/tmp/meeting_sources/<meeting_key>_<YYYYMMDD>[_<meeting_instance>]`。
+  custom prompt、active glossary terms、來源與日期）、`history-index.md`（同系列近三場的
+  heading 大綱與指標，日期嚴格早於本次；**是索引不是語料**，不含內容行）。
+  所有 source 流程的產物都是這個，**不是正式稿**。目錄位置：`/tmp/meeting_sources/<meeting_key>_<YYYYMMDD>[_<meeting_instance>]`。
 - **接地** —— 正式稿的每個事實都指得回 `transcript.md`。`extract.md`、`meeting-context.md`、
   glossary、歷史會議記錄只提升可讀性與連續性，不能長出 transcript 沒講過的決策、
   待辦、數字或時間。無法接地的寫 `[待確認]`。衝突時 `transcript.md` 勝。
@@ -24,11 +25,6 @@ disable-model-invocation: true
   RESULT_SOURCE_DIR  RESULT_TRANSCRIPT  RESULT_EXTRACT  RESULT_CONTEXT  RESULT_DATE
   RESULT_HISTORY_INDEX
   ```
-
-- **歷史索引** —— `history-index.md`，和上面三個檔放在同一個 source artifacts 目錄。
-  同系列近三場的 **heading 大綱 ＋ 指標**（本機正式稿路徑、Doc URL），**不含內容行**。
-  日期嚴格早於本次，所以不會讀到自己的產出。用法是掃大綱判斷「這個議題以前談過」，
-  再決定要不要沿指標去讀那一場的全文 —— 不要整包讀進來。
 
 ## Skill 目錄解析
 
@@ -207,11 +203,7 @@ A 與 B 都收在這裡。main agent 讀：
 | `RESULT_EXTRACT` | 議題／決策／行動／風險 checklist |
 | `RESULT_CONTEXT` | 人名、專案名、縮寫、會議類型脈絡 |
 | `references/default-prompt.md` 或 config 指定的 prompt | 格式 |
-| `RESULT_HISTORY_INDEX` | 連續性：前次決策的延續、未完成待辦、術語演進、已知命名 |
-
-歷史索引**先讀索引本身**（它很短，只有大綱）。本次議題明顯延伸自索引裡的某個議題時，
-才沿那一場的「本機」路徑讀全文；沒有延伸關係就不要讀 —— 那是白燒 context，還多一條
-把上週決策寫進本週記錄的路。
+| 同類型歷史會議記錄 | 連續性：前次決策的延續、未完成待辦、術語演進、已知命名 |
 
 證據優先序：`transcript.md` > `extract.md` > `meeting-context.md` > 歷史會議記錄。
 歷史記錄與 glossary 都受**接地**約束。
