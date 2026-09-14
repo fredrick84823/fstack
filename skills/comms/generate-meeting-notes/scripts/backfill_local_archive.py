@@ -20,15 +20,13 @@ backfill_local_archive.py - 一次性補齊：把 Drive 上有、本機缺的正
 """
 
 import argparse
-import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from extract_audio_sources import get_google_credentials, load_config
-from local_archive import LOCAL_ARCHIVE_ROOT, archive_paths, sidecar_content
+from local_archive import DATE_DIR, LOCAL_ARCHIVE_ROOT, archive_paths, sidecar_content
 
-DATE_DIR = re.compile(r"\d{8}")
 MAX_PAGES = 20
 
 

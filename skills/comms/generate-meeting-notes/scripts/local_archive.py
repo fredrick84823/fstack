@@ -18,6 +18,10 @@ from pathlib import Path
 
 DEFAULT_ARCHIVE_DIRNAME = "meeting-notes"
 
+# 日期資料夾的形狀。歸檔版面的 owner 是這支模組，所以放這裡 —— 補齊腳本與歷史索引
+# 都在掃同一批資料夾，各自編一份的話版面改了只會改到其中一份。
+DATE_DIR = re.compile(r"\d{8}")
+
 
 def _configured_root() -> Path:
     """歸檔根目錄，由 config.json 的 local_archive_root 決定。
