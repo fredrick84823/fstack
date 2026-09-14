@@ -43,16 +43,27 @@ test -n "$SKILL_DIR" || { echo "generate-meeting-notes skill directory not found
 
 ## 版本來源檢查
 
-**canonical 是 fstack 的 `skills/comms/generate-meeting-notes/`。** 這個 skill 可能同時
-存在於安裝目錄與多個 repo，彼此是**獨立檔案**（不同 inode）：
+**canonical 是 fstack 的 `skills/comms/generate-meeting-notes/`，而且改動一律從 repo 端
+開始（repo-first）。** 這個 skill 可能同時存在於安裝目錄與多個 repo，彼此是**獨立檔案**
+（不同 inode）：
 
-- 當前 repo 是 fstack → 用 repo 版
-- 其他情況 → 用上面解析出的 `SKILL_DIR`（安裝版，與 fstack 手動掉齊）
-- 其他 repo 內的同名副本 → **不要跟**。那些凍結在 2026-06 重構之前，比安裝版舊
+- 當前 repo 是 fstack → 用 repo 版，**要改就改這裡**：開 branch、一票一 worktree
+- 其他情況 → 用上面解析出的 `SKILL_DIR`。**安裝版是掉齊的產物，不是編輯的對象** ——
+  它只有一份、所有 worktree 共用，把未合併的改動寫進去會同時弄紅 `main` 與其他每一
+  張票的 parity
+- 其他 repo 內的同名副本 → **不要跟**。那些凍結在 2026-06 重構之前
 - 安裝版與 fstack 在流程上不一致 → **停下來**列出差異，由使用者決定
 
+掉齊在**合併之後**做，方向是 repo → 安裝版：
+
+| 指令 | 方向 | 什麼時候 |
+|------|------|---------|
+| `bin/sync-to-installed.sh` | repo → 安裝版 | PR 合併後。三方合併，安裝版的真實設定不會被 repo 的佔位符蓋掉 |
+| `bin/sync-from-installed.sh` | 安裝版 → repo | **補救用** —— 有人直接改了安裝版時把改動撿回來。repo 較新時它會拒絕執行（退出碼 `3`）：這個方向帶 `--delete`，照跑會刪掉已合併的改動 |
+
 發佈流程結束會自己比對一次（`⚠️  安裝版與 fstack 已經漂移`），印完照樣回 `0` ——
-Doc 那時已經發出去了，擋下來沒有意義。看到就跑 `bin/sync-from-installed.sh` 掉齊。
+Doc 那時已經發出去了，擋下來沒有意義。看到就照它印的指令跑；若 repo 比安裝版新，
+那支會拒絕並指回 `bin/sync-to-installed.sh`。
 
 ## 流程選擇
 

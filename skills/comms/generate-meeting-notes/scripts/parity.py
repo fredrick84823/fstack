@@ -2,9 +2,12 @@
 """
 parity.py - 安裝版與 fstack 之間的漂移比對。
 
-canonical 是 fstack，實際被編輯的是安裝版。中間那段「改了安裝版還沒掉齊」是正常
-工作流的狀態，隨時檢查只會一直叫；**發佈當下編輯已經結束**，此時的漂移是真漂移
-（裁決見 #17）。所以呼叫點只有一個：發佈流程的最後。
+canonical 是 fstack，改動也從 repo 端開始（repo-first）；安裝版是掉齊的產物。中間那段
+「改了還沒掉齊」是正常工作流的狀態，隨時檢查只會一直叫；**發佈當下編輯已經結束**，
+此時的漂移是真漂移（裁決見 #17）。所以 `report_drift` 的呼叫點只有一個：發佈流程的最後。
+
+`sync_direction` 是第二個用途：`bin/sync-from-installed.sh` 動檔案**之前**問一次方向。
+那個方向帶 `--delete`，repo 比安裝版新時照跑會刪掉已合併的改動（#29）。
 
 比對方式與 `tests/integration/test_installed_parity.py` 原本的作法同一份 ——
 把安裝版重跑一次 `bin/sync-from-installed.sh` 同步進暫存目錄，再跟 repo 版比對。
@@ -22,7 +25,7 @@ import filecmp
 import shutil
 import subprocess
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
@@ -86,6 +89,44 @@ def sync_diff(installed: Path, repo: Path) -> list[str]:
         return _differs(filecmp.dircmp(stage / SKILL_REL, repo / SKILL_REL))
 
 
+# `sync_direction` 的三個回傳值。bin/sync-from-installed.sh 逐字比對 REPO_NEWER。
+INSTALLED_NEWER = "安裝版較新"
+REPO_NEWER = "repo 較新"
+IN_SYNC = "一致"
+
+
+def sync_direction(installed: Mapping[str, float], repo: Mapping[str, float]) -> str:
+    """兩邊的「差異檔案 → mtime」清單 → 該往哪個方向掉齊。
+
+    只吃**內容真的不同**的路徑 —— sanitize 造成的差異在呼叫端（`sync_diff`）就已經
+    消掉了。所以「兩邊都改成一樣」在這裡是兩份空清單，跟「都沒改」同一個結果。
+
+    平手（mtime 完全相同）算 repo 較新。這個判斷唯一的用途是擋下會刪掉已合併改動的
+    那個方向，而猜錯的代價不對稱：多擋一次要人跑一次掉齊，少擋一次工作就沒了。
+    """
+    for rel, mtime in repo.items():
+        if rel not in installed or mtime >= installed[rel]:
+            return REPO_NEWER
+    return INSTALLED_NEWER if installed else IN_SYNC
+
+
+def _mtimes(root: Path, rels: Iterable[str]) -> dict[str, float]:
+    """`rels` 之中在 `root` 底下存在的那些 → mtime。不存在的不收 —— 不存在本身就是
+    方向的證據，用 `0` 之類的哨兵值填會讓它退化成一個普通的比大小。"""
+    return {rel: (root / rel).stat().st_mtime for rel in rels if (root / rel).exists()}
+
+
+def direction_against_installed(installed: Path, repo: Path) -> str:
+    """安裝目錄與 fstack 工作樹 → 方向。動任何檔案之前問。
+
+    差異清單走 `sync_diff`（同一份比對邏輯，#24 收斂的那份），mtime 則直接讀兩邊的
+    **原始**檔案 —— 不能讀暫存基準的：sanitize 那道 `sed` 會把被替換過的檔案 mtime
+    改成現在，於是每個含佔位符的檔案都會看起來像「安裝版剛改過」。
+    """
+    rels = sync_diff(installed, repo)
+    return sync_direction(_mtimes(installed, rels), _mtimes(repo / SKILL_REL, rels))
+
+
 def report_drift(config: dict, installed: Path = SKILL_DIR) -> None:
     """發佈流程結束時叫一次。有漂移就印警告，其餘情況什麼都不印。
 
@@ -107,3 +148,14 @@ def report_drift(config: dict, installed: Path = SKILL_DIR) -> None:
         # （同步腳本會以 1 收場）就是漂移偵測永遠不叫，而且沒有任何測試會紅
         # —— #14 點名的「驗收腳本的靜默失敗沒人守」就是這個形狀。
         print(f"\nℹ️  漂移比對跳過：{type(exc).__name__}: {exc}")
+
+
+if __name__ == "__main__":
+    # `--direction INSTALLED REPO` —— 給 bin/sync-from-installed.sh 的方向閘門呼叫。
+    # 比對壞掉時讓例外原地炸開（非零退出碼），不要印一個看起來像答案的字串：
+    # 呼叫端拿到「一致」就會放行 rsync --delete。
+    import sys
+
+    if sys.argv[1:2] != ["--direction"] or len(sys.argv) != 4:
+        sys.exit(f"用法：{Path(__file__).name} --direction INSTALLED REPO")
+    print(direction_against_installed(Path(sys.argv[2]), Path(sys.argv[3])))
