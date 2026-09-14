@@ -71,11 +71,12 @@ class Session(NamedTuple):
     outline: list[tuple[int, str]]
 
 
-def outline(markdown: str, max_depth: int = MAX_DEPTH) -> list[tuple[int, str]]:
+def outline(markdown: str) -> list[tuple[int, str]]:
     """抽 heading 大綱，回傳 [(層級, 標題文字)]。
 
-    `max_depth` 是在擋 Heading 4 那層的版型樣板（`#### 討論`／`#### 狀態`／`#### 風險`
+    `MAX_DEPTH` 是在擋 Heading 4 那層的版型樣板（`#### 討論`／`#### 狀態`／`#### 風險`
     每個議題重複一次，資訊量是零）。議題 heading 本身是 Heading 3，不會被切掉。
+    做成參數過一次又收回來了 —— 沒有任何產品呼叫端會傳別的值。
 
     圍欄程式區塊裡的 `# 註解`**不是** heading —— 不濾掉的話會在大綱裡長出假議題。
     """
@@ -95,7 +96,7 @@ def outline(markdown: str, max_depth: int = MAX_DEPTH) -> list[tuple[int, str]]:
             continue
         level = len(m.group(1))
         text = _INLINE_MARK.sub("", m.group(2)).strip()
-        if level <= max_depth and text:
+        if level <= MAX_DEPTH and text:
             found.append((level, text))
     return found
 

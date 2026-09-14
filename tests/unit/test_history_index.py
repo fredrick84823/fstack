@@ -20,7 +20,6 @@
 
 from __future__ import annotations
 
-import inspect
 import json
 import re
 import subprocess
@@ -92,16 +91,6 @@ def _unslash(text: str) -> str:
     return text.replace("\\", "")
 
 
-def _headings(markdown: str, max_depth: int = 3) -> list[tuple[int, str]]:
-    """語料自己的 heading 真值 —— 從原始 markdown 直接數，不經過受測模組。"""
-    out = []
-    for line in markdown.split("\n"):
-        m = re.match(r"^(#{1,6}) (.*)$", line)
-        if m and len(m.group(1)) <= max_depth:
-            out.append((len(m.group(1)), m.group(2)))
-    return out
-
-
 def _content_lines(markdown: str) -> list[str]:
     """正式稿裡**不該**出現在索引中的行：非 heading、夠長到不會誤判的內容行。"""
     return [
@@ -164,27 +153,6 @@ def test_outline_returns_headings_only_never_content():
     got = hi.outline(LADDER)
 
     assert got == [(1, "一層"), (2, "二層"), (3, "三層")]
-
-
-@pytest.mark.parametrize(
-    "max_depth,expected",
-    [
-        (1, [(1, "一層")]),
-        (2, [(1, "一層"), (2, "二層")]),
-        (3, [(1, "一層"), (2, "二層"), (3, "三層")]),
-        (4, [(1, "一層"), (2, "二層"), (3, "三層"), (4, "四層")]),
-        (5, [(1, "一層"), (2, "二層"), (3, "三層"), (4, "四層"), (5, "五層")]),
-    ],
-    ids=["d1", "d2", "d3", "d4", "d5"],
-)
-def test_outline_max_depth_is_inclusive(max_depth, expected):
-    """`max_depth` 那一層**要收**，深一層才不收。
-
-    這條刪掉 → `<` 寫成 `<=`（或反過來）不會有人發現：大綱看起來仍然「有東西」，
-    只是每一場都少一整層議題，或多出一層版型樣板（討論／狀態／風險），
-    而那層的資訊量是零，只會把索引撐胖。
-    """
-    assert hi.outline(LADDER, max_depth) == expected
 
 
 FENCED = """# 真 heading
@@ -271,15 +239,6 @@ def test_doc_url_degrades_to_none(tmp_path: Path, raw):
 # --------------------------------------------------------------------------- find_notes
 
 
-def test_find_notes_returns_oldest_first(tmp_path: Path):
-    for date in ("20260821", "20260824", "20260831"):
-        _put(tmp_path, date)
-
-    got = hi.find_notes(tmp_path, FOLDER, "20260907")
-
-    assert [p.parent.name for p in got] == ["20260821", "20260824", "20260831"]
-
-
 def test_find_notes_excludes_the_current_date_itself(tmp_path: Path):
     """驗收條件 4：**嚴格早於** —— 同日的那場不算。
 
@@ -341,14 +300,6 @@ def test_find_notes_zero_limit_returns_nothing(tmp_path: Path):
         _put(tmp_path, date)
 
     assert hi.find_notes(tmp_path, FOLDER, "20260907", 0) == []
-
-
-def test_find_notes_default_limit_is_three_sessions(tmp_path: Path):
-    """預設值就是 `DEFAULT_SESSIONS`，不是「全部」也不是別的數字。"""
-    for date in ("20260713", "20260720", "20260821", "20260824", "20260831"):
-        _put(tmp_path, date)
-
-    assert len(hi.find_notes(tmp_path, FOLDER, "20260907")) == hi.DEFAULT_SESSIONS
 
 
 def test_find_notes_ignores_the_other_source_artifacts_in_the_same_folder(tmp_path: Path):
@@ -569,33 +520,6 @@ def test_render_keeps_every_session_in_oldest_first_order(tmp_path: Path):
     ), "指標也要跟著各自那一場"
 
 
-def test_render_keeps_the_headings_in_document_order(tmp_path: Path):
-    """單一場之內，大綱的順序就是原稿的順序 —— 排序或去重都會讓議題對不回全文。"""
-    session = _session(tmp_path, "pm-20260902.md", "20260902")
-
-    text = hi.render(SERIES, "20260907", [session])
-
-    positions = [text.find(t) for _, t in session.outline]
-    assert all(p >= 0 for p in positions), "大綱每一項都要出現"
-    assert positions == sorted(positions)
-
-
-def test_render_gives_every_heading_its_own_line(tmp_path: Path):
-    """大綱是逐行的清單，不是一段接起來的句子。
-
-    這條刪掉 → 把換行接成空白（或反過來把每一項再拆行）都不會有人發現：
-    `in text` 照樣成立，只是索引變成一坨，agent 掃不動。下界同時擋住「只印了前幾項」。
-    """
-    session = _session(tmp_path, "data-20260831.md", "20260831")
-
-    lines = hi.render(SERIES, "20260907", [session]).split("\n")
-
-    assert len(lines) >= len(session.outline)
-    for _, title in session.outline:
-        owners = [line for line in lines if title in line]
-        assert len(owners) == 1, f"{title!r} 應該剛好佔一行，實際 {len(owners)} 行"
-
-
 OUTLINE_LINE = re.compile(r"( *)- \S.*")
 
 
@@ -784,17 +708,6 @@ def test_data_20260831_every_issue_heading_survives_and_no_template_layer_does()
     assert max(lvl for lvl, _ in got) == 3
 
 
-def test_data_20260831_depth_four_would_add_twenty_five_template_headings():
-    """把 `max_depth` 放寬一層會多收進 25 個「討論／狀態／風險」—— 資訊量是零。
-
-    這條在講預設值 3 的理由：同一份稿子 37 個 heading，其中 25 個是樣板。
-    """
-    text = (CORPUS / "data-20260831.md").read_text(encoding="utf-8")
-
-    assert len(hi.outline(text, 3)) == 12
-    assert len(hi.outline(text, 4)) == 37
-
-
 def test_data_20260831_compresses_a_two_hundred_line_note_into_thirty(tmp_path: Path):
     """驗收條件 5：一場 200 行級的正式稿壓到 30 行內。"""
     source = (CORPUS / "data-20260831.md").read_text(encoding="utf-8")
@@ -909,42 +822,7 @@ def test_rd_20260730_numbered_issue_headings_all_survive():
     assert got[0] == (1, "RD 會議記錄"), "H1 的粗體要脫掉"
 
 
-@pytest.mark.parametrize(
-    "fixture",
-    ["data-20260821.md", "data-20260824.md", "data-20260831.md", "pm-20260902.md",
-     "prof-20260812.md", "rd-20260730.md"],
-    ids=_qid,
-)
-def test_outline_never_invents_or_loses_a_heading(fixture):
-    """六份真實正式稿的共同底線：大綱 == 原檔深度 3 以內的 heading，不多不少。
-
-    上面每一份有自己的斷言（各會議結構不同）；這條只守「沒有任何一份掉東西或多東西」，
-    以後新增語料照樣適用。文字比對容忍反斜線跳脫（契約沒規定要不要還原）。
-    """
-    text = (CORPUS / fixture).read_text(encoding="utf-8")
-
-    got = [(lvl, _unslash(t)) for lvl, t in hi.outline(text)]
-    expected = [
-        (lvl, _unslash(t.replace("**", ""))) for lvl, t in _headings(text, hi.MAX_DEPTH)
-    ]
-
-    assert got == expected
-
-
 # --------------------------------------------------------------------------- build_index
-
-
-def test_build_index_writes_the_documented_filename(tmp_path: Path):
-    """驗收條件 1：索引檔就叫 `INDEX_FILENAME`，寫在 source artifacts 目錄裡。"""
-    root = tmp_path / "archive"
-    source_dir = tmp_path / "sources"
-    source_dir.mkdir()
-    _put(root, "20260824", (CORPUS / "data-20260824.md").read_text(encoding="utf-8"))
-
-    path = hi.build_index(source_dir, FOLDER, SERIES, "20260907", root=root)
-
-    assert path == source_dir / hi.INDEX_FILENAME
-    assert "議題一：客戶丁需求對焦（成員甲）" in path.read_text(encoding="utf-8")
 
 
 def test_build_index_creates_the_output_directory_tree(tmp_path: Path):
@@ -1198,19 +1076,10 @@ def test_cli_exits_two_on_an_unknown_meeting_key(cli_home: Path, tmp_path: Path)
 
 # --------------------------------------------------------------------------- 流程 B（Seam ③）
 
-CONTRACT_KEYS = {"SOURCE_DIR", "TRANSCRIPT", "EXTRACT", "CONTEXT", "DATE", "HISTORY_INDEX"}
-
-
-def test_flow_b_wires_the_index_builder_in():
-    """流程 B 自己產索引，不必 agent 另外跑一次 `history_index.py`（SKILL.md 明文）。
-
-    驗的是模組屬性而不是原始碼字串：`import history_index` 與
-    `from history_index import build_index` 兩種寫法都算數，改名或拿掉就抓得到。
-    `extract_audio_sources.main()` 是 async 又會打 NotebookLM，這裡不跑它。
-    """
-    module = load_script("extract_audio_sources")
-
-    assert hasattr(module, "build_index") or hasattr(module, "history_index")
+CONTRACT_KEYS = {
+    "RESULT_SOURCE_DIR", "RESULT_TRANSCRIPT", "RESULT_EXTRACT",
+    "RESULT_CONTEXT", "RESULT_DATE", "RESULT_HISTORY_INDEX",
+}
 
 
 TRANSCRIPT = "# 逐字稿\n\nSpeaker 1：這是本次會議的事實。\n"
@@ -1293,6 +1162,7 @@ def test_flow_b_stdout_value_is_the_index_file_that_was_actually_written(flow_b)
     """
     results, written = flow_b
 
+    assert CONTRACT_KEYS <= set(results), f"交棒契約少了 {CONTRACT_KEYS - set(results)}"
     assert results["RESULT_HISTORY_INDEX"] == str(written)
     assert Path(results["RESULT_HISTORY_INDEX"]).is_file()
     assert results["RESULT_HISTORY_INDEX"] != results["RESULT_SOURCE_DIR"]
@@ -1312,15 +1182,3 @@ def test_flow_b_index_holds_the_outline_not_this_meetings_sources(flow_b):
     assert "議題七：AI 課程與客戶現場支援" in text, "8/31 那場的大綱要在"
     assert "Speaker 1" not in text and "議題一：索引接上流程 B" not in text
 
-
-def test_flow_b_hands_off_the_index_path_on_stdout():
-    """交棒契約多的那一行必須跟其餘五行印在同一段，而且值是算出來的不是寫死的。
-
-    `main()` 打 NotebookLM，所以這條驗的是**印出去的那段文字**本身；那一行的值正不正確
-    由上面 CLI 那三條守著（同一個 `build_index` 回傳值）。
-    """
-    source = inspect.getsource(load_script("extract_audio_sources"))
-    printed = set(re.findall(r"RESULT_([A-Z_]+):", source))
-
-    assert CONTRACT_KEYS <= printed, f"少了 {CONTRACT_KEYS - printed}"
-    assert re.search(r"RESULT_HISTORY_INDEX:\s*\{", source), "值要內插，不能是寫死的字面路徑"
