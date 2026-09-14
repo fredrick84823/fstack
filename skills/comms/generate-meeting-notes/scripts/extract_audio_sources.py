@@ -769,30 +769,20 @@ def _markdown_to_gdocs(
 
             # `bolds` / `codes` 的 offset 是 `plain` 的 Python 字元位置 —— 解析層用字元
             # 是對的，換算成 Docs 的 UTF-16 index 是**這一層**的事。
-            for bs, be in bolds:
-                if bs < be:
+            # code 沒有原生樣式，以等寬字體＋淺灰底＋深紅字模擬，三個屬性缺一不可，
+            # 所以 fields 直接由 INLINE_CODE_STYLE 的 key 算出來，不另外手抄一份。
+            # ponytail: 每個 range 重切一次前綴，同一行是 O(n²)；會議記錄一行幾十字，
+            # 真的變長再改成掃一次就把 offset 對照表建好。
+            for ranges, style in ((bolds, {"bold": True}), (codes, INLINE_CODE_STYLE)):
+                for start, end in ranges:
                     fmt_requests.append({
                         "updateTextStyle": {
                             "range": {
-                                "startIndex": line_start + _u16len(plain[:bs]),
-                                "endIndex": line_start + _u16len(plain[:be]),
+                                "startIndex": line_start + _u16len(plain[:start]),
+                                "endIndex": line_start + _u16len(plain[:end]),
                             },
-                            "textStyle": {"bold": True},
-                            "fields": "bold",
-                        }
-                    })
-
-            # `code` — Docs 無原生 code 樣式，以等寬字體＋淺灰底＋深紅字模擬
-            for cs, ce in codes:
-                if cs < ce:
-                    fmt_requests.append({
-                        "updateTextStyle": {
-                            "range": {
-                                "startIndex": line_start + _u16len(plain[:cs]),
-                                "endIndex": line_start + _u16len(plain[:ce]),
-                            },
-                            "textStyle": INLINE_CODE_STYLE,
-                            "fields": "weightedFontFamily,backgroundColor,foregroundColor",
+                            "textStyle": style,
+                            "fields": ",".join(style),
                         }
                     })
 
