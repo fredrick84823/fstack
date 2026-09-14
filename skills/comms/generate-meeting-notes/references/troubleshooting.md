@@ -79,3 +79,28 @@ API controls → Manage Third-Party App Access → Internal apps → **Trust int
 
 **user credential 無法自我提權** —— 傳給 `google.auth.default(scopes=...)` 的 scopes
 對它無效，scope 在授權當下就固定了。
+
+## Markdown → Google Docs 樣式
+
+### 內文有 emoji 時，粗體／inline code 的底色整段跑掉
+
+**結論：這顆雷是真的，2026-09-14 修掉。** 不是「理論上可能」——
+修之前實測一行 `🚀 開場 \`code_a\` 結束`，送出去的 range 用 UTF-16 切回來是
+`' code_'`，不是 `'code_a'`。
+
+| | index 單位 |
+|---|---|
+| Docs API（`startIndex` / `endIndex`） | UTF-16 code unit |
+| 修之前的 `_markdown_to_gdocs` | Python 字元 |
+
+繁中、全形標點都在 BMP 內，兩者一致，所以預設 prompt 的語料從來沒炸過。
+emoji 是 surrogate pair：**一顆差 1，而 index 是整份文件累加的**——
+那顆 emoji 之後所有樣式範圍整體前移一格，越後面偏越多，
+症狀是「底色與粗體整體往左漂」而不是某一段壞掉。
+
+修法：`_u16len()` 把 offset 換算成 UTF-16 code unit，換算只發生在組 Docs request
+那一層，解析層（`_parse_inline` / `_classify_line`）的 offset 仍是 Python 字元。
+
+回歸釘在 `tests/unit/test_inline_style_requests.py`——
+**斷言是用送出去的 range 去切 UTF-16 編碼後的文字**，不是比對解析函式的中間產物。
+往後改動這段若又用 `len()` 算 index，那條會紅。
