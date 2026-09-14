@@ -28,7 +28,7 @@ stdout 印交棒契約的一行：
 
 退出碼：
     0  索引已寫出（**找不到任何歷史場次也是 0** —— 空索引是合法結果，不是錯誤）
-    2  參數錯誤：--meeting 指到 config 裡沒有的會議
+    2  參數錯誤：--meeting 指到 config 裡沒有的會議，或 --date 不是 8 位數字
 """
 
 import argparse
@@ -39,14 +39,13 @@ from pathlib import Path
 from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).parent))
-from local_archive import LOCAL_ARCHIVE_ROOT, SIDECAR_SUFFIX
+from local_archive import DATE_DIR, LOCAL_ARCHIVE_ROOT, SIDECAR_SUFFIX
 
 INDEX_FILENAME = "history-index.md"
 NOTE_PREFIX = "會議記錄"
 DEFAULT_SESSIONS = 3
 MAX_DEPTH = 3
 
-DATE_DIR = re.compile(r"\d{8}")
 _HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 _FENCE = re.compile(r"^\s*(```|~~~)")
 # 索引只要讀得懂的標題文字，不要行內標記。粗體與 inline code 的標記字元原樣留著會讓
@@ -58,7 +57,6 @@ _INLINE_MARK = re.compile(r"\*\*|__|`")
 # 殺得掉 —— 要殺就得寫逐字釘死版面的測試，那正是棒④會刪掉的裝飾性測試。
 INDEX_HEADER = (
     "**這是索引不是語料**：只有各場的 heading 大綱與指標，沒有內容行。\n"
-    "本次議題延伸自過去議題時，才沿「本機」路徑去讀那一場的全文。\n"
     "接地優先序低於 `transcript.md`：歷史不能長出本次會議沒講過的事實。"
 )
 EMPTY_NOTICE = "（本機歸檔沒有早於 {before_date} 的同系列場次。）"
@@ -147,14 +145,16 @@ def find_notes(
     return notes[-limit:]
 
 
-def read_session(note_path: Path, series_name: str, max_depth: int = MAX_DEPTH) -> Session:
+def read_session(note_path: Path, series_name: str) -> Session:
     """把一份正式稿讀成 `Session`。讀不到正式稿會 raise；側檔讀不到只是沒有 URL。"""
+    # 前綴對不上就退回整個檔名（`series_name` 含 `/` 之類時，寫檔那步會把它清成 `-`，
+    # 前綴就對不上了）。退化後的 label 仍然唯一且看得懂，所以不當成錯誤。
     label = note_path.stem.removeprefix(f"{NOTE_PREFIX}_{series_name}_")
     return Session(
         label=label,
         note_path=note_path,
         doc_url=doc_url(note_path.with_name(note_path.stem + SIDECAR_SUFFIX)),
-        outline=outline(note_path.read_text(encoding="utf-8"), max_depth),
+        outline=outline(note_path.read_text(encoding="utf-8")),
     )
 
 
@@ -205,11 +205,18 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="產同系列近 N 場的歷史會議索引")
     parser.add_argument("--meeting", "-m", required=True, help="會議類型（config.json 的 meetings key）")
-    parser.add_argument("--date", required=True, help="本次日期 YYYYMMDD；索引只收早於它的場次")
+    parser.add_argument("--date", required=True, help="本次日期 YYYYMMDD（8 位數字）；索引只收早於它的場次")
     parser.add_argument("--output-dir", required=True, help="source artifacts 目錄，索引寫在裡面")
     parser.add_argument("--sessions", type=int, default=DEFAULT_SESSIONS, help=f"取近 N 場（預設 {DEFAULT_SESSIONS}）")
     parser.add_argument("--root", help="歸檔根目錄（預設吃 config 的 local_archive_root）")
     args = parser.parse_args()
+
+    # 日期比較是字串比較。`--date` 不是 8 位數字時（例如 `2026-09-14`），每一場都會被
+    # 判成「本次或之後」而排掉 —— 索引靜靜寫成空檔、exit 0、契約行照印。失敗模式是資料
+    # 缺失而不是報錯，人會去 debug 索引但病在參數，所以擋在這裡。
+    if not DATE_DIR.fullmatch(args.date):
+        print(f"❌ --date 要 8 位數字 YYYYMMDD，收到：'{args.date}'")
+        sys.exit(2)
 
     meetings = load_config().get("meetings", {})
     if args.meeting not in meetings:

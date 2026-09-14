@@ -468,20 +468,6 @@ def test_read_session_label_is_the_filename_minus_the_series_prefix(
     assert hi.read_session(note, series).label == expected
 
 
-def test_read_session_passes_max_depth_through_to_the_outline(tmp_path: Path):
-    """`max_depth` 要真的傳到大綱抽取，不是收下來就丟掉。
-
-    這條刪掉 → 參數被吃掉、永遠用 `MAX_DEPTH`，而預設值下的每一條測試都還是綠的。
-    往上調（想看子層）與往下調（想再壓）兩個方向都驗一次。
-    """
-    text = (CORPUS / "data-20260831.md").read_text(encoding="utf-8")
-    note = _put(tmp_path, "20260831", text)
-
-    assert hi.read_session(note, SERIES, 2).outline == hi.outline(text, 2)
-    assert hi.read_session(note, SERIES, 4).outline == hi.outline(text, 4)
-    assert [lvl for lvl, _ in hi.read_session(note, SERIES, 2).outline] == [1, 2, 2, 2, 2]
-
-
 def test_read_session_finds_the_sidecar_by_the_documented_name(tmp_path: Path):
     """側檔檔名 = 正式稿檔名去掉 `.md` 再接 `SIDECAR_SUFFIX`。
 
@@ -961,6 +947,81 @@ def test_build_index_writes_the_documented_filename(tmp_path: Path):
     assert "議題一：客戶丁需求對焦（成員甲）" in path.read_text(encoding="utf-8")
 
 
+def test_build_index_creates_the_output_directory_tree(tmp_path: Path):
+    """`source_dir` 連上層都還不存在時要一路建出來。
+
+    流程 A 的 source artifacts 目錄是
+    `/tmp/meeting_sources/<key>_<date>[_<instance>]` —— 第一次跑某個會議時
+    `/tmp/meeting_sources` 本身就不存在。這條刪掉 → 只有第一次跑會炸，而炸的訊息是
+    `FileNotFoundError`，看起來像歸檔路徑設錯而不是輸出目錄沒建。
+    """
+    root = tmp_path / "archive"
+    source_dir = tmp_path / "meeting_sources" / "data_20260907" / "巢狀"
+    _put(root, "20260831", (CORPUS / "data-20260831.md").read_text(encoding="utf-8"))
+
+    path = hi.build_index(source_dir, FOLDER, SERIES, "20260907", root=root)
+
+    assert path == source_dir / hi.INDEX_FILENAME
+    assert "議題七：AI 課程與客戶現場支援" in path.read_text(encoding="utf-8")
+
+
+def test_build_index_rerun_overwrites_instead_of_failing(tmp_path: Path):
+    """對同一個 `source_dir` 重跑是覆寫，不是報錯，也不是接在後面。
+
+    重跑同一場發佈是常態（extract 被判不合格重試、多場次補跑）。這條刪掉 →
+    第二次跑要嘛炸在「檔案已存在」，要嘛把兩份索引接成一份（agent 會讀到兩次大綱，
+    以為同一個議題談過兩輪）。
+    """
+    root = tmp_path / "archive"
+    source_dir = tmp_path / "sources"
+    _put(root, "20260821", (CORPUS / "data-20260821.md").read_text(encoding="utf-8"))
+    _put(root, "20260831", (CORPUS / "data-20260831.md").read_text(encoding="utf-8"))
+
+    first = hi.build_index(source_dir, FOLDER, SERIES, "20260907", root=root, limit=2)
+    before = first.read_text(encoding="utf-8")
+    second = hi.build_index(source_dir, FOLDER, SERIES, "20260907", root=root, limit=1)
+    after = second.read_text(encoding="utf-8")
+
+    assert second == first
+    assert after != before, "第二次的 limit 不同，內容就該不同 —— 相同表示根本沒重寫"
+    assert after.count("議題七：AI 課程與客戶現場支援") == 1, "覆寫不是附加"
+    assert "議題七：客戶乙（成員壬 的需求）" not in after
+
+
+def test_build_index_passes_the_series_and_date_all_the_way_down(tmp_path: Path):
+    """`build_index` 收到的 `series_name` 與 `before_date` 要真的傳到下游兩支。
+
+    `render` 與 `read_session` 各自的測試都很密，但它們是**直接呼叫**的；中間那段
+    「`build_index` 有沒有把對的東西傳下去」沒有人看。傳錯的症狀全都只出現在寫出去的
+    那個檔裡，而檔案存在、是索引、大綱齊全這些都還是對的：
+
+    - `series_name` 沒傳到 `render` → 標題變成「歷史會議索引：None」
+    - `series_name` 沒傳到 `read_session` → 每場小標從 `20260824_am` 退化成完整檔名
+    - `before_date` 沒傳到 `render` → 「全部早於 None」
+
+    同日兩場（`_am` / `_pm`）是第三條的鑑別力來源：只有前綴真的被拿掉，兩場的小標才
+    短到能一眼分辨；退化成完整檔名時差異被埋在最後三個字元。
+    """
+    root = tmp_path / "archive"
+    source_dir = tmp_path / "sources"
+    for date, suffix in [("20260821", ""), ("20260824", "_am"), ("20260824", "_pm")]:
+        _put(root, date, "# 會議記錄\n\n## 核心要點\n", name=_note_name(SERIES, date, suffix))
+
+    text = hi.build_index(source_dir, FOLDER, SERIES, "20260907", root=root).read_text(
+        encoding="utf-8"
+    )
+    lines = text.split("\n")
+
+    titles = [line for line in lines if line.startswith("# ")]
+    assert len(titles) == 1 and SERIES in titles[0]
+
+    notices = [line for line in lines if "20260907" in line and not line.startswith("## ")]
+    assert notices, "「近 N 場／日期上限」那行要帶得到 before_date"
+
+    labels = sorted(line[len("## "):] for line in lines if line.startswith("## "))
+    assert labels == ["20260821", "20260824_am", "20260824_pm"]
+
+
 def test_build_index_skips_only_the_broken_session(tmp_path: Path):
     """驗收條件 7：單一份正式稿讀不進來時只跳過那一場，整個流程不掛。
 
@@ -1079,6 +1140,47 @@ def test_cli_root_flag_overrides_the_configured_archive(cli_home: Path, tmp_path
     assert "議題七：AI 課程與客戶現場支援" not in text
 
 
+@pytest.mark.parametrize(
+    "date,ok",
+    [
+        ("20260914", True),
+        ("2026-09-14", False),
+        ("2026/09/14", False),
+        ("abc", False),
+        ("202609141", False),
+        ("2026091", False),
+        ("", False),
+    ],
+    ids=_qid,
+)
+def test_cli_requires_an_eight_digit_date(cli_home: Path, tmp_path: Path, date, ok):
+    """`--date` 不是 8 位數字就 exit 2，而且什麼都不產。
+
+    日期比較是字串比較，所以 `2026-09-14` 不會報錯，它會讓**每一場**都被判成
+    「本次或之後」（`'0' > '-'`）而排掉：索引靜靜寫成空檔、exit 0、契約行照印。
+    下游流程 C 讀到的是一份合法但空的索引，沒有任何訊號說參數給錯了 —— 人會去 debug
+    索引內容，病其實在參數。所以這裡要一次釘三件事：退出碼、不留半成品、不印契約行。
+
+    第一格是對照組：合法日期照樣 exit 0 並產檔，免得 guard 寫成「全部擋掉」也綠。
+    """
+    source_dir = tmp_path / f"sources-{date or 'empty'}".replace("/", "-")
+    source_dir.mkdir()
+
+    proc = _run_cli(
+        cli_home, "--meeting", "data", "--date", date, "--output-dir", str(source_dir)
+    )
+    index = source_dir / hi.INDEX_FILENAME
+
+    if ok:
+        assert proc.returncode == 0, proc.stderr
+        assert index.is_file()
+        assert f"RESULT_HISTORY_INDEX: {index}" in proc.stdout
+    else:
+        assert proc.returncode == 2, proc.stdout + proc.stderr
+        assert not index.exists(), "參數錯誤時不該留下一份空索引"
+        assert "RESULT_HISTORY_INDEX" not in proc.stdout
+
+
 def test_cli_exits_two_on_an_unknown_meeting_key(cli_home: Path, tmp_path: Path):
     """config 沒有那個會議 → exit 2，而且不要留下一份空索引讓下游以為成功。"""
     source_dir = tmp_path / "sources3"
@@ -1109,6 +1211,106 @@ def test_flow_b_wires_the_index_builder_in():
     module = load_script("extract_audio_sources")
 
     assert hasattr(module, "build_index") or hasattr(module, "history_index")
+
+
+TRANSCRIPT = "# 逐字稿\n\nSpeaker 1：這是本次會議的事實。\n"
+EXTRACT = (
+    "# 議題\n\n* 議題一：索引接上流程 B\n\n# 決策\n\n* 決策一：交棒契約多一行\n\n"
+    "# 行動項目\n\n* 行動一：補測試\n\n# 風險\n\n* 風險一：值印錯沒人發現\n"
+)
+
+
+@pytest.fixture
+def flow_b(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys):
+    """跑一次流程 B 的 `main()`，回傳 (RESULT_* 的 dict, 索引實際被寫到哪)。
+
+    只有外部相依換成替身（config、音訊切分、NotebookLM、glossary、片段清理）；
+    `build_index` 包一層 spy **轉呼真貨**並強制 `root=tmp_path`，所以索引是真的產出來的，
+    同時不會去讀使用者真實的歸檔樹。`main()` 的組裝邏輯全部走真的那條路。
+    """
+    module = load_script("extract_audio_sources")
+    archive = tmp_path / "archive"
+    source_dir = tmp_path / "sources"
+    audio = tmp_path / "data_meeting_20260907.m4a"
+    audio.write_bytes(b"not really audio")
+    _put(archive, "20260831", (CORPUS / "data-20260831.md").read_text(encoding="utf-8"))
+
+    meeting = {
+        "series_name": SERIES,
+        "folder_name": FOLDER,
+        "folder_id": "series-folder-id",
+        "notebook_name": "notebook",
+        "slack_channel": "",
+        "attendees": [],
+    }
+    monkeypatch.setattr(module, "load_config", lambda: {"meetings": {"data": meeting}})
+    monkeypatch.setattr(module, "load_glossary_entries", lambda *a, **kw: ([], None))
+    monkeypatch.setattr(module, "fetch_shared_glossary", lambda *a, **kw: (None, "略過"))
+    monkeypatch.setattr(module, "build_glossary_prompt", lambda *a, **kw: "")
+    monkeypatch.setattr(module, "load_prompt", lambda *a, **kw: "prompt")
+    monkeypatch.setattr(module, "build_meeting_context_markdown", lambda *a, **kw: "# 會議脈絡\n")
+    monkeypatch.setattr(module, "get_audio_duration_seconds", lambda *a, **kw: 600.0)
+    monkeypatch.setattr(module, "split_audio", lambda *a, **kw: [audio])
+    monkeypatch.setattr(module, "cleanup_segments", lambda *a, **kw: None)
+
+    async def fake_upload(*a, **kw):
+        return TRANSCRIPT, EXTRACT
+
+    monkeypatch.setattr(module, "upload_and_extract_sources", fake_upload)
+
+    built: list[Path] = []
+    real_build = module.build_index
+
+    def spy(*args, **kwargs):
+        kwargs["root"] = archive
+        path = real_build(*args, **kwargs)
+        built.append(path)
+        return path
+
+    monkeypatch.setattr(module, "build_index", spy)
+
+    import asyncio
+
+    asyncio.run(
+        module.main(str(audio), "data", delete_segments=True, output_dir=str(source_dir))
+    )
+
+    results = {
+        line.split(": ", 1)[0]: line.split(": ", 1)[1]
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith("RESULT_") and ": " in line
+    }
+    assert built, "流程 B 應該自己產索引"
+    return results, built[-1]
+
+
+def test_flow_b_stdout_value_is_the_index_file_that_was_actually_written(flow_b):
+    """交棒契約印出去的**值**必須是那次真的寫出來的索引檔。
+
+    這條刪掉 → 那一行印成 source artifacts 目錄（或 transcript、或別場的索引）都照樣綠：
+    行在、值有內插、檔案系統上也真的有東西。下游流程 C 只吃 stdout，拿這個值去
+    `read_text()` 會拿到一個目錄。Seam ③ 的斷言要打在送出去的**值**上，不是那行的存在。
+    """
+    results, written = flow_b
+
+    assert results["RESULT_HISTORY_INDEX"] == str(written)
+    assert Path(results["RESULT_HISTORY_INDEX"]).is_file()
+    assert results["RESULT_HISTORY_INDEX"] != results["RESULT_SOURCE_DIR"]
+    assert Path(results["RESULT_HISTORY_INDEX"]).name == hi.INDEX_FILENAME
+
+
+def test_flow_b_index_holds_the_outline_not_this_meetings_sources(flow_b):
+    """印出去的那個檔內容真的是索引：歷史場次的大綱在，本次的逐字稿與 extract 不在。
+
+    只斷言「檔案存在」的話，把值指到 `transcript.md` 也會綠 —— 而那正是流程 C 最不該
+    當成歷史來讀的東西（本次事實混進歷史欄位，接地優先序整個倒過來）。
+    """
+    results, _ = flow_b
+    text = Path(results["RESULT_HISTORY_INDEX"]).read_text(encoding="utf-8")
+
+    assert hi.INDEX_HEADER.split("\n")[0] in text
+    assert "議題七：AI 課程與客戶現場支援" in text, "8/31 那場的大綱要在"
+    assert "Speaker 1" not in text and "議題一：索引接上流程 B" not in text
 
 
 def test_flow_b_hands_off_the_index_path_on_stdout():
