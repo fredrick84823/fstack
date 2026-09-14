@@ -26,7 +26,17 @@ PURE := \
 	_parse_blocks \
 	_parse_table_rows \
 	_classify_line \
-	preprocess_content
+	preprocess_content \
+	_norm \
+	flatten \
+	classify \
+	diff_lines \
+	merge \
+	_all_entries \
+	validate_merged \
+	prune_local \
+	keys_to_push \
+	summary_line
 
 # key 的形狀是 `<路徑轉點>.x_<函式名>__mutmut_<n>` —— `x_` 前綴是 mutmut 加的，
 # 少了它 fnmatch 一個都配不到，而配不到時 mutmut 是 assert 不是靜靜跳過。
