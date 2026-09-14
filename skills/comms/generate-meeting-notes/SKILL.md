@@ -333,7 +333,7 @@ cd "$SKILL_DIR" && uv run scripts/replace_speakers.py \
 | 需要時 | 讀 |
 |---|---|
 | 首次設定、`config.json` 結構、Google 認證檔案的角色 | `references/setup.md` |
-| glossary 格式、共用 glossary 的合併與降級 | `references/glossary.md` |
+| glossary 格式、共用 glossary 的合併與降級、回寫共用檔 | `references/glossary.md` |
 | 同日同類型多檔／多場次、`meeting_instance` 命名 | `references/multi-session.md` |
 | 403 / `This app is blocked` / scope 診斷 / NotebookLM 重跑 | `references/troubleshooting.md` |
 | 預設 prompt 內容 | `references/default-prompt.md` |
