@@ -49,6 +49,9 @@ test -n "$SKILL_DIR" || { echo "generate-meeting-notes skill directory not found
 - 其他 repo 內的同名副本 → **不要跟**。那些凍結在 2026-06 重構之前，比安裝版舊
 - 安裝版與 fstack 在流程上不一致 → **停下來**列出差異，由使用者決定
 
+發佈流程結束會自己比對一次（`⚠️  安裝版與 fstack 已經漂移`），印完照樣回 `0` ——
+Doc 那時已經發出去了，擋下來沒有意義。看到就跑 `bin/sync-from-installed.sh` 掉齊。
+
 ## 流程選擇
 
 | 流程 | 觸發條件 | 產出 |

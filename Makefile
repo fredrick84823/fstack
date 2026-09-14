@@ -16,6 +16,8 @@ MUT_LOG := .mutmut-run.log
 # 函式。I/O 那些現在零測試，掛進去只會噴一牆 🫥 no-tests，數字沒有意義。
 # 新增純函式時把名字加進來 —— 不加就是量不到它。
 # 沒列進來的純函式：build_glossary_prompt / is_non_content_extract / inject_attendees。
+# parity.py 同理只掛 drift_warning —— sync_diff / find_repo / report_drift 碰檔案系統與
+# 子行程，是 I/O 那一層，不是 Seam ①。
 # 它們現在零測試，掛進去是 147 顆 🫥 no-tests —— 跟掛 NotebookLM／Drive I/O 同一種
 # 稀釋，只是走函式那道門。有測試了再加回來（glossary 那兩支是 #10，attendees 是 #9）。
 PURE := \
@@ -26,7 +28,8 @@ PURE := \
 	_parse_blocks \
 	_parse_table_rows \
 	_classify_line \
-	preprocess_content
+	preprocess_content \
+	drift_warning
 
 # key 的形狀是 `<路徑轉點>.x_<函式名>__mutmut_<n>` —— `x_` 前綴是 mutmut 加的，
 # 少了它 fnmatch 一個都配不到，而配不到時 mutmut 是 assert 不是靜靜跳過。

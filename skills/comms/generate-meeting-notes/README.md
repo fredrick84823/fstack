@@ -355,6 +355,8 @@ meeting-context.md
 | `meetings.<key>.notebook_name` | `extract_audio_sources.py --meeting <key>` 查 config | 錄音輸入的 NotebookLM notebook |
 | `prompt_path` | main agent 讀取 | 成稿 prompt |
 | `glossary_path` | main agent / `extract_audio_sources.py` 讀取 | naming-only glossary |
+| `local_archive_root` | `local_archive.py` 讀取 | 本機正式稿歸檔根目錄（預設 `~/meeting-notes`）|
+| `fstack_repo` | `parity.py` 讀取 | fstack 工作樹位置；發佈結束比對安裝版有沒有漂移。沒設定就不比 |
 
 `glossary.json` 空範本：
 

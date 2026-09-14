@@ -59,6 +59,7 @@ from extract_audio_sources import (
     load_config,
 )
 from local_archive import note_title, write_local_archive
+from parity import report_drift
 
 
 def extract_date_from_str(s: str) -> str:
@@ -329,6 +330,10 @@ def main():
             send_notification(slack_channel, doc_url, drive_path, series_name, date_str)
         else:
             print(f"⚠️  未設定 slack_channel，跳過通知")
+
+    # 發佈結束才比對安裝版與 fstack。此刻編輯已經停了，漂移是真漂移（#17）。
+    # 不擋流程：Doc 已經發出去，回非零只會讓人學會忽略它。
+    report_drift(config)
 
     print("\n✅ 完成")
 
