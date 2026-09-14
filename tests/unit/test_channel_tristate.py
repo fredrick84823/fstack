@@ -11,7 +11,20 @@
 
 不打網路、不碰使用者的家目錄：Drive 與 config 用替身、Slack 兩支換成記錄器、
 歸檔強制 `root=tmp_path`、設定檔一律落在 `tmp_path`。
-"""
+
+**這個檔裡 `channel` 有兩顆模組物件，是刻意的。** 純函式那組走 `load_script("channel")`
+（模組 `__name__` 是路徑推出來的點分名），發佈／CLI 接線那組經由
+`import create_gdoc_from_md`，而它自己 `import channel` 拿到的是 import system 那顆
+（`__name__ == "channel"`）。repo 既有作法一樣分兩種，只是分在兩個檔
+（`test_drift_warning.py` 走 `load_script("parity")`、`test_publish_drift.py` 走
+`import parity`）。
+
+代價講清楚，免得下一個人重新爭論一次：mutmut 的 trampoline 是拿模組 `__name__` 去配
+mutant key，所以**只有 `load_script` 那顆的呼叫**算得進 channel.py 的 mutant 覆蓋；
+接線那幾條（`publish_once` 與 CLI）的 hit 配不上 key，對 mutation 分數沒有貢獻。
+它們守的是別的東西 —— 「發佈流程真的接上了三態」「寫進去的是哪個檔」——
+那些本來就不是 mutation 量得到的層。反過來把純函式那組也改成平常 import 的話，
+`channel_state` 等五支會整批變 🫥 no-tests（實測過），所以不要統一。"""
 
 from __future__ import annotations
 
@@ -19,6 +32,7 @@ import ast
 import json
 import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -170,6 +184,86 @@ def test_the_three_sentinels_are_distinct():
     assert len({channel.UNSET, channel.MUTED, channel.SEND}) == 3
 
 
+# ---------------------------------------------------------------- 要送出去的那個值
+
+
+def test_channel_id_strips_the_padding_off_a_real_channel():
+    """設定檔是手改的，ID 前後帶空白很常見。送出去的要是清乾淨的那個值。"""
+    assert channel.channel_id(meeting_with("  C0PADDED  ")) == "C0PADDED"
+
+
+def test_channel_id_is_empty_for_muted():
+    """`""` 沒有要送的對象。回一個 truthy 值的話呼叫端會照送。"""
+    assert channel.channel_id(meeting_with("")) == ""
+
+
+def test_channel_id_is_empty_for_unset():
+    """`null` 同理 —— 而且它多一個坑：回 `None` 的話呼叫端一 `.strip()` 就 AttributeError。"""
+    assert channel.channel_id(meeting_with(None)) == ""
+    assert channel.channel_id(meeting_with(ABSENT)) == ""
+
+
+@pytest.mark.parametrize("value", [None, "", "   ", "C0XXXXXXXXX", "  C0PADDED  "], ids=[
+    "null", "muted", "whitespace", "plain", "padded",
+])
+def test_channel_id_agrees_with_channel_state(value):
+    """兩支是同一條規則的兩面：`SEND` 時一定有值可送，其餘時一定沒有。
+
+    這支存在的理由就是「呼叫端不要自己再判一次」（Feature Envy）。兩份規則一旦分岔，
+    症狀是 `channel_state` 說要發、`channel_id` 給空字串 —— Slack 回
+    `channel_not_found`，而記錄那邊一切正常，沒人會回頭查設定檔。
+    """
+    meeting = meeting_with(value)
+    if channel.channel_state(meeting) == channel.SEND:
+        assert channel.channel_id(meeting)
+    else:
+        assert channel.channel_id(meeting) == ""
+
+
+# ------------------------------------------------ setup 那題的答案 → 要寫進 JSON 的值
+
+
+def test_an_answer_overwrites_whatever_was_there():
+    """有答案就覆蓋 —— 三種既有狀態一視同仁，包含改掉一個已經設好的 channel。"""
+    assert channel.channel_from_answer("C0NEW", "C0OLD") == "C0NEW"
+    assert channel.channel_from_answer("C0NEW", None) == "C0NEW"
+    assert channel.channel_from_answer("C0NEW", "") == "C0NEW"
+
+
+def test_enter_on_an_unset_meeting_stays_unset():
+    """沒設過、按 Enter → 還是「還沒設定」，提醒繼續出現。"""
+    assert channel.channel_from_answer("", None) is None
+    assert channel.channel_state({"slack_channel": channel.channel_from_answer("", None)}) == (
+        channel.UNSET
+    )
+
+
+def test_enter_on_a_muted_meeting_stays_muted():
+    """**這是 Spec 軸抓到的那個 bug。**
+
+    `""`（我已經決定這場不發通知）按 Enter 被寫成 `null` 的話，它就無聲降級成
+    「還沒設定」，之後每一場會都被 DM 一次 —— 而區分這兩態是這張票的全部內容。
+    兩者都 falsy，`answer or existing or None` 這種寫法剛好會踩到。
+    """
+    assert channel.channel_from_answer("", "") == ""
+    assert channel.channel_state({"slack_channel": channel.channel_from_answer("", "")}) == (
+        channel.MUTED
+    )
+
+
+def test_enter_on_a_configured_meeting_keeps_the_channel():
+    """沒答案就原樣 —— 第三種既有狀態。
+
+    這格與上面兩格是同一條規則（空答案＝不改變這個欄位），不是三個各自的特例。
+    只對 `""` 特別處理的寫法在這裡會回 `None`，把設好的 channel 洗掉，
+    而症狀跟 `""` 被降級成 `null` 一樣安靜：使用者只是重跑了一次 setup、什麼都沒改。
+    """
+    assert channel.channel_from_answer("", "C0OLD") == "C0OLD"
+    assert channel.channel_state({"slack_channel": channel.channel_from_answer("", "C0OLD")}) == (
+        channel.SEND
+    )
+
+
 # ---------------------------------------------------------------- DM 提醒的內容
 
 
@@ -256,6 +350,18 @@ def test_a_real_channel_gets_the_notification(publish_once):
     assert run.code == 0
 
 
+def test_the_published_channel_is_the_stripped_one(publish_once):
+    """設定檔手改留下的前後空白不准跟著送出去 —— Slack 只會回 `channel_not_found`，
+    而那則通知沒發出去這件事，在發佈流程這邊看起來一切正常。"""
+    run = publish_once("  C0PADDED  ")
+
+    assert len(run.sent) == 1
+    assert run.channel_arg == "C0PADDED"
+    assert run.dms == []
+    assert run.results["RESULT_URL"] == DOC_URL
+    assert run.code == 0
+
+
 def test_no_slack_skips_the_dm_too(publish_once):
     """`--no-slack` 是「這次不要碰 Slack」，DM 也算碰 Slack。"""
     run = publish_once(None, extra_argv=("--no-slack",))
@@ -273,12 +379,136 @@ def test_send_dm_does_not_exit_when_there_is_no_token(monkeypatch, capsys):
     """
     monkeypatch.setattr(slack, "load_config", lambda: {})
     monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+    monkeypatch.setattr(slack, "_post", lambda *a, **kw: pytest.fail("沒 token 還是送了"))
 
     assert slack.send_dm("測試提醒") is False
     assert capsys.readouterr().out.strip(), "靜默回 False 等於沒人知道提醒沒送出去"
 
 
+def test_send_dm_does_not_post_when_there_is_no_recipient(monkeypatch, capsys):
+    """有 token 但沒設 `slack_dm_user` → 不該走到 `_post`（沒有對象可送）。"""
+    monkeypatch.setattr(slack, "load_config", lambda: {"slack_bot_token": "xoxb-t"})
+    monkeypatch.setattr(slack, "_post", lambda *a, **kw: pytest.fail("沒有收件對象還是送了"))
+
+    assert slack.send_dm("測試提醒") is False
+    assert capsys.readouterr().out.strip()
+
+
+def test_send_dm_posts_the_text_to_the_configured_user(monkeypatch, capsys):
+    """設定齊全時，送出去的對象是 `slack_dm_user`、內容是原封不動的那段字。
+
+    斷言打在 `_post` 收到的參數上：`send_dm` 把 text 弄丟或送給別人，
+    回傳值照樣是 `True`。
+    """
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        slack, "load_config", lambda: {"slack_bot_token": "xoxb-t", "slack_dm_user": "U0ME"}
+    )
+    monkeypatch.setattr(slack, "_post", lambda *a: (calls.append(a), True)[1])
+
+    assert slack.send_dm("測試提醒") is True
+    capsys.readouterr()
+
+    (token, target, text, _what), = calls
+    assert (token, target, text) == ("xoxb-t", "U0ME", "測試提醒")
+
+
+def fake_slack_sdk() -> tuple[ModuleType, list]:
+    """一顆假的 `slack_sdk`：`WebClient(token).chat_postMessage(**kw)` 記下來就好。"""
+    sent: list = []
+
+    class WebClient:
+        def __init__(self, token=None, **kw):
+            sent.append(("init", token))
+
+        def chat_postMessage(self, **kw):
+            sent.append(("post", kw))
+            return {"ok": True}
+
+    sdk = ModuleType("slack_sdk")
+    sdk.WebClient = WebClient
+    errors = ModuleType("slack_sdk.errors")
+
+    class SlackApiError(Exception):
+        def __init__(self, message="", response=None):
+            super().__init__(message)
+            self.response = response
+
+    errors.SlackApiError = SlackApiError
+    sdk.errors = errors
+    return sdk, sent
+
+
+def test_post_sends_the_text_to_the_target(monkeypatch, capsys):
+    """`_post` 是兩支（channel 通知與 DM）唯一的出口，所以 target 與 text 要原樣帶到。"""
+    sdk, sent = fake_slack_sdk()
+    monkeypatch.setitem(sys.modules, "slack_sdk", sdk)
+    monkeypatch.setitem(sys.modules, "slack_sdk.errors", sdk.errors)
+
+    assert slack._post("xoxb-t", "C0ABC", "內容", "通知") is True
+    capsys.readouterr()
+
+    assert ("init", "xoxb-t") in sent
+    (post,) = [kw for tag, kw in sent if tag == "post"]
+    assert post["channel"] == "C0ABC"
+    assert post["text"] == "內容"
+
+
+def test_post_survives_a_machine_without_slack_sdk(monkeypatch, capsys):
+    """`slack_sdk` 沒裝時印一行回 `False`，不拋 ImportError。
+
+    `slack_sdk` 移進函式裡 import 之後，有 token 但沒裝套件的機器會**在 Doc 建好之後**
+    才炸 —— 那時炸掉等於把 `RESULT_URL` 連同整個交棒一起吞掉，與「通知失敗不擋流程」
+    完全相反。`mutants/` 那道 env 與 CI 都沒裝它，所以這條在那裡是真的走這條路。
+    """
+    monkeypatch.setitem(sys.modules, "slack_sdk", None)  # import 時 ImportError
+
+    assert slack._post("xoxb-t", "C0ABC", "內容", "通知") is False
+    assert capsys.readouterr().out.strip(), "靜默回 False 等於沒人知道為什麼沒收到"
+
+
 # ---------------------------------------------------------------- setup 寫出來的值
+
+
+def run_setup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    existing: dict | None = None,
+    channel_answer: str = "",
+) -> dict:
+    """真的跑一次 `setup_config`，全程只碰 `tmp_path`，回傳寫出來的 `pm會議` entry。
+
+    `existing` 給的話先當成已存在的設定檔放好（模擬「重跑 setup」）。
+    stub 看 prompt 文字決定回什麼，不靠問題順序 —— 順序是實作內部，會變。
+    channel 那題一律按 Enter（回空字串）。
+    """
+    import setup as setup_mod
+
+    config_path = tmp_path / "config.json"
+    if existing is not None:
+        config_path.write_text(
+            json.dumps({"meetings": {"pm會議": existing}}, ensure_ascii=False), encoding="utf-8"
+        )
+
+    monkeypatch.setattr(setup_mod, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(setup_mod, "CONFIG_PATH", config_path)
+    monkeypatch.setattr(setup_mod, "setup_glossary_entries", lambda *a, **kw: None)
+
+    rounds = {"n": 0}
+
+    def answer(prompt: str = "") -> str:
+        if "會議類型" in prompt and "空白則完成" in prompt:
+            rounds["n"] += 1
+            return "pm會議" if rounds["n"] == 1 else ""  # 第二輪空白 → 結束迴圈
+        if "Slack Channel ID" in prompt:
+            return channel_answer
+        return ""  # 其餘全部跳過
+
+    monkeypatch.setattr("builtins.input", answer)
+
+    setup_mod.setup_config(with_audio=False)
+
+    return json.loads(config_path.read_text(encoding="utf-8"))["meetings"]["pm會議"]
 
 
 def test_setup_writes_null_not_empty_string_when_the_question_is_skipped(
@@ -290,32 +520,52 @@ def test_setup_writes_null_not_empty_string_when_the_question_is_skipped(
     提醒一次都不會出現 —— 而那正是這張票要修的症狀。
 
     真的驅動 `setup_config`：這條要守的就是「互動流程寫出去的值」，
-    直接斷言一個自己捏的 dict 等於什麼都沒驗。stub 看 prompt 文字決定回什麼，
-    不靠問題順序 —— 順序是實作內部，會變。
+    直接斷言一個自己捏的 dict 等於什麼都沒驗。
     """
-    import setup as setup_mod
-
-    monkeypatch.setattr(setup_mod, "CONFIG_DIR", tmp_path)
-    monkeypatch.setattr(setup_mod, "CONFIG_PATH", tmp_path / "config.json")
-    monkeypatch.setattr(setup_mod, "setup_glossary_entries", lambda *a, **kw: None)
-
-    rounds = {"n": 0}
-
-    def answer(prompt: str = "") -> str:
-        if "會議類型" in prompt and "空白則完成" in prompt:
-            rounds["n"] += 1
-            return "pm會議" if rounds["n"] == 1 else ""  # 第二輪空白 → 結束迴圈
-        return ""  # 其餘全部跳過，包含 Slack Channel ID 那題
-
-    monkeypatch.setattr("builtins.input", answer)
-
-    setup_mod.setup_config(with_audio=False)
-
-    written = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
-    entry = written["meetings"]["pm會議"]
+    entry = run_setup(tmp_path, monkeypatch)
 
     assert entry["slack_channel"] is None
     assert channel.channel_state(entry) == channel.UNSET
+
+
+def test_rerunning_setup_does_not_downgrade_a_muted_meeting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """**Spec 軸抓到的 bug 走完整流程的那一條。**
+
+    一個 `""`（我已經決定這場不發通知）的會議，重跑 setup 按 Enter 就被寫成 `null`，
+    於是無聲降級成「還沒設定」—— 之後每場會都被 DM 一次。使用者做的唯一動作是
+    「重跑一次 setup、什麼都沒改」，所以這個退化不會有人聯想到原因。
+
+    上面 `channel_from_answer` 那層的 case 只驗函式；這條驗 `setup.py` 真的接上了它。
+    """
+    entry = run_setup(tmp_path, monkeypatch, existing={"slack_channel": ""})
+
+    assert entry["slack_channel"] == ""
+    assert channel.channel_state(entry) == channel.MUTED
+
+
+def test_rerunning_setup_keeps_a_configured_channel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """已經設好 channel 的會議，重跑 setup 按 Enter 不該把它洗掉。"""
+    entry = run_setup(tmp_path, monkeypatch, existing={"slack_channel": "C0KEEPME"})
+
+    assert entry["slack_channel"] == "C0KEEPME"
+    assert channel.channel_id(entry) == "C0KEEPME"
+
+
+def test_setup_never_writes_a_fourth_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """那題打了空白就走 —— 寫進 JSON 的必須是三態之一，不是 `"   "`。
+
+    `"   "` 既不是 `null` 也不是 `""`：`channel_state` 判它不是 `SEND`，但沒有任何
+    路徑處理它，而它長得跟「刻意不發」一模一樣（都不發、都不提醒？看實作怎麼落）。
+    現在靠 `ask()` 會 strip 擋住，這條釘的就是那個保證。
+    """
+    entry = run_setup(tmp_path, monkeypatch, channel_answer="   ")
+
+    assert entry["slack_channel"] in (None, "")
+    assert channel.channel_state(entry) in (channel.UNSET, channel.MUTED)
 
 
 # ---------------------------------------------------------------- 回寫與備份

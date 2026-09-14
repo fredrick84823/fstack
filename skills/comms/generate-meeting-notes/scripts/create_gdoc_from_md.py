@@ -52,7 +52,7 @@ from pathlib import Path
 
 # 從同目錄的 extract_audio_sources.py import 可重用函式
 sys.path.insert(0, str(Path(__file__).parent))
-from channel import SEND, UNSET, channel_state, dm_reminder
+from channel import SEND, UNSET, channel_id, channel_state, dm_reminder
 from extract_audio_sources import (
     create_gdoc_in_shared_drive,
     get_google_credentials,
@@ -329,7 +329,7 @@ def main():
         if state == SEND:
             from send_slack_notification import send_notification
             send_notification(
-                meeting["slack_channel"].strip(), doc_url, drive_path, series_name, date_str
+                channel_id(meeting), doc_url, drive_path, series_name, date_str
             )
         elif state == UNSET:
             from send_slack_notification import send_dm

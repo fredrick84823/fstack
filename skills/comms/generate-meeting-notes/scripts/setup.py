@@ -18,6 +18,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from channel import channel_from_answer  # noqa: E402
+
 # ─── 路徑設定 ──────────────────────────────────────────────────────────────────
 
 SKILL_DIR = Path(__file__).parent.parent
@@ -500,9 +503,13 @@ def setup_config(with_audio: bool):
         )
         print("  請在 Slack 中右鍵點擊 channel → View channel details → 複製 Channel ID")
         print("  還沒問到就留空白 —— 記錄照產，發佈時會 DM 提醒你補上（不是永久靜音）")
-        slack_channel = ask(
-            "Slack Channel ID（例：C0XXXXXXXXX，空白＝還沒設定）",
-            existing_m.get("slack_channel") or "",
+        existing_channel = existing_m.get("slack_channel")
+        slack_channel = channel_from_answer(
+            ask(
+                "Slack Channel ID（例：C0XXXXXXXXX，空白＝還沒設定）",
+                existing_channel or "",
+            ),
+            existing_channel,
         )
 
         meetings[key] = {
@@ -512,8 +519,8 @@ def setup_config(with_audio: bool):
             "series_name": series_name,
             # 空白寫 `null` 而不是 `""`：這兩個在發佈流程是不同的狀態（#26）——
             # `null` 是還沒設定（DM 提醒我），`""` 是刻意不發通知（安靜）。
-            # 刻意靜音走 `channel.py --channel ""`，不從這裡填。
-            "slack_channel": slack_channel or None,
+            # 兩者的取捨在 `channel_from_answer` 裡，這裡不再判一次。
+            "slack_channel": slack_channel,
             "attendees": existing_m.get("attendees", []),
             "custom_prompt": existing_m.get("custom_prompt", ""),
         }

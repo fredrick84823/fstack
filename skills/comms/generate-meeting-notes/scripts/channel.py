@@ -52,6 +52,30 @@ def channel_state(meeting: dict) -> str:
     return SEND if channel.strip() else MUTED
 
 
+def channel_id(meeting: dict) -> str:
+    """要送出去的 channel ID。`channel_state` 回 `SEND` 時才有意義。
+
+    存在的理由是「怎麼算 SEND」這條規則只能有一份：呼叫端自己再 `.strip()` 一次的話，
+    規則哪天改了（例如連零寬空白也要清掉）兩邊會靜靜地不一致 —— 而不一致的症狀是
+    `channel_state` 說可以發、送出去的 ID 卻是 Slack 不認得的那個。
+    """
+    return (meeting.get("slack_channel") or "").strip()
+
+
+def channel_from_answer(answer: str, existing: str | None) -> str | None:
+    """setup 那題的答案（＋這個會議原本的值）→ 要寫進 JSON 的值。**空白＝不改變。**
+
+    空白不能一律寫 `None`：原本是 `""`（我已經決定這場不發通知）的會議按一下 Enter 就
+    降級成「還沒設定」，接下來每一場都 DM 我一次 —— 而讓這兩件事分得開就是這張票的
+    全部內容。
+
+    也不寫成「只有 `""` 特別處理」：那樣 `("", "C0OLD")` 會洗掉一個設好的 channel。
+    現在 `ask()` 會先把空輸入換成既有值，所以那一格走不到 —— 但「只有從 UI 那條路
+    進來才正確」的函式，第二個呼叫端出現時就是同一科的病再犯一次。
+    """
+    return answer or existing
+
+
 def dm_reminder(
     meeting_key: str,
     series_name: str,

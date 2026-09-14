@@ -67,6 +67,8 @@ PURE := \
 	entry_id \
 	_buckets \
 	channel_state \
+	channel_id \
+	channel_from_answer \
 	dm_reminder \
 	set_channel
 
