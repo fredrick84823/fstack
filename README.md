@@ -269,7 +269,14 @@ Wires the `improve` skill's signal capture into session lifecycle:
 - **SessionStart** → 不注入 pending 清單。`scripts/check-signal-queue.sh` 保留但刻意未接線，
   不要接回；原因見 [#40](https://github.com/fredrick84823/fstack/issues/40)（每輪自報造成的
   訊號雜訊，偵測要改成 out-of-band、每 session 一次）。
+- **SessionEnd** → 讀 transcript，對本 session 實際呼叫過的 skill 跑一次 precision-first
+  分類器（`scripts/session_classifier.py`）。沒有 skill 呼叫就不呼叫模型；自動化 session
+  （`claude -p`、subagent、`IMPROVE_CLASSIFIER_DISABLE=1`）一律跳過；每 session 上限
+  `IMPROVE_MAX_SIGNALS` 筆（預設 3）。這是 #40 要的反轉：偵測離開 agent 自己的 context。
 - **Stop** → captures `<<GAP skill: desc>>` markers and skill candidates automatically
+
+兩條路徑共用同一個 capture：`signal_state.py capture` 以 (target_skill, 正規化後的 gap)
+去重，重複的只把既有 signal 的 `evidence_count` 加一，不在 queue 開第二筆。
 
 ## Post-install: gap detection
 
