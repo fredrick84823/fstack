@@ -32,6 +32,22 @@ mutant 活著。實測（2026-09-14，`test_gdocs_request_shape.py`）：`_markd
 這種假綠**兩道事後守衛都看不見**（例外是 0、🫥 也是 0），症狀只是「分數沒殺光」，
 而沒人會去查一個本來就不滿分的數字。純函式便宜，讓每條測試自己呼叫一次。
 
+**第六種，只在「手動注入 bug 驗鑑別力」時發作：`__pycache__` 的 mtime 只有秒解析度。**
+同一秒內連續寫兩次同一個 `.py`（還原 → 注入，或注入 → 還原 → 再注入），Python 認為
+原始碼沒變，重用舊的 `.pyc` —— **跑的是上一版的碼**，注入的 bug 從來沒被執行過，測試
+當然全綠，而實驗會被記成「這個 bug 沒有測試抓得到」。實測（#36）：同一個注入，同秒寫入
+時 `open_items` 回舊答案 7、間隔 1 秒回新答案 0。同一次事故裡還有一個注入沒被還原就
+留在工作樹上，也是同一個原因讓它一路綠到被人逐行讀碼才發現。
+
+注入實驗一律這樣跑：
+
+```bash
+rm -rf skills/comms/generate-meeting-notes/scripts/__pycache__ tests/unit/__pycache__
+PYTHONDONTWRITEBYTECODE=1 python3 -m pytest tests/unit -q -p no:cacheprovider
+```
+
+`load_script` 幫不上忙 —— 它每次都從路徑載，但 `exec_module` 照樣會走 `__pycache__`。
+
 harness 自己的契約釘在 `test_harness.py`。
 """
 
