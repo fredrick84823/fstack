@@ -20,6 +20,7 @@ reconcile_drive.py - 每小時掃 Shared Drive：日期資料夾有音檔、沒�
 | 每輪處理上限 | `MAX_PER_ROUND` 場。判準寫錯時不會一次燒 20 次 NotebookLM |
 | 系列資料夾在設定檔裡找不到 | 不產，只 DM。缺會議類型脈絡，硬產出來的是壞的 |
 | 同一個日期資料夾有多個音檔 | 不產，只 DM。挑一個產會讓另一半永遠沒有機會 |
+| 該會議類型沒設 `slack_channel` | 記錄照產，通知走 DM fallback（`channel.py` 的三態） |
 | Google 憑證會開瀏覽器 | 一開始就擋（`credential_gap`），不要卡在沒有人的提示上 |
 | NotebookLM 認證失效 | **切音訊前**就驗，失敗就 DM 並停，退出碼非 `0` |
 | Drive 翻頁超過上限 | 報錯收工（`list_all`）。無上限的翻頁是「跑不完」不是「變紅」 |
@@ -36,7 +37,8 @@ reconcile_drive.py - 每小時掃 Shared Drive：日期資料夾有音檔、沒�
 用法（與 SKILL.md 一致，都從 skill 目錄用 uv 跑）：
     uv run scripts/reconcile_drive.py              # 正常一輪（cron 每小時）
     uv run scripts/reconcile_drive.py --dry-run    # 只印差集，不產
-    另有 --limit N、--window-days N，以及 --today / --state（測試用）。
+    另有 --today / --state（測試用）。**每輪上限與 7 天窗沒有旗標** —— 票上它們是
+    為判準錯的代價不對稱設的，做成旗標等於留一個一行就能關掉的洞。
 
 **預設是真的會產，不是 dry-run** —— 與 `backfill_local_archive.py` 相反。那支是人手動
 跑的一次性補齊，dry-run 當預設才安全；這支是排程跑的，預設不做事等於永遠不做事。
@@ -57,6 +59,7 @@ import subprocess
 import sys
 import tempfile
 from datetime import date, datetime
+from operator import attrgetter
 from pathlib import Path
 from typing import NamedTuple
 
@@ -70,7 +73,7 @@ from extract_audio_sources import (
     get_google_credentials,
     load_config,
 )
-from local_archive import DATE_DIR
+from local_archive import DATE_DIR, NOTE_PREFIX
 from send_slack_notification import send_dm
 
 STATE_PATH = CONFIG_DIR / "reconcile-state.json"
@@ -85,9 +88,6 @@ DOC_MIME = "application/vnd.google-apps.document"
 # 與 SKILL.md 的「輸入類型與路由」同一份清單。
 AUDIO_SUFFIXES = (".m4a", ".mp3", ".wav", ".aac", ".flac", ".ogg", ".opus")
 
-# 會議記錄的 Doc 名前綴，與 `local_archive.note_title` 同一個字面。
-NOTE_PREFIX = "會議記錄"
-
 # 掃到了但沒有產的三個理由。字串而非 enum：它們會被印進 stdout 與 DM，也會被測試
 # 逐字斷言（同 `channel.DM_HEADER`）。
 UNKNOWN_SERIES = "系列資料夾不在設定檔的任何會議類型"
@@ -95,6 +95,9 @@ MULTI_AUDIO = "同一個日期資料夾有多個音檔"
 OVER_LIMIT = "超過本輪上限，下一輪會再看到"
 
 DM_HEADER = "📮 每小時 reconcile 有東西需要你看一眼"
+
+# 排序鍵：**舊的先**。理由見 `compute_pending`；同一天有多場時用系列名定序，固定就好。
+_BY_DATE = attrgetter("date", "series")
 
 # 子行程的硬上限。NotebookLM 那段要上傳幾十段再等 AI 處理，所以給得寬；但一定要有，
 # 卡住的排程是「每小時卡一次而沒人知道」，不是「變紅」。
@@ -110,7 +113,6 @@ class Session(NamedTuple):
     series: str
     date: str
     meeting_key: str | None
-    folder_id: str
     audio: tuple[dict, ...]
     reason: str
 
@@ -122,13 +124,21 @@ class Round(NamedTuple):
     skipped: list[Session]
 
 
-# ─── 純函式 ────────────────────────────────────────────────────────────────────
+# ─── Seam ① 純函式層 ──────────────────────────────────────────────────────────
+#
+# str/dict in → str/dict out，不碰網路。`credential_gap` 與 `prompt_file` 是例外：它們
+# 碰檔案系統，但碰的是測試自己建的 tmp 目錄（同 `channel.set_channel`、`history_index`
+# 的那幾支），所以照樣掛進 mutation 範圍。Drive 掃描、下載與三個子行程在下面兩節。
 
-def in_window(folder_date: str, today: str, window_days: int = WINDOW_DAYS) -> bool:
-    """`folder_date` 是否落在以 `today` 結尾的 `window_days` 天窗內。兩個都是 YYYYMMDD。
+def in_window(folder_date: str, today: str) -> bool:
+    """`folder_date` 是否落在以 `today` 結尾的 `WINDOW_DAYS` 天窗內。兩個都是 YYYYMMDD。
 
     窗是**固定**的，不是「上次跑到哪」：每小時跑一次，落差不會累積；7 天足以涵蓋 Mac
     關機幾天，而且第一次跑不會把幾個月的舊資料夾全部翻出來。
+
+    ponytail: 天花板是「關機超過 7 天的那幾場永遠補不回來」。要升級的話是記下上次
+    成功掃到哪一天、窗取 `max(7, 距上次)` —— **不是**把窗調大，調大等於每小時多掃
+    幾十個資料夾來換一年用不到一次的情況。
 
     未來日期回 `False`（`delta < 0`）：打錯的日期資料夾不該被當成今天的會議產一份。
     解不出日期的也回 `False` 而不是拋 —— 資料夾名是別人打的，一個 `202609xx` 不該讓
@@ -138,7 +148,7 @@ def in_window(folder_date: str, today: str, window_days: int = WINDOW_DAYS) -> b
         delta = (_as_date(today) - _as_date(folder_date)).days
     except ValueError:
         return False
-    return 0 <= delta < window_days
+    return 0 <= delta < WINDOW_DAYS
 
 
 def _as_date(text: str) -> date:
@@ -156,8 +166,12 @@ def is_note(file: dict) -> bool:
     **兩個條件都要**：Google Doc，而且檔名以 `會議記錄` 開頭。只看檔名的話，同一個
     資料夾裡的 `會議記錄_….md`（源自本機歸檔被人手動丟上來）會被當成已經有記錄；
     只看 mimeType 的話，任何一份放進資料夾的 Doc 都會讓這場永遠不產。
+
+    ponytail: 判準是**檔名前綴**，所以有人把 Doc 改掉名字，下一輪就會重產一份並蓋掉
+    那場的既有記錄。要升級的話是在 Doc 上寫一個 `appProperties` 標記、改認那個標記
+    —— 但那要先讓 `create_gdoc_from_md.py` 開始寫它，而既有的 Doc 一份都沒有。
     """
-    return file.get("mimeType") == DOC_MIME and file.get("name", "").startswith(NOTE_PREFIX)
+    return file.get("mimeType") == DOC_MIME and file["name"].startswith(NOTE_PREFIX)
 
 
 def compute_pending(
@@ -165,12 +179,11 @@ def compute_pending(
     known_series: dict[str, str],
     today: str,
     *,
-    window_days: int = WINDOW_DAYS,
     limit: int = MAX_PER_ROUND,
 ) -> Round:
     """吃日期資料夾清單，吐這一輪的差集。**純函式** —— 不碰 Drive、不碰時鐘、不碰檔案。
 
-    `folders` 每筆是 `{"series": 系列資料夾名, "date": "YYYYMMDD", "folder_id": …,
+    `folders` 每筆是 `{"series": 系列資料夾名, "date": "YYYYMMDD",
     "files": [{"id":…, "name":…, "mimeType":…}]}`；`known_series` 是系列資料夾名 →
     會議 key。
 
@@ -182,12 +195,12 @@ def compute_pending(
     skipped: list[Session] = []
 
     for folder in folders:
-        if not in_window(folder["date"], today, window_days):
+        if not in_window(folder["date"], today):
             continue
-        files = folder.get("files", [])
+        files = folder["files"]
         if any(is_note(f) for f in files):
             continue
-        audio = tuple(f for f in files if is_audio(f.get("name", "")))
+        audio = tuple(f for f in files if is_audio(f["name"]))
         if not audio:
             continue
 
@@ -202,22 +215,15 @@ def compute_pending(
             series=folder["series"],
             date=folder["date"],
             meeting_key=key,
-            folder_id=folder.get("folder_id", ""),
             audio=audio,
             reason=reason,
         )
         (skipped if reason else candidates).append(session)
 
-    candidates.sort(key=_by_date)
+    candidates.sort(key=_BY_DATE)
     skipped += [s._replace(reason=OVER_LIMIT) for s in candidates[limit:]]
-    skipped.sort(key=_by_date)
+    skipped.sort(key=_BY_DATE)
     return Round(candidates[:limit], skipped)
-
-
-def _by_date(session: Session) -> tuple[str, str]:
-    """排序鍵：**舊的先**。積壓要從最舊的開始消化，不然一場久久沒人處理的會議會永遠
-    排在新的後面。同一天有多場時用系列名定序 —— 只要是固定的就好。"""
-    return (session.date, session.series)
 
 
 def series_map(meetings: dict) -> dict[str, str]:
@@ -227,7 +233,7 @@ def series_map(meetings: dict) -> dict[str, str]:
     同一條規則 —— 那兩支在掃同一批資料夾。
     """
     return {
-        meeting.get("folder_name", meeting.get("series_name", key)): key
+        meeting.get("folder_name", meeting["series_name"]): key
         for key, meeting in meetings.items()
     }
 
@@ -252,19 +258,18 @@ def credential_gap(config_dir: Path = CONFIG_DIR) -> str:
     if not isinstance(creds_data, dict) or not ({"installed", "web"} & set(creds_data)):
         return ""
 
+    # 「讀不到」與「讀得到但沒有 refresh_token」不分兩條訊息：補救動作一樣（把它刪掉、
+    # 手動跑一次 setup 重建授權），分開寫只是把同一句話寫兩遍再各自漂移。
     token_path = config_dir / "google_token.json"
     try:
         token = json.loads(token_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return (
-            f"讀不到 {token_path}，下次取憑證會開瀏覽器等人按同意 —— 排程沒有人。\n"
-            f"   先手動跑一次 `uv run scripts/setup.py` 把授權建起來。\n"
-            f"   （這是 {creds_path} 那份授權，不是 ADC；兩者是不同的兩份。）"
-        )
+        token = None
     if not isinstance(token, dict) or not token.get("refresh_token"):
         return (
-            f"{token_path} 沒有 refresh_token，下次取憑證會開瀏覽器等人按同意。\n"
-            f"   刪掉它再手動跑一次 `uv run scripts/setup.py`。\n"
+            f"{token_path} 讀不到、或沒有 refresh_token，下次取憑證會開瀏覽器等人按"
+            f"同意 —— 排程沒有人。\n"
+            f"   把它刪掉再手動跑一次 `uv run scripts/setup.py` 把授權重建起來。\n"
             f"   （這是 {creds_path} 那份授權，不是 ADC；兩者是不同的兩份。）"
         )
     return ""
@@ -340,7 +345,7 @@ def dm_skipped(skipped: list[Session]) -> str:
     return "\n".join(lines)
 
 
-def dm_blocked(detail: str, count: int = 0) -> str:
+def dm_blocked(detail: str, count: int) -> str:
     """整輪（或某一場）停下來時要 DM 的字。
 
     `count` 是這輪本來要產幾場；`0` 表示還沒數到那一步（憑證、掃 Drive）。零的時候
@@ -360,8 +365,12 @@ def series_folders(drive, meetings: dict) -> list[dict]:
     容器從設定檔既有的 `folder_id` 反推 —— 設定檔沒有 drive id 這個欄位，硬加一個
     等於要每個人重跑 setup。而「設定檔裡沒有的系列資料夾」正是要報告的東西之一，
     所以不能只走 config 裡那幾個 id。
+
+    ponytail: 每個會議類型各打一次 `files().get()` 拿 parent（N+1）。四種會議是四次，
+    每小時一輪，不值得快取。真的變幾十種再改成在 config 存一個 `drive_id`，那時候
+    重跑 setup 的代價才比每輪 N 次 round-trip 小。
     """
-    parents: list[str] = []
+    parents: set[str] = set()
     for meeting in meetings.values():
         folder_id = meeting.get("folder_id")
         if not folder_id:
@@ -369,7 +378,7 @@ def series_folders(drive, meetings: dict) -> list[dict]:
         info = drive.files().get(
             fileId=folder_id, fields="parents", supportsAllDrives=True
         ).execute()
-        parents.extend(p for p in info.get("parents", []) if p not in parents)
+        parents.update(info.get("parents", []))
 
     folders: list[dict] = []
     seen: set[str] = set()
@@ -384,7 +393,7 @@ def series_folders(drive, meetings: dict) -> list[dict]:
     return folders
 
 
-def scan_drive(drive, meetings: dict, today: str, window_days: int = WINDOW_DAYS) -> list[dict]:
+def scan_drive(drive, meetings: dict, today: str) -> list[dict]:
     """掃出窗內每個日期資料夾的檔案清單，餵給 `compute_pending`。
 
     窗的判斷用的是 `in_window` 本人，不是在這裡另寫一次 —— 兩份會靜靜地漂開，而漂開
@@ -399,12 +408,11 @@ def scan_drive(drive, meetings: dict, today: str, window_days: int = WINDOW_DAYS
         for folder in date_folders:
             if not DATE_DIR.fullmatch(folder["name"]):
                 continue
-            if not in_window(folder["name"], today, window_days):
+            if not in_window(folder["name"], today):
                 continue
             listings.append({
                 "series": series["name"],
                 "date": folder["name"],
-                "folder_id": folder["id"],
                 "files": list_all(drive, f"'{folder['id']}' in parents and trashed=false"),
             })
     return listings
@@ -429,7 +437,7 @@ def download_audio(drive, file: dict, dest: Path) -> Path:
 
 # ─── 產製 ──────────────────────────────────────────────────────────────────────
 
-def run(cmd: list[str], timeout: int, stdin: str | None = None) -> subprocess.CompletedProcess:
+def run_step(cmd: list[str], timeout: int, stdin: str | None = None) -> subprocess.CompletedProcess:
     """跑一個子行程，一律帶硬上限。逾時是 `TimeoutExpired`，由呼叫端翻成 DM ＋ 非零。"""
     return subprocess.run(
         cmd, cwd=SKILL_DIR, input=stdin, capture_output=True, text=True, timeout=timeout
@@ -443,7 +451,7 @@ def notebooklm_gap() -> str:
     白燒一輪，而排程沒有人在旁邊看著那 20 段白切。
     """
     try:
-        proc = run(["uv", "run", "notebooklm", "auth", "check", "--test"], AUTH_TIMEOUT)
+        proc = run_step(["uv", "run", "notebooklm", "auth", "check", "--test"], AUTH_TIMEOUT)
     except (OSError, subprocess.TimeoutExpired) as exc:
         return f"NotebookLM 認證檢查跑不起來：{type(exc).__name__}: {exc}"
     if proc.returncode != 0:
@@ -469,7 +477,7 @@ def generate(drive, session: Session, config: dict, workdir: Path) -> str:
     download_audio(drive, audio, local_audio)
 
     sources = workdir / "sources"
-    extract = run([
+    extract = run_step([
         "uv", "run", "scripts/extract_audio_sources.py", str(local_audio),
         "--meeting", session.meeting_key,
         "--delete-segments", "--segment-count", "20",
@@ -482,7 +490,7 @@ def generate(drive, session: Session, config: dict, workdir: Path) -> str:
         raise RuntimeError(f"流程 B 沒有印出交棒契約：\n{extract.stdout[-1000:]}")
 
     notes = workdir / "meeting_notes.md"
-    synth = run([
+    synth = run_step([
         "claude", "-p",
         "--safe-mode",                   # 不吃使用者的 CLAUDE.md／hooks／plugins／MCP
         "--output-format", "text",
@@ -490,14 +498,17 @@ def generate(drive, session: Session, config: dict, workdir: Path) -> str:
         "--allowed-tools", "Read Write",  # 其餘一律自動拒絕 —— 發佈那幾步過不了這一關
         "--permission-prompts", "none",
     ], SYNTHESIS_TIMEOUT, stdin=synthesis_prompt(handoff, prompt_file(config), notes))
-    if not notes.exists() or not notes.read_text(encoding="utf-8").strip():
+    # 退出碼與檔案**兩個都要**。子 agent 非零退出但已經寫了半份稿時，只看檔案會照樣
+    # 往下發佈 —— 而 Doc 一旦建起來，下一輪 `is_note` 就認定這場有記錄，半份稿永久生效。
+    # 那正是「多算一場是重跑 NotebookLM 並覆寫既有記錄」這個不對稱的另一面。
+    if synth.returncode != 0 or not notes.exists() or not notes.read_text(encoding="utf-8").strip():
         raise RuntimeError(
-            f"流程 C 沒有寫出正式稿（退出碼 {synth.returncode}）：\n"
+            f"流程 C 沒有交出正式稿（退出碼 {synth.returncode}）：\n"
             f"{(synth.stdout + synth.stderr)[-1000:]}"
         )
 
     # 不帶 --audio-file／--delete-local-audio：Drive 上那份是原件，本機這份是暫存。
-    publish = run([
+    publish = run_step([
         "uv", "run", "scripts/create_gdoc_from_md.py",
         "--meeting", session.meeting_key,
         "--date", session.date,
@@ -533,18 +544,11 @@ def notify(text: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="每小時 reconcile Shared Drive：有音檔沒記錄就產")
     parser.add_argument("--dry-run", action="store_true", help="只印差集，不產任何記錄")
-    parser.add_argument("--limit", type=int, default=MAX_PER_ROUND,
-                        help=f"每輪處理上限（預設 {MAX_PER_ROUND}）")
-    parser.add_argument("--window-days", type=int, default=WINDOW_DAYS,
-                        help=f"掃描窗幾天（預設 {WINDOW_DAYS}）")
     parser.add_argument("--today", help="把今天當成哪一天 YYYYMMDD（測試用）")
     parser.add_argument("--state", default=str(STATE_PATH),
                         help=f"狀態檔路徑（預設 {STATE_PATH}）；不存在＝首次執行，強制 dry-run")
     args = parser.parse_args()
 
-    if args.limit < 1 or args.window_days < 1:
-        print("❌ --limit 與 --window-days 至少是 1")
-        return 2
     today = args.today or date.today().strftime("%Y%m%d")
     try:
         _as_date(today)
@@ -575,18 +579,21 @@ def main() -> int:
         return 1
 
     try:
-        listings = scan_drive(drive, meetings, today, args.window_days)
+        listings = scan_drive(drive, meetings, today)
     except Exception as exc:
         notify(dm_blocked(f"❌ 掃 Drive 失敗：{type(exc).__name__}: {exc}", 0))
         return 1
 
-    round_ = compute_pending(
-        listings, series_map(meetings), today,
-        window_days=args.window_days, limit=args.limit,
-    )
+    round_ = compute_pending(listings, series_map(meetings), today)
     report(round_)
     notify(dm_skipped(round_.skipped))
 
+    # `--dry-run` 先判，而且**不寫狀態檔**：寫了的話手動看一次差集就把「首次強制
+    # dry-run」那道閘門用掉了，而 SKILL.md 承諾的「確認差集無誤之後下一輪才真的產」
+    # 靠的就是那道閘門還在。
+    if args.dry_run:
+        print("\n這是 dry-run，沒有產任何記錄。")
+        return 0
     if first_run:
         state_path.parent.mkdir(parents=True, exist_ok=True)
         state_path.write_text(
@@ -595,9 +602,6 @@ def main() -> int:
         )
         print(f"\n這是首次執行，強制 dry-run，沒有產任何記錄。狀態檔已建立：{state_path}")
         print("確認上面的差集無誤之後，下一輪就會真的產。")
-        return 0
-    if args.dry_run:
-        print("\n這是 dry-run，沒有產任何記錄。")
         return 0
     if not round_.pending:
         print("\n沒有差集，這輪不動。")

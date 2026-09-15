@@ -645,16 +645,9 @@ Input：
 Output：差集清單印在 stdout；需要人介入的那幾場 DM `slack_dm_user`；產出的每一場印
 `create_gdoc_from_md.py` 的 `RESULT_URL`。
 
-邊界（全部是為「無人看管」設的，不是可選項）：
-
-| 情況 | 行為 |
-|---|---|
-| 首次執行 | 強制 dry-run |
-| 每輪上限 | 2 場 |
-| 掃描窗 | 最近 7 天的日期資料夾 |
-| 系列資料夾不在 config | 不產，只 DM |
-| 同一資料夾多個音檔 | 不產，只 DM |
-| 憑證會開瀏覽器 / NotebookLM 認證失效 | 切音訊前就擋，退出碼非 `0` |
+邊界（首次強制 dry-run、每輪上限 2 場、7 天窗、未知系列只 DM、認證先驗）那張表在
+`SKILL.md` 的「排程 · Shared Drive reconcile」一節，**這裡不再抄一份** —— 同一張表
+原本有三份，而三份之間已經漂移過一次。
 
 Drive 上的音檔是原件，一律保留不動；本機暫存目錄跑完整個移除。所以發佈那步**不帶**
 `--audio-file`／`--delete-local-audio`。

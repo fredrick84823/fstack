@@ -47,10 +47,9 @@ from pathlib import Path
 from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).parent))
-from local_archive import DATE_DIR, LOCAL_ARCHIVE_ROOT, SIDECAR_SUFFIX
+from local_archive import DATE_DIR, LOCAL_ARCHIVE_ROOT, NOTE_PREFIX, SIDECAR_SUFFIX
 
 INDEX_FILENAME = "history-index.md"
-NOTE_PREFIX = "會議記錄"
 DEFAULT_SESSIONS = 3
 MAX_DEPTH = 3
 

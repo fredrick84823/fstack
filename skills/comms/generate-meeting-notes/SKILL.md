@@ -382,12 +382,13 @@ cd "$SKILL_DIR" && uv run scripts/reconcile_drive.py --dry-run    # 只印差集
 
 | 情況 | 行為 |
 |---|---|
-| 首次執行（沒有狀態檔 `~/.config/generate-meeting-notes/reconcile-state.json`） | 強制 dry-run，只印差集 |
-| 每輪處理上限 | 2 場。判準寫錯時不會一次燒 20 次 NotebookLM |
+| 首次執行（沒有狀態檔 `~/.config/generate-meeting-notes/reconcile-state.json`） | 強制 dry-run，只印差集；`--dry-run` 不會用掉這道閘門 |
+| 每輪處理上限 | 2 場。判準寫錯時不會一次燒 20 次 NotebookLM。**沒有旗標可以調** |
 | 系列資料夾在 config 裡完全找不到 | 不產，只 DM。缺會議類型脈絡，硬產出來的是壞的 |
 | 同一個日期資料夾有多個音檔 | 不產，只 DM。見 `references/multi-session.md` 手動處理 |
 | 該會議類型沒設 channel | 記錄照產，通知走 DM fallback（`channel.py` 的三態） |
 | Google 憑證會開瀏覽器 / NotebookLM 認證失效 | **切音訊前**就擋，DM 並停，退出碼非 `0` |
+| Drive 翻頁超過上限 | 報錯收工。無上限的翻頁是「跑不完」不是「變紅」 |
 
 **音檔歸屬與流程 C 相反。** 流程 C 的 `--delete-local-audio` 是為「本機是原件、Drive
 是副本」寫的；這裡 Drive 是原件、本機只是暫存下載。所以 reconcile 發佈時**不帶**

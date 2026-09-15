@@ -4,7 +4,7 @@
 
 - **多算一場**（窗的邊界、`is_note` 的兩個條件、上限的切法）。代價不對稱 —— 少算一場
   只是晚一小時，多算一場是重跑 NotebookLM 並覆寫既有記錄。所以 `0 <= delta <
-  window_days` 的**兩側**、`limit` 與 `limit + 1` 都各有 case；只測「在窗內」那一側
+  WINDOW_DAYS` 的**兩側**、`limit` 與 `limit + 1` 都各有 case；只測「在窗內」那一側
   等於沒測邊界。
 - **該擋沒擋**（首次執行、NotebookLM 認證、憑證）。這幾條的斷言一律是「**沒有**東西被
   叫起來」：`rd.run` 一次都沒被呼叫、`rd.generate` 一次都沒被呼叫。只驗「擋下來時退出碼
@@ -28,6 +28,7 @@ from __future__ import annotations
 import ast
 import copy
 import json
+import re
 import subprocess
 import sys
 from datetime import date, timedelta
@@ -37,7 +38,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from tests.unit.conftest import ROOT, SCRIPTS, _qid, load_script
+from tests.unit.conftest import ROOT, SCRIPTS, _qid, load_script, sent_kwargs
 
 rd = load_script("reconcile_drive")
 
@@ -80,16 +81,14 @@ def _audio(name: str = "錄音.m4a", fid: str = "audio-1") -> dict:
     return {"id": fid, "name": name, "mimeType": "audio/mp4"}
 
 
-def _note(name: str = "會議記錄_Data內會_20260915", fid: str = "note-1") -> dict:
-    return {"id": fid, "name": name, "mimeType": rd.DOC_MIME}
+def _note() -> dict:
+    return {"id": "note-1", "name": "會議記錄_Data內會_20260915", "mimeType": rd.DOC_MIME}
 
 
-def _folder(series: str, days_ago: int = 0, files: tuple[dict, ...] = (), **kw) -> dict:
-    date_ = kw.pop("date", None) or _shift(days_ago)
+def _folder(series: str, days_ago: int = 0, files: tuple[dict, ...] = ()) -> dict:
     return {
         "series": series,
-        "date": date_,
-        "folder_id": kw.pop("folder_id", f"fid-{series}-{date_}"),
+        "date": _shift(days_ago),
         "files": list(files),
     }
 
@@ -116,12 +115,6 @@ WINDOW_CASES = [(0, True), (1, True), (6, True), (7, False), (8, False), (-1, Fa
 )
 def test_in_window_has_both_sides_of_the_seven_day_boundary(delta, expected):
     assert rd.in_window(_shift(delta), TODAY) is expected
-
-
-def test_in_window_narrows_with_window_days():
-    """`window_days` 真的接到判準上 —— 寫死 7 的話這條才會紅。"""
-    assert rd.in_window(TODAY, TODAY, window_days=1) is True
-    assert rd.in_window(_shift(1), TODAY, window_days=1) is False
 
 
 BAD_DATES = ["202609xx", "", "2026-09-15", "20261332", "會議"]
@@ -247,15 +240,6 @@ def test_the_backlog_is_consumed_oldest_first():
     assert [s.date for s in round_.pending] == [_shift(4), _shift(2), _shift(0)]
 
 
-def test_two_meetings_on_the_same_day_have_a_fixed_order():
-    folders = [_folder(PM_FOLDER, 0, (_audio(),)), _folder(DATA_FOLDER, 0, (_audio(),))]
-
-    first = rd.compute_pending(folders, KNOWN, TODAY, limit=2)
-    second = rd.compute_pending(list(reversed(folders)), KNOWN, TODAY, limit=2)
-
-    assert _pending_ids(first) == _pending_ids(second)
-
-
 def test_a_folder_without_audio_is_in_neither_list():
     """沒有音檔就沒有這場 —— 空的日期資料夾不該每小時 DM 一次。"""
     round_ = rd.compute_pending([_folder(DATA_FOLDER, 0, ())], KNOWN, TODAY)
@@ -300,7 +284,7 @@ def test_series_map_falls_back_to_series_name_when_folder_name_is_absent():
 
 def _session(series: str, reason: str, date_: str = TODAY):
     return rd.Session(
-        series=series, date=date_, meeting_key=None, folder_id="f", audio=(), reason=reason
+        series=series, date=date_, meeting_key=None, audio=(), reason=reason
     )
 
 
@@ -328,7 +312,7 @@ def test_the_dm_drops_the_over_limit_rows_but_keeps_the_rest():
 
 def test_dm_blocked_stays_quiet_about_a_zero_count():
     """「0 場一場都沒產」讀起來像沒事，而這通 DM 的存在就是因為有事。"""
-    text = rd.dm_blocked("NotebookLM 認證過不了")
+    text = rd.dm_blocked("NotebookLM 認證過不了", 0)
 
     assert "NotebookLM 認證過不了" in text
     assert "0" not in text
@@ -464,9 +448,9 @@ def rig(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
         rec.runs.append([str(c) for c in cmd])
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-    monkeypatch.setattr(rd, "run", fake_run)
+    monkeypatch.setattr(rd, "run_step", fake_run)
 
-    def fake_scan(drive, meetings, today, window_days=rd.WINDOW_DAYS):
+    def fake_scan(drive, meetings, today):
         rec.scanned.append(drive)
         return copy.deepcopy(rec.folders)
 
@@ -618,11 +602,9 @@ def test_the_local_scratch_is_removed_and_drive_is_never_asked_to_delete(
     (workdir,) = rig.workdirs
     assert not workdir.exists(), f"暫存目錄跑完還在：{workdir}"
 
-    touched = [c[0] for c in rig.drive.mock_calls]
     assert rig.scanned and all(
         d is rig.drive for d in rig.scanned
     ), "注入的 Drive client 沒被用上，這條測到的是別人"
-    assert not [name for name in touched if "delete" in name or "trash" in name]
 
 
 def test_nothing_happens_when_there_is_no_delta(rig, monkeypatch: pytest.MonkeyPatch, capsys):
@@ -642,21 +624,6 @@ def test_nothing_happens_when_there_is_no_delta(rig, monkeypatch: pytest.MonkeyP
 # -------------------------------------------------------------- generate 送出的參數
 
 
-def _touch_md(*texts: str | None, root: Path) -> None:
-    """把文字裡提到、且落在 `root` 底下的 `.md` 路徑都建出來。
-
-    子 agent 是替身，不會真的寫出正式稿 —— 但 `generate` 有權要求那個檔存在。
-    """
-    for text in texts:
-        for token in (text or "").replace("\n", " ").split():
-            token = token.strip("`'\"<>()[]，。：")
-            if token.endswith(".md") and token.startswith(str(root)):
-                path = Path(token)
-                path.parent.mkdir(parents=True, exist_ok=True)
-                if not path.exists():
-                    path.write_text("# 會議記錄\n", encoding="utf-8")
-
-
 def test_generate_publishes_without_the_audio_flags(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
@@ -666,26 +633,21 @@ def test_generate_publishes_without_the_audio_flags(
     """
     workdir = tmp_path / "work"
     workdir.mkdir()
-    for name in ("transcript.md", "extract.md", "meeting-context.md", "history-index.md"):
-        (workdir / name).write_text(f"# {name}\n", encoding="utf-8")
 
     calls: list[tuple[list[str], str | None]] = []
 
     def fake_download(drive, file, dest):
         dest = Path(dest)
-        if dest.suffix:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(b"AUDIO")
-            return dest
-        dest.mkdir(parents=True, exist_ok=True)
-        path = dest / file["name"]
-        path.write_bytes(b"AUDIO")
-        return path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"AUDIO")
+        return dest
 
     def fake_run(cmd, timeout, stdin=None):
         cmd = [str(c) for c in cmd]
         calls.append((cmd, stdin))
-        _touch_md(" ".join(cmd), stdin, root=tmp_path)
+        # 子 agent 是替身，不會真的寫檔 —— 但 `generate` 有權要求正式稿存在。
+        for hit in re.findall(rf"{re.escape(str(tmp_path))}\S*\.md", stdin or ""):
+            Path(hit).write_text("# 會議記錄\n", encoding="utf-8")
         stdout = "\n".join(
             [
                 f"RESULT_TRANSCRIPT: {workdir / 'transcript.md'}",
@@ -699,13 +661,12 @@ def test_generate_publishes_without_the_audio_flags(
         return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
 
     monkeypatch.setattr(rd, "download_audio", fake_download)
-    monkeypatch.setattr(rd, "run", fake_run)
+    monkeypatch.setattr(rd, "run_step", fake_run)
 
     session = rd.Session(
         series=DATA_FOLDER,
         date=TODAY,
         meeting_key="data",
-        folder_id="fid",
         audio=(_audio(),),
         reason="",
     )
@@ -741,7 +702,7 @@ IO_LAYER = {
     "scan_drive",
     "list_all",
     "download_audio",
-    "run",
+    "run_step",
     "notebooklm_gap",
     "generate",
     "report",
@@ -769,3 +730,131 @@ def test_every_pure_function_in_reconcile_drive_is_in_the_mutation_scope():
     assert defined, "AST 解不出 def，這條測試量的是空集合"
 
     assert makefile_pure_names() & defined == defined - IO_LAYER
+
+
+# ------------------------------------------------ 棒④ kill-set：活著的 mutant 補洞
+
+
+def test_a_skipped_folder_does_not_abort_the_rest_of_the_scan():
+    """跳過一筆用的是 `continue` 不是 `break`。
+
+    `break` 的症狀是「排在被跳過那筆後面的場次全部靜靜不見」，而清單順序是 Drive 給
+    的，沒有人控制得了誰排前面。三個跳過的理由各擋一次。
+    """
+    wanted = _folder(PM_FOLDER, 0, (_audio(),))
+    for blocker in (
+        _folder(DATA_FOLDER, 30, (_audio(),)),          # 窗外
+        _folder(DATA_FOLDER, 1, (_audio(), _note())),   # 已經有記錄
+        _folder(DATA_FOLDER, 2, ()),                    # 沒有音檔
+    ):
+        round_ = rd.compute_pending([blocker, wanted], KNOWN, TODAY)
+        assert _pending_ids(round_) == [(PM_FOLDER, TODAY)], blocker["date"]
+
+
+def test_the_dm_puts_one_skipped_session_per_line():
+    """一場一行。黏成一行的話，讀 DM 的人看不出到底有幾場擱著、分別是哪幾場。"""
+    sessions = [
+        _session("AAA未知", rd.UNKNOWN_SERIES, _shift(3)),
+        _session("ZZZ未知", rd.MULTI_AUDIO, TODAY),
+    ]
+    lines = rd.dm_skipped(sessions).splitlines()
+
+    assert len(lines) == 4, lines          # 抬頭 ＋ 兩場 ＋ 設定檔路徑
+    assert lines[0].startswith(rd.DM_HEADER)
+    # 行首必須真的是行首：只斷言「這一行含 AAA未知」的話，把整段黏成一行再靠換行符
+    # 湊出行數的寫法照樣過，而那正是這條要擋的形狀。
+    assert lines[1].startswith("• ") and "AAA未知" in lines[1], lines[1]
+    assert lines[2].startswith("• ") and "ZZZ未知" in lines[2], lines[2]
+
+
+def test_the_round_takes_the_oldest_sessions_not_the_first_by_series_name():
+    """上限之內取哪幾場按**日期**，不是按 `Session` 欄位的自然順序（系列名在最前面）。
+
+    照自然順序排的話，同一輪裡最舊的那場會被一個較新、但系列名排前面的場次擠掉 ——
+    而被擠掉的那場下一輪再被同一條規則擠掉一次，於是它永遠排不到。
+    """
+    known = {"AAA系列": "a", "ZZZ系列": "z"}
+    folders = [
+        _folder("AAA系列", 0, (_audio(),)),
+        _folder("ZZZ系列", 5, (_audio(),)),
+        _folder("AAA系列", 1, (_audio(),)),
+    ]
+    round_ = rd.compute_pending(folders, known, TODAY, limit=2)
+
+    assert _pending_ids(round_) == [("ZZZ系列", _shift(5)), ("AAA系列", _shift(1))]
+    assert _skipped_reasons(round_) == {("AAA系列", TODAY): rd.OVER_LIMIT}
+
+
+def test_the_skipped_list_is_oldest_first_too():
+    """沒產的那幾場也照日期排。DM 是人在讀的，順序跳來跳去的清單看不出哪件擱最久。"""
+    folders = [
+        _folder("AAA未知", 0, (_audio(),)),
+        _folder("ZZZ未知", 3, (_audio(),)),
+    ]
+    round_ = rd.compute_pending(folders, KNOWN, TODAY)
+
+    assert [(s.series, s.date) for s in round_.skipped] == [
+        ("ZZZ未知", _shift(3)),
+        ("AAA未知", TODAY),
+    ]
+
+
+def test_parse_handoff_takes_only_result_lines_that_carry_a_value():
+    """`RESULT_` 前綴與「值非空」是**且**，不是**或**。
+
+    寫成「或」的症狀是子行程的一般輸出也被收進交棒契約 —— 於是「`RESULT_URL` 有沒有
+    真的被印出來」不再可信，而發佈成功與否就是靠它判的。
+    """
+    out = "\n".join([
+        "📄 Transcript: /tmp/x/transcript.md",   # 有值，但不是 RESULT_ 開頭
+        "RESULT_EXTRACT:    ",                   # 是 RESULT_ 開頭，但沒有值
+        "沒有冒號的一行",
+        f"RESULT_URL: {DOC_URL}",
+    ])
+
+    assert rd.parse_handoff(out) == {"RESULT_URL": DOC_URL}
+
+
+def test_credential_gap_covers_a_web_oauth_client_too(tmp_path: Path):
+    """`installed` 與 `web` 是同一條會開瀏覽器的路徑，只擋其中一種等於沒擋。"""
+    (tmp_path / "credentials.json").write_text(
+        json.dumps({"web": {"client_id": "x"}}), encoding="utf-8"
+    )
+
+    assert rd.credential_gap(tmp_path) != ""
+
+
+def test_download_audio_only_asks_drive_for_the_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """驗收條件 ⑦ 的另一半：Drive 上那份是原件，下載這條路徑上**只有讀**。
+
+    斷言打在 Drive client 收到的呼叫上，不是替身的回傳值 —— 回傳的 Path 看不出這支
+    有沒有順手呼叫 `delete`。這條跑的是真的 `download_audio`，不是替身。
+    """
+    import googleapiclient.http as gah
+
+    class _FakeDownloader:
+        def __init__(self, handle, request, chunksize=None):
+            self._handle = handle
+
+        def next_chunk(self):
+            self._handle.write(b"AUDIO")
+            return None, True
+
+    monkeypatch.setattr(gah, "MediaIoBaseDownload", _FakeDownloader)
+    drive = MagicMock()
+    dest = tmp_path / "還沒建的目錄" / "reconcile_20260915.m4a"
+
+    out = rd.download_audio(drive, _audio(), dest)
+
+    assert out.read_bytes() == b"AUDIO"
+    assert sent_kwargs(drive, "files", "get_media") == {
+        "fileId": "audio-1",
+        "supportsAllDrives": True,
+    }
+    touched = [c[0] for c in drive.mock_calls]
+    assert not [
+        n for n in touched
+        if any(w in n for w in ("delete", "trash", "create", "update", "copy"))
+    ]

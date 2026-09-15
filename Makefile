@@ -48,6 +48,10 @@ MUT_LOG := .mutmut-run.log
 # `credential_gap` / `prompt_file` 碰檔案系統，但碰的是測試自己建的 tmp 目錄（同
 # `set_channel` 的理由），照樣掛。Drive 掃描、下載與三個子行程那幾支不掛：它們要憑證、
 # 要網路、要 NotebookLM，是 I/O 那一層。
+# `synthesis_prompt`（22 顆）與 `credential_gap`（17 顆）會留下殺不掉的：全部是 prompt
+# 與錯誤訊息的**字面值**，以及 `encoding="utf-8"` → `None`／`"UTF-8"`、
+# `"credentials.json"` → `"CREDENTIALS.JSON"`（這台的檔案系統大小寫不敏感）。那些不寫
+# 測試 —— 要殺就得逐字釘死文案，而那正是棒④ 會刪掉的裝飾性測試（同 `build_index`）。
 PURE := \
 	outline \
 	open_items \
@@ -91,7 +95,6 @@ PURE := \
 	is_audio \
 	is_note \
 	compute_pending \
-	_by_date \
 	series_map \
 	credential_gap \
 	parse_handoff \
