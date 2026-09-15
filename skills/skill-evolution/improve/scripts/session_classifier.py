@@ -14,6 +14,9 @@ Three things keep the cost near zero for the sessions that have nothing to say:
 - An unattended session (`claude -p`, subagent, anything but a human at a terminal)
   exits at the gate — otherwise the classifier would grade its own runs.
 - At most `--max-signals` findings per session, so one bad session cannot flood the queue.
+- A gap already on file for that skill comes back as one more witness, not a second queue
+  entry — including when it is worded differently, which the validator decides by
+  answering `duplicate_of` against the KNOWN_SIGNALS it is shown.
 
 Input (stdin): Claude Code SessionEnd hook JSON. Empirically (2026-09-15, Claude Code
 2.1.272) that payload carries `transcript_path`, which is why this is a SessionEnd hook
@@ -162,15 +165,56 @@ def build_excerpt(skills: list[str], messages: list[str], *, limit: int = 8000) 
     return header + body[-limit:]
 
 
+def known_signals(memory_sh: Path, memory_dir: Path, skill: str, *, limit: int = 20) -> list[dict[str, str]]:
+    """The most recent signals already on file for this skill, newest last.
+
+    Exact text matching only catches a gap phrased the same way twice, and July's queue
+    said the same thing four different ways in a day — 43% of that month was duplicates
+    that no whitespace-folding key would ever join. So the judgement of "is this the same
+    gap said differently" goes to the validator, which needs to see what it is comparing
+    against. Reading is cheap; a wrong fuzzy-match rule written here would not be.
+    """
+    if not memory_sh.is_file() or not (memory_dir / "signals.jsonl").is_file():
+        return []
+    try:
+        completed = subprocess.run(
+            ["bash", str(memory_sh), "lookup", "--memory-dir", str(memory_dir), "--target-skill", skill],
+            text=True, capture_output=True, timeout=30,
+        )
+        prior = json.loads(completed.stdout).get("prior_signals") or []
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError, AttributeError):
+        return []
+    return [
+        {"signal_id": record.get("signal_id", ""), "gap": record.get("gap", "")}
+        for record in prior[-limit:]
+        if record.get("signal_id")
+    ]
+
+
+def with_known_signals(excerpt: str, signals: list[dict[str, str]]) -> str:
+    """Append the KNOWN_SIGNALS section the validator answers `duplicate_of` from.
+
+    It rides inside the excerpt because validate-gap.sh belongs to #43 and takes three
+    positional arguments today. When that script grows a slot of its own this moves into
+    it; the section marker is already the one the prompt looks for.
+    """
+    if not signals:
+        return excerpt
+    lines = "\n".join(f"{item['signal_id']}: {item['gap']}" for item in signals)
+    return f"{excerpt}\n\n===KNOWN_SIGNALS===\n{lines}\n"
+
+
 # --- validator -------------------------------------------------------------------
 
 
 def run_validator(validator: Path, skill: str, excerpt: str, env: dict[str, str]) -> dict[str, Any] | None:
     """Call #43's precision-first validator for one skill and parse its JSON verdict.
 
-    Contract (#43): {verdict, target_skill, gap, evidence_quote, risk_class}. Anything
-    that is not parseable JSON with an `accept` verdict and a quote is dropped —
-    precision-first means the silent path is the default one.
+    Contract (#43): {verdict, target_skill, gap, evidence_quote, risk_class, duplicate_of}.
+    Anything that is not parseable JSON with an `accept` verdict is dropped —
+    precision-first means the silent path is the default one. A verdict naming a
+    `duplicate_of` is exempt from needing its own gap text and quote: it is pointing at a
+    signal that already carries both.
     """
     try:
         completed = subprocess.run(
@@ -191,7 +235,7 @@ def run_validator(validator: Path, skill: str, excerpt: str, env: dict[str, str]
         return None
     if not isinstance(verdict, dict) or verdict.get("verdict") != "accept":
         return None
-    if not verdict.get("gap") or not verdict.get("evidence_quote"):
+    if not verdict.get("duplicate_of") and not (verdict.get("gap") and verdict.get("evidence_quote")):
         return None
     verdict.setdefault("target_skill", skill)
     return verdict
@@ -207,6 +251,23 @@ def resolve_queue(cwd: Path, env: dict[str, str]) -> Path:
         return project
     home = Path(env.get("AGENTS_SKILLS_HOME") or (Path(env.get("HOME", "~")).expanduser() / ".agents/skills"))
     return home / "improve/signal-queue.md"
+
+
+def witness(state_script: Path, queue: Path, signal_id: str) -> str | None:
+    """Count one more sighting of the signal the validator says this repeats."""
+    completed = subprocess.run(
+        [
+            sys.executable, str(state_script), "witness",
+            "--queue", str(queue),
+            "--memory-dir", str(queue.parent / "memory"),
+            "--signal-id", signal_id,
+        ],
+        text=True, capture_output=True,
+    )
+    if completed.returncode != 0:
+        print(completed.stderr.strip(), file=sys.stderr)
+        return None
+    return completed.stdout.strip()
 
 
 def capture(state_script: Path, queue: Path, verdict: dict[str, Any], timestamp: str) -> str | None:
@@ -247,13 +308,13 @@ def classify(payload: dict[str, Any], args: argparse.Namespace, env: dict[str, s
 
     reason = skip_reason(env, rows)
     if reason:
-        return {"skipped": reason, "skills": [], "captured": []}
+        return {"skipped": reason, "skills": [], "captured": [], "deduped": []}
 
     skills = skills_used(rows)
     if not skills:
         # The cheap exit that makes this affordable: no Skill ran, so there is nothing to
         # attribute a gap to, and the model is never called.
-        return {"skipped": "no skill invoked", "skills": [], "captured": []}
+        return {"skipped": "no skill invoked", "skills": [], "captured": [], "deduped": []}
 
     messages = user_messages(rows)
     excerpt = build_excerpt(skills, messages)
@@ -263,17 +324,28 @@ def classify(payload: dict[str, Any], args: argparse.Namespace, env: dict[str, s
     child_env = dict(env)
     child_env.setdefault("IMPROVE_VALIDATE_MODEL", args.model)
 
+    state_script = scripts / "signal_state.py"
+    memory_dir = queue.parent / "memory"
     captured: list[dict[str, Any]] = []
+    deduped: list[dict[str, Any]] = []
     for skill in skills:
+        # Only new signals are budgeted. A repeat adds nothing to the queue, so counting
+        # it against the cap would spend the budget on findings nobody has to read.
         if len(captured) >= args.max_signals:
             break
-        verdict = run_validator(validator, skill, excerpt, child_env)
+        prior = known_signals(scripts / "memory.sh", memory_dir, skill)
+        verdict = run_validator(validator, skill, with_known_signals(excerpt, prior), child_env)
         if verdict is None:
             continue
-        signal_id = capture(scripts / "signal_state.py", queue, verdict, args.timestamp)
+        duplicate_of = str(verdict.get("duplicate_of") or "")
+        if duplicate_of:
+            if witness(state_script, queue, duplicate_of):
+                deduped.append({"signal_id": duplicate_of, "target_skill": verdict["target_skill"]})
+            continue
+        signal_id = capture(state_script, queue, verdict, args.timestamp)
         if signal_id:
             captured.append({"signal_id": signal_id, "target_skill": verdict["target_skill"]})
-    return {"skipped": None, "skills": skills, "captured": captured}
+    return {"skipped": None, "skills": skills, "captured": captured, "deduped": deduped}
 
 
 def main(argv: list[str] | None = None) -> int:

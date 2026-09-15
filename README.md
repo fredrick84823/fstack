@@ -276,7 +276,13 @@ Wires the `improve` skill's signal capture into session lifecycle:
 - **Stop** → captures `<<GAP skill: desc>>` markers and skill candidates automatically
 
 兩條路徑共用同一個 capture：`signal_state.py capture` 以 (target_skill, 正規化後的 gap)
-去重，重複的只把既有 signal 的 `evidence_count` 加一，不在 queue 開第二筆。
+去重，重複的只把既有 signal 的 `evidence_count` 加一，不在 queue 開第二筆。兩個例外：
+
+- 既有 signal 已經 `resolved` → 視為回歸，開新 signal，raw record 的
+  `links.regression_of` 指向舊 id。`deferred` / `rejected` / `pending` 維持累加。
+- 換句話說的重複（正規化比不出來的）由驗證器認：分類器把該 skill 最近 20 筆既有 signal
+  餵進 `===KNOWN_SIGNALS===`，驗證器回 `duplicate_of` 時走 `signal_state.py witness`
+  累加，不進 capture。
 
 ## Post-install: gap detection
 

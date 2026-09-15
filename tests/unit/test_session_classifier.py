@@ -37,15 +37,16 @@ WITH_SKILLS = FIXTURES / "session-with-skills.jsonl"
 WITHOUT_SKILLS = FIXTURES / "session-without-skills.jsonl"
 SDK_CLI = FIXTURES / "session-sdk-cli.jsonl"
 
-# 每次呼叫附到 log，再吐一筆 accept。log 讓「模型有沒有被呼叫」變成可斷言的事實。
+# 每次呼叫把 skill 附到 log、把送進去的 excerpt 存檔，再吐一筆 accept。
+# log 讓「模型有沒有被呼叫」、excerpt 檔讓「validator 看到了什麼」變成可斷言的事實。
 STUB_VALIDATOR = """#!/usr/bin/env bash
 printf '%s\\n' "$1" >> "$IMPROVE_STUB_LOG"
+printf '%s' "$3" > "$IMPROVE_STUB_EXCERPT"
 cat <<JSON
-{"verdict":"accept","target_skill":"$1","gap":"$IMPROVE_STUB_GAP","evidence_quote":"不對，未結案的項目沒有被帶進索引","risk_class":"S2"}
+{"verdict":"accept","target_skill":"$1","gap":"$IMPROVE_STUB_GAP","evidence_quote":"不對，未結案的項目沒有被帶進索引","risk_class":"S2","duplicate_of":$IMPROVE_STUB_DUPLICATE_OF}
 JSON
 """
 
-# 同一個 gap 文字（去掉空白差異後相同）用來驗去重。
 REJECTING_VALIDATOR = """#!/usr/bin/env bash
 printf '%s\\n' "$1" >> "$IMPROVE_STUB_LOG"
 echo '{"verdict":"reject","target_skill":"'"$1"'","gap":"","evidence_quote":"","risk_class":"S3"}'
@@ -62,6 +63,7 @@ class SessionClassifierTest(unittest.TestCase):
         self.memory = self.queue.parent / "memory"
         self.log = self.root / "validator-calls.log"
         self.log.write_text("")
+        self.excerpt = self.root / "validator-excerpt.txt"
 
     def tearDown(self) -> None:
         self.temp.cleanup()
@@ -79,6 +81,7 @@ class SessionClassifierTest(unittest.TestCase):
         env_extra: dict[str, str] | None = None,
         validator: Path | None = None,
         gap: str = "索引沒有帶出未結案狀態",
+        duplicate_of: str | None = None,
         args: list[str] | None = None,
     ) -> dict:
         env = {
@@ -89,7 +92,9 @@ class SessionClassifierTest(unittest.TestCase):
             "CLAUDE_CODE_SESSION_ATTENDED": "1",
             "IMPROVE_VALIDATOR": str(validator or self.write_validator()),
             "IMPROVE_STUB_LOG": str(self.log),
+            "IMPROVE_STUB_EXCERPT": str(self.excerpt),
             "IMPROVE_STUB_GAP": gap,
+            "IMPROVE_STUB_DUPLICATE_OF": json.dumps(duplicate_of),
         }
         env.update(env_extra or {})
         payload = json.dumps({
@@ -221,6 +226,45 @@ class SessionClassifierTest(unittest.TestCase):
         self.assertEqual(len(raw), 1)
         self.assertEqual(raw[0]["evidence_count"], 2)
 
+    # --- 換句話說的重複：交給驗證器認，不自己寫模糊比對 ------------------------
+
+    def test_the_skills_existing_signals_are_handed_to_the_validator_to_compare_against(self) -> None:
+        self.run_classifier(WITH_SKILLS, args=["--max-signals", "1"], gap="索引沒有帶出未結案狀態")
+        self.log.write_text("")
+        self.run_classifier(WITH_SKILLS, args=["--max-signals", "1"], gap="換一種說法的同一件事")
+
+        excerpt = self.excerpt.read_text()
+        # 沒有這一段，驗證器沒有東西可以比對，duplicate_of 永遠只能回 null，
+        # 7 月那 43% 換句話說的重複就全部漏回 queue。
+        self.assertIn("===KNOWN_SIGNALS===", excerpt)
+        self.assertIn("索引沒有帶出未結案狀態", excerpt)
+        self.assertRegex(excerpt, r"sig_\w+: 索引沒有帶出未結案狀態")
+
+    def test_a_duplicate_of_verdict_adds_a_witness_instead_of_a_queue_entry(self) -> None:
+        first = self.run_classifier(WITH_SKILLS, args=["--max-signals", "1"])
+        existing = first["captured"][0]["signal_id"]
+
+        second = self.run_classifier(
+            WITH_SKILLS, args=["--max-signals", "1"],
+            gap="完全不同的措辭，但講的是同一個缺口",
+            duplicate_of=existing,
+        )
+        self.assertEqual(second["captured"], [])
+        self.assertEqual({item["signal_id"] for item in second["deduped"]}, {existing})
+        # 文字比對抓不到這一筆 —— 它是靠驗證器指名的。
+        self.assertEqual(len(self.queue_entries()), 1)
+        self.assertEqual(self.raw_records()[0]["evidence_count"], 1 + len(second["deduped"]))
+
+    def test_a_duplicate_does_not_spend_the_per_session_budget(self) -> None:
+        first = self.run_classifier(WITH_SKILLS, args=["--max-signals", "1"])
+        existing = first["captured"][0]["signal_id"]
+        # 上限 1、兩個 skill：第一個回 duplicate_of 不佔額度，第二個才吃掉它。
+        report = self.run_classifier(
+            WITH_SKILLS, args=["--max-signals", "1"], gap="另一個真缺口", duplicate_of=existing,
+        )
+        self.assertEqual(len(report["deduped"]), 2)
+        self.assertEqual(report["captured"], [])
+
     def test_a_different_gap_on_the_same_skill_is_still_its_own_signal(self) -> None:
         # 去重的鍵是 (skill, gap)，不是 skill —— 少了這條，同一個 skill 的第二個
         # 真 gap 會被第一個吃掉。
@@ -275,21 +319,97 @@ class CaptureDedupTest(unittest.TestCase):
         self.capture("同一句描述", skill="skill-b")
         self.assertEqual(self.queue.read_text().count("- **signal_id**:"), 2)
 
-    def test_a_deduped_capture_leaves_the_existing_status_alone(self) -> None:
-        # 去重不該是「復活」：已經被判掉的 signal 不能靠再出現一次爬回 pending。
-        signal_id = self.capture("會再出現一次的 gap")
+    def transition(self, signal_id: str, to: str, *, candidate: str | None = None) -> None:
+        extra = []
+        if to == "resolved":
+            candidate = candidate or "candidate_fixture"
+            subprocess.run(
+                [
+                    sys.executable, str(STATE), "prepare",
+                    "--queue", str(self.queue), "--memory-dir", str(self.memory),
+                    "--signal-id", signal_id, "--candidate-id", candidate,
+                ],
+                text=True, capture_output=True, check=True,
+            )
+            extra = ["--candidate-id", candidate]
         subprocess.run(
             [
                 sys.executable, str(STATE), "transition",
                 "--queue", str(self.queue), "--memory-dir", str(self.memory),
-                "--signal-id", signal_id, "--to", "deferred", "--decision-by", "unit-test",
+                "--signal-id", signal_id, "--to", to, "--decision-by", "unit-test", *extra,
             ],
             text=True, capture_output=True, check=True,
         )
-        self.capture("會再出現一次的 gap", timestamp="2026-09-17T10:00:00+08:00")
-        self.assertIn("- **status**: deferred", self.queue.read_text())
-        self.assertNotIn("- **status**: pending", self.queue.read_text())
+
+    def test_a_deduped_capture_leaves_the_existing_status_alone(self) -> None:
+        # 去重不該是「復活」：已經被判掉的 signal 不能靠再出現一次爬回 pending。
+        for index, status in enumerate(("deferred", "rejected")):
+            with self.subTest(status=status):
+                gap = f"會再出現一次的 gap {index}"
+                signal_id = self.capture(gap)
+                self.transition(signal_id, status)
+                self.capture(gap, timestamp=f"2026-09-1{index + 7}T10:00:00+08:00")
+                self.assertIn(f"- **status**: {status}", self.queue.read_text())
+                self.assertNotIn("- **status**: pending", self.queue.read_text())
+                record = [r for r in self.raw() if r["signal_id"] == signal_id][0]
+                self.assertEqual(record["evidence_count"], 2)
+
+    def test_a_gap_that_comes_back_after_being_fixed_is_a_new_signal(self) -> None:
+        # 裁示：resolved 是唯一的例外。把回歸折進已修好的那筆，就等於把「修了但沒修好」
+        # 這件事唯一的證據埋掉 —— evidence_count 從 1 變 2，而 queue 上沒有任何東西變。
+        gap = "索引沒有帶出未結案狀態"
+        original = self.capture(gap)
+        self.transition(original, "resolved")
+
+        regression = self.capture(gap, timestamp="2026-09-20T10:00:00+08:00")
+        self.assertNotEqual(regression, original)
+        self.assertEqual(self.queue.read_text().count("- **signal_id**:"), 2)
+        self.assertIn("- **status**: pending", self.queue.read_text())
+
+        new_record = [r for r in self.raw() if r["signal_id"] == regression][0]
+        old_record = [r for r in self.raw() if r["signal_id"] == original][0]
+        self.assertEqual(new_record["links"]["regression_of"], original)
+        self.assertEqual(new_record["evidence_count"], 1)
+        self.assertEqual(old_record["evidence_count"], 1, "舊的那筆不該同時又被加一次")
+
+    def test_a_third_sighting_joins_the_live_regression_not_the_resolved_ancestor(self) -> None:
+        # 同一個鍵現在有兩筆 raw record。第三次出現屬於還活著的那筆，
+        # 比對「第一筆」的話會開出第三個 signal，回歸就變成每次都開新的。
+        gap = "索引沒有帶出未結案狀態"
+        original = self.capture(gap)
+        self.transition(original, "resolved")
+        regression = self.capture(gap, timestamp="2026-09-20T10:00:00+08:00")
+
+        again = self.capture(gap, timestamp="2026-09-21T10:00:00+08:00")
+        self.assertEqual(again, regression)
+        self.assertEqual(self.queue.read_text().count("- **signal_id**:"), 2)
+        self.assertEqual([r for r in self.raw() if r["signal_id"] == regression][0]["evidence_count"], 2)
+
+    def test_witness_counts_a_signal_named_outright(self) -> None:
+        # 驗證器認出「換句話說的同一件事」時給的是 id，不是文字 —— 那條路徑走這裡。
+        signal_id = self.capture("原本的描述")
+        subprocess.run(
+            [
+                sys.executable, str(STATE), "witness",
+                "--queue", str(self.queue), "--memory-dir", str(self.memory),
+                "--signal-id", signal_id,
+            ],
+            text=True, capture_output=True, check=True,
+        )
         self.assertEqual(self.raw()[0]["evidence_count"], 2)
+        self.assertEqual(self.queue.read_text().count("- **signal_id**:"), 1)
+
+    def test_witness_refuses_an_unknown_signal_instead_of_inventing_one(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable, str(STATE), "witness",
+                "--queue", str(self.queue), "--memory-dir", str(self.memory),
+                "--signal-id", "sig_does_not_exist",
+            ],
+            text=True, capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unknown signal_id", result.stderr)
 
 
 if __name__ == "__main__":

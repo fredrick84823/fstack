@@ -52,16 +52,33 @@ def normalize_gap(value: str) -> str:
 
 
 def find_duplicate(records: list[dict[str, Any]], target_skill: str, gap: str) -> dict[str, Any] | None:
-    """The same (skill, gap) said twice is one signal with two witnesses, not two signals.
+    """The newest raw signal sharing this (skill, gap), or None.
 
-    Matching is on raw evidence, not on the queue: a signal whose queue entry is already
-    terminal still absorbs the repeat, so a stale gap cannot climb back into `pending`
-    just by recurring. `/improve` reads evidence_count to see how often it came back.
+    Newest, not first: a regression opens a second record under the same key, and the
+    third occurrence belongs to the live one, not to the resolved ancestor it descends
+    from. Records are appended in order, so the last match is the current one.
     """
     wanted = normalize_gap(gap)
+    found = None
     for record in records:
         if record.get("target_skill") == target_skill and normalize_gap(record.get("gap", "")) == wanted:
+            found = record
+    return found
+
+
+def bump_evidence(records: list[dict[str, Any]], signal_id: str) -> dict[str, Any] | None:
+    """One more witness for a signal already on file. Mutates the record in place."""
+    for record in records:
+        if record.get("signal_id") == signal_id:
+            record["evidence_count"] = int(record.get("evidence_count", 1)) + 1
             return record
+    return None
+
+
+def queue_status_of(entries: list[dict[str, Any]], signal_id: str) -> str | None:
+    for entry in entries:
+        if entry["fields"].get("signal_id") == signal_id:
+            return entry["fields"].get("status", "pending")
     return None
 
 
@@ -308,11 +325,20 @@ def command_capture(args: argparse.Namespace) -> None:
         raw_path = memory_dir / "signals.jsonl"
         raw_records = read_jsonl(raw_path)
         duplicate = find_duplicate(raw_records, args.target_skill, args.gap)
+        regression_of = ""
         if duplicate is not None:
-            duplicate["evidence_count"] = int(duplicate.get("evidence_count", 1)) + 1
-            atomic_write(raw_path, render_jsonl(raw_records))
-            print(duplicate["signal_id"])
-            return
+            # A gap that recurs after it was fixed is news; one that recurs while it is
+            # still pending, deferred or rejected is the same gap saying itself twice.
+            # Folding a regression into the resolved record would bury the only evidence
+            # that the fix did not hold. An orphan raw record with no queue entry keeps
+            # the conservative side: absorb it rather than invent a second signal.
+            if queue_status_of(entries, duplicate["signal_id"]) == "resolved":
+                regression_of = duplicate["signal_id"]
+            else:
+                bump_evidence(raw_records, duplicate["signal_id"])
+                atomic_write(raw_path, render_jsonl(raw_records))
+                print(duplicate["signal_id"])
+                return
         if any(entry["fields"].get("signal_id") == signal_id for entry in entries):
             raise StateError(f"duplicate queue signal_id: {signal_id}")
         if ensure_unique(raw_records, signal_id, "raw signal", allow_missing=True) is not None:
@@ -338,6 +364,8 @@ def command_capture(args: argparse.Namespace) -> None:
             _, _, entries = queue_lines(queue)
             entry = find_queue_entry(entries, signal_id)
             raw = raw_record_from_entry(entry, signal_id)
+            if regression_of:
+                raw["links"]["regression_of"] = regression_of
             raw_records.append(raw)
             atomic_write(raw_path, render_jsonl(raw_records))
             graph["signals"].append(graph_record_from_raw(raw, "pending"))
@@ -351,6 +379,24 @@ def command_capture(args: argparse.Namespace) -> None:
             atomic_write(queue, "".join(failed_lines))
             raise
     print(signal_id)
+
+
+def command_witness(args: argparse.Namespace) -> None:
+    """Record one more sighting of a signal named outright, not matched by text.
+
+    Exact text matching only ever catches a gap phrased the same way twice; the validator
+    is what recognises the same gap said differently, and it answers with an id. Either
+    way the count is bumped here, so signals.jsonl keeps a single writer.
+    """
+    queue = Path(args.queue).expanduser().resolve()
+    memory_dir = Path(args.memory_dir).expanduser().resolve()
+    with lifecycle_lock(queue):
+        raw_path = memory_dir / "signals.jsonl"
+        raw_records = read_jsonl(raw_path)
+        if bump_evidence(raw_records, args.signal_id) is None:
+            raise StateError(f"unknown signal_id: {args.signal_id}")
+        atomic_write(raw_path, render_jsonl(raw_records))
+    print(args.signal_id)
 
 
 def command_adopt_legacy(args: argparse.Namespace) -> None:
@@ -478,6 +524,12 @@ def build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--gap", required=True)
     capture.add_argument("--evidence-quote", default="")
     capture.set_defaults(func=command_capture)
+
+    witness = subparsers.add_parser("witness")
+    witness.add_argument("--queue", required=True)
+    witness.add_argument("--memory-dir", required=True)
+    witness.add_argument("--signal-id", required=True)
+    witness.set_defaults(func=command_witness)
 
     adopt = subparsers.add_parser("adopt-legacy")
     adopt.add_argument("--queue", required=True)
