@@ -173,8 +173,9 @@ cat ~/.config/generate-meeting-notes/config.json
 
 ### Step 3：Slack channel
 
-- 該會議類型有 `slack_channel` → 告知「完成後自動通知 channel `{id}`，要改請說」
-- 為空 → 提醒「此類型未設 channel，不會自動通知；要設請重跑 `setup.py`」
+- 有 `slack_channel` → 告知「完成後自動通知 channel `{id}`，要改請說」
+- 欄位不存在或 `null`（還沒設定）→ 告知「此類型還沒設 channel，記錄照產，完成後會 DM 提醒補上」
+- `""`（刻意不發）→ 不用講，這是設定好的靜音
 
 ### Step 4：NotebookLM 認證
 
@@ -321,7 +322,7 @@ cd "$SKILL_DIR" && uv run scripts/replace_speakers.py \
 `create_gdoc_from_md.py` 結束時自動呼叫 `send_slack_notification.py`，**agent 不介入**。
 只在腳本印警告時處理：
 
-- `未設定 slack_channel` → 重跑 `setup.py` 填 Channel ID
+- `還沒設定 Slack channel` → 問到 Channel ID 後跑 `python3 scripts/channel.py --meeting <key> --channel C0XXXXXXXXX`（會先備份設定檔）
 - `Slack 通知失敗` → 確認 Bot Token 正確且 Bot 已加入該 channel
 
 ## 流程 D：雙來源合併

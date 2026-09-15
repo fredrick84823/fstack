@@ -40,7 +40,8 @@ cd "$SKILL_DIR" && uv run scripts/setup.py --with-audio # 再加上 Audio Source
 | `custom_prompt` | 給 agent 的補充（報告順序、人名對照），提升格式一致性與講者推斷品質 |
 | `folder_name` | Slack 通知裡顯示的雲端路徑名稱 |
 | `series_name` | Google Doc 名稱裡的系列名 |
-| `slack_channel` | 空字串 = 不發通知 |
+| `slack_channel` | 三態：欄位不存在／`null` = 還沒設定（記錄照產，DM 提醒補上）；`""` = 刻意不發通知；`"C0…"` = 發那個 channel。改用 `scripts/channel.py --meeting <key> --channel <id>` 寫回（會先備份設定檔） |
+| `slack_dm_user` | 你的 Slack Member ID；會議還沒設 channel 時 DM 提醒你。沒設就只印在 stdout |
 | `glossary_path` | 本機詞彙表，見 `glossary.md` |
 | `shared_glossary` | 可選，團隊共用詞彙表，見 `glossary.md` |
 

@@ -247,7 +247,7 @@ Audio Source Extraction 不會直接採用 NotebookLM Studio report 當正式會
 
 - `gcloud`：取得 Google Application Default Credentials，並用 `--enable-gdrive-access` 讓 Drive API 可用。
 - Google Drive / Google Docs：建立日期資料夾、建立正式 Google Doc、上傳 source artifacts。
-- Slack：可選；設定 `slack_channel` 與 `slack_bot_token` 後自動通知。
+- Slack：可選；設定 `slack_channel` 與 `slack_bot_token` 後自動通知。會議還沒設 `slack_channel` 時改 DM `slack_dm_user`，記錄照產。
 - `ffmpeg`：錄音輸入才需要，用來切音訊。
 - NotebookLM：錄音輸入才需要，用來把音訊 source 萃取成 `transcript.md` 與 `extract.md`。
 
@@ -346,10 +346,11 @@ meeting-context.md
 | Field | 傳遞方式 | 用途 |
 |---|---|---|
 | `slack_bot_token` | `send_slack_notification.py` 讀取 config | 發 Slack 通知 |
+| `slack_dm_user` | `send_slack_notification.py` 讀取 config | 會議還沒設 channel 時 DM 提醒的對象（你的 Member ID） |
 | `meetings.<key>.folder_id` | `create_gdoc_from_md.py --meeting <key>` 查 config | Shared Drive 父資料夾 |
 | `meetings.<key>.folder_name` | `create_gdoc_from_md.py` 查 config | Slack 顯示路徑 |
 | `meetings.<key>.series_name` | `create_gdoc_from_md.py` 查 config | Google Doc 命名 |
-| `meetings.<key>.slack_channel` | `create_gdoc_from_md.py` 查 config | 通知目標 channel |
+| `meetings.<key>.slack_channel` | `create_gdoc_from_md.py` 查 config | 通知目標 channel。三態：欄位不存在／`null` = 還沒設定（記錄照產，DM 提醒補上）；`""` = 刻意不發通知；`"C0…"` = 發那個 channel |
 | `meetings.<key>.attendees` | `create_gdoc_from_md.py` 查 config | 發布前注入「與會者」欄位 |
 | `meetings.<key>.custom_prompt` | main agent / `meeting-context.md` | 會議類型補充脈絡 |
 | `meetings.<key>.notebook_name` | `extract_audio_sources.py --meeting <key>` 查 config | 錄音輸入的 NotebookLM notebook |
@@ -587,7 +588,7 @@ Input 傳遞：
 5. 建立 Google Doc，將 Markdown 轉為 Google Docs 格式。
 6. 將 Google Doc 移到日期子資料夾。
 7. 上傳 `transcript.md`、`extract.md`、`meeting-context.md` 到同一個日期子資料夾。
-8. 若未加 `--no-slack` 且有 `slack_channel`，發 Slack 通知。
+8. 若未加 `--no-slack`：`slack_channel` 有值就發該 channel；欄位不存在或 `null` 就印提醒並 DM `slack_dm_user`；`""` 則安靜跳過。
 
 Output：
 
@@ -612,7 +613,15 @@ Input：
 - Slack bot token：來自 `slack_bot_token`
 - Doc URL / Drive path / series / date：來自 `create_gdoc_from_md.py`
 
-若 `slack_channel` 空白，發布腳本只輸出 Google Doc URL，不發通知。
+`slack_channel` 的三態見 `scripts/channel.py`：欄位不存在或 `null` 時發布腳本照樣輸出 Google Doc URL，另外印一段提醒並 DM `slack_dm_user`（含 Doc URL、本機路徑、寫回用的那行指令）；`""` 則安靜不發。
+
+拿到 Channel ID 後寫回：
+
+```bash
+python3 scripts/channel.py --meeting <key> --channel C0XXXXXXXXX
+```
+
+寫入前會把原設定檔複製成 `config.json.bak`（它是非版控的手改檔）。
 
 ## End-to-End Data Flow
 

@@ -34,6 +34,9 @@ MUT_LOG := .mutmut-run.log
 # `build_index` 會留下幾顆殺不掉的：警告訊息的字面值、`encoding="utf-8"` → `None`／
 # `"UTF-8"`（這台機器上等價）。那些不寫測試 —— 要殺就得逐字釘死訊息文案，而那正是
 # 棒④ 會刪掉的裝飾性測試。
+# channel.py 的三支全掛：`channel_state` / `dm_reminder` 是 dict/str in → str out，
+# `set_channel` 碰檔案系統但碰的是測試自己建的 tmp 檔（同 history_index 的理由）——
+# 「備份有沒有先於寫入」正是最該被 mutant 問一次的地方。`main` 是 CLI 進入點，不掛。
 PURE := \
 	outline \
 	render \
@@ -64,7 +67,12 @@ PURE := \
 	keys_to_push \
 	summary_line \
 	entry_id \
-	_buckets
+	_buckets \
+	channel_state \
+	channel_id \
+	channel_from_answer \
+	dm_reminder \
+	set_channel
 
 # key 的形狀是 `<路徑轉點>.x_<函式名>__mutmut_<n>` —— `x_` 前綴是 mutmut 加的，
 # 少了它 fnmatch 一個都配不到，而配不到時 mutmut 是 assert 不是靜靜跳過。

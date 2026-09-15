@@ -18,6 +18,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from channel import channel_from_answer  # noqa: E402
+
 # ─── 路徑設定 ──────────────────────────────────────────────────────────────────
 
 SKILL_DIR = Path(__file__).parent.parent
@@ -421,12 +424,14 @@ def setup_glossary_entries(glossary_path: Path, meetings: dict):
 def setup_config(with_audio: bool):
     existing_meetings = {}
     existing_slack_token = ""
+    existing_dm_user = ""
     existing_glossary_path = str(CONFIG_DIR / "glossary.json")
     if CONFIG_PATH.exists():
         with open(CONFIG_PATH, encoding="utf-8") as f:
             existing = json.load(f)
         existing_meetings = existing.get("meetings", {})
         existing_slack_token = existing.get("slack_bot_token", "")
+        existing_dm_user = existing.get("slack_dm_user") or ""
         existing_glossary_path = existing.get("glossary_path", existing_glossary_path)
         info("找到現有設定（現有會議類型將保留，可新增或略過）")
 
@@ -440,6 +445,11 @@ def setup_config(with_audio: bool):
     slack_bot_token = ask(
         "Slack Bot Token（空白跳過 Slack 通知功能）",
         existing_slack_token,
+    )
+    print("  在 Slack 點自己的頭像 → Profile → ⋯ → Copy member ID")
+    slack_dm_user = ask(
+        "你的 Slack Member ID（會議沒設 channel 時 DM 提醒你，空白跳過）",
+        existing_dm_user,
     )
 
     # 預設 prompt
@@ -492,9 +502,14 @@ def setup_config(with_audio: bool):
             existing_m.get("series_name", key),
         )
         print("  請在 Slack 中右鍵點擊 channel → View channel details → 複製 Channel ID")
-        slack_channel = ask(
-            "Slack Channel ID（例：C0XXXXXXXXX，空白跳過）",
-            existing_m.get("slack_channel", ""),
+        print("  還沒問到就留空白 —— 記錄照產，發佈時會 DM 提醒你補上（不是永久靜音）")
+        existing_channel = existing_m.get("slack_channel")
+        slack_channel = channel_from_answer(
+            ask(
+                "Slack Channel ID（例：C0XXXXXXXXX，空白＝還沒設定）",
+                existing_channel or "",
+            ),
+            existing_channel,
         )
 
         meetings[key] = {
@@ -502,6 +517,9 @@ def setup_config(with_audio: bool):
             "folder_id": folder_id,
             "folder_name": folder_name,
             "series_name": series_name,
+            # 空白寫 `null` 而不是 `""`：這兩個在發佈流程是不同的狀態（#26）——
+            # `null` 是還沒設定（DM 提醒我），`""` 是刻意不發通知（安靜）。
+            # 兩者的取捨在 `channel_from_answer` 裡，這裡不再判一次。
             "slack_channel": slack_channel,
             "attendees": existing_m.get("attendees", []),
             "custom_prompt": existing_m.get("custom_prompt", ""),
@@ -514,6 +532,7 @@ def setup_config(with_audio: bool):
 
     config = {
         "slack_bot_token": slack_bot_token,
+        "slack_dm_user": slack_dm_user,
         "meetings": meetings,
         "prompt_path": str(user_prompt),
         "glossary_path": str(glossary_path),
