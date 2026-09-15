@@ -1,12 +1,10 @@
 ---
 name: improve
 description: >
-  通用 skill 自我進化工具。當任何 skill 執行後使用者有修正、抱怨、或說「少了什麼」，
-  且能確認是可重複的 skill 規則缺口時，才在 response 末尾輸出 <<GAP skill-name: 一句話描述缺口>>，
-  Stop hook 自動寫入 signal-queue.md。
-  主動觸發：「improve」「skill 改進」「improve skill」「修正 skill」「更新 skill 規則」
-  「skill 有缺口」「skill 漏掉了」「self-improve」「自我進化」「skill 學習」。
-  初始化：「improve init」批量為選定 skill 生成 Signal Collection 區塊（供人工審核）。
+  Capture reusable skill gaps after user corrections or complaints by emitting a
+  GAP marker for signal-queue.md. Use for skill improvement, self-improvement,
+  rule updates, or `improve init`.
+disable-model-invocation: true
 ---
 
 # Improve — Skill 自我進化工具
@@ -44,11 +42,12 @@ ELSE                                                 → 互動詢問
 
 ## Skill Evolution Memory
 
-`signal-queue.md` 是人工可讀的待辦佇列；`memory/` 是 `/improve` 的可查詢狀態層。Stop hook 捕捉 `<<GAP>>` 時，必須同時寫入兩者：
+`signal-queue.md` 是人工可讀的待辦佇列，也是 **current lifecycle status 的唯一 source of truth**。`memory/` 保存 raw evidence、decision events 與可重建索引；不得把 JSONL 或 graph 的 `pending` 與 queue pending 取 union。Stop hook 捕捉 `<<GAP>>` 時，必須透過 `scripts/signal_state.py capture` 寫入 shared `signal_id`：
 
 ```
 skills/improve/memory/
   signals.jsonl                 # raw events: correction, failure, suspected gap
+  transitions.jsonl             # append-only lifecycle decisions
   skill-graph.json              # compact lookup index
   claims/{skill}.md             # consolidated recurring gap claims
   eval-cases/{skill}.json       # generated / approved eval cases
@@ -75,9 +74,19 @@ skills/improve/memory/
 }
 ```
 
-查詢時使用 `scripts/memory.sh lookup --memory-dir <dir> --target-skill <skill> [--affected-rule <rule>] [--gap-type <type>]`，先依 `target_skill`、`affected_rule`、`gap_type` 找 prior signals / claims / eval cases；不要直接手寫解析 JSONL。
+上例的 `status` 代表 capture 當下的狀態，等同 `status_semantics=captured_at_ingest`，不是 current lifecycle status。舊 records 保持 immutable，不為了 resolved/rejected/deferred 而改寫；current status 只讀 queue，decision history append 到 `transitions.jsonl`，graph status 則是可由 queue 重建的 projection。
 
-反思整理時使用 `skill-memory-reflect` skill，而不是把 raw hook capture 當成最終狀態。`skill-memory-reflect` 會讀取 `memory/signals.jsonl`、推論舊 records 的缺失欄位、產生 `claims/{skill}.md`、`eval-cases/{skill}.json`，並輸出 prioritized `/improve` worklist。`scripts/consolidate-memory.sh` 只作為機械備援，不是語意去重與 eval 產生的主要流程。
+查詢時使用 `scripts/memory.sh lookup --memory-dir <dir> --target-skill <skill> [--affected-rule <rule>] [--gap-type <type>]`，先依 `target_skill`、`affected_rule`、`gap_type` 找 prior signals / claims / eval cases；不要直接手寫解析 JSONL，也不要用 lookup 結果取代 queue 的 actionable selection。
+
+### Lifecycle Safety Contract
+
+- 新 signal 一律用 `scripts/signal_state.py capture`：同一個 top-level process 持有 scope-local lock，先 atomic commit queue，再寫 raw memory 與 graph；memory 失敗時 queue 保留 `memory_sync=failed` 供 recovery。
+- Approve 前以 `signal_state.py prepare --candidate-id <hash>` 記錄 deterministic apply intent。重試時若同一 intent 的 post-state 已存在，跳過重複 patch / test append / changelog append，再完成 transition。
+- Approve、Reject、Deferred 都用 `signal_state.py transition`；禁止直接用文字編輯只改 queue status。
+- `signal_state.py reconcile` 預設 dry-run，只處理指定 `signal_id`。Legacy entry 只能用 `(timestamp, target_skill, normalized gap)` 唯一精確匹配後 `adopt-legacy`；ambiguous/unmatched 時禁止猜測。
+- `signal_state.py` 是唯一 lock owner；其 internal primitives 不重新取得 lock，避免 nested-lock deadlock。Queue rewrites、raw append、transition append、graph projection 都用 same-directory temp file + atomic rename。
+
+反思整理時要讀 `memory/signals.jsonl`、推論舊 records 的缺失欄位、產生 `claims/{skill}.md`、`eval-cases/{skill}.json`，並輸出 prioritized `/improve` worklist，而不是把 raw hook capture 當成最終狀態。`scripts/consolidate-memory.sh` 只作為機械備援，不是語意去重與 eval 產生的主要流程。
 
 ## Signal 類型
 
@@ -130,8 +139,14 @@ skills/improve/memory/
 ```bash
 ts=$(date -Iseconds)
 queue="$HOME/.agents/skills/improve/signal-queue.md"
-printf '\n## [%s] %s\n\n- **type**: %s\n- **source**: cowork auto-detected\n- **gap**: %s\n- **status**: pending\n' \
-  "$ts" "skill-name" "S2" "gap description" >> "$queue"
+~/.agents/skills/improve/scripts/signal_state.py capture \
+  --queue "$queue" \
+  --memory-dir "$(dirname "$queue")/memory" \
+  --timestamp "$ts" \
+  --target-skill "skill-name" \
+  --type S2 \
+  --source "cowork auto-detected" \
+  --gap "gap description"
 ```
 
 ## improve init — 批量初始化 Signal Collection
@@ -172,13 +187,17 @@ printf '\n## [%s] %s\n\n- **type**: %s\n- **source**: cowork auto-detected\n- **
 
 ### Step 0.5: Skill Evolution Memory Lookup
 
-在正式進入 Step 2 歸因前，先查 `memory/skill-graph.json` 與 `memory/signals.jsonl`：
+在正式進入 Step 2 歸因前：
 
-1. 是否已有相似 signal（`duplicates`）
-2. 是否已有 rejected false positive（避免重複誤判）
-3. 是否已有同一 `affected_rule` 的 prior candidate / version
-4. 是否已有可重用的 A/B/C/D eval case
-5. 是否有 downstream skill 被過去改寫影響
+1. 從 queue 選定 signal；若沒有 `signal_id`，先用 `signal_state.py adopt-legacy` 做唯一精確連結
+2. 對該 `signal_id` 執行 `signal_state.py reconcile` dry-run，將 drift 納入 evidence，但不自動改狀態
+3. 再查 `memory/skill-graph.json` 與 `memory/signals.jsonl`：
+
+   - 是否已有相似 signal（`duplicates`）
+   - 是否已有 rejected false positive（避免重複誤判）
+   - 是否已有同一 `affected_rule` 的 prior candidate / version
+   - 是否已有可重用的 A/B/C/D eval case
+   - 是否有 downstream skill 被過去改寫影響
 
 若查到相似歷史，Step 6 review 包必須展示：
 
@@ -194,7 +213,7 @@ risk: regression / contradiction / false_positive
 依以下優先順序確定信號來源：
 
 1. **指定 SIGNAL 路徑**：直接讀取指定檔案（report、diff、log）
-2. **讀取 signal queue**：讀取 scope 對應的 `signal-queue.md`，取出所有 `status: pending` 項目
+2. **讀取 signal queue**：讀取 scope 對應的 `signal-queue.md`，取出所有 `status: pending` 項目；這是唯一 actionable set
 3. **互動模式**：若無任何輸入，詢問使用者描述遇到的缺口
 
 將每個缺口結構化為：
@@ -424,15 +443,18 @@ THEN {action}
 
 處理結果：
 - `A (Approve)` → 進入 Step 7
-- `R (Reject)` → signal-queue.md 對應項目標記 `status: rejected`，結束
+- `R (Reject)` → 呼叫 `signal_state.py transition --to rejected`，同步 queue authority、transition log 與 graph projection後結束
+- `D (Defer)` → 呼叫 `signal_state.py transition --to deferred`，不得直接手改 queue
 - `M (Modify)` → 使用者提供修改意見，回 Step 3 重新萃取規則
 
 ### Step 7: 寫入 + Changelog (Apply & Log)
 
-1. **寫入正式 SKILL.md**：用 Edit 工具修改對應段落（路徑由 Step 0 的 scope 決定）
-2. **更新測試檔**（若有變動）
-3. **更新 signal-queue.md**：處理過的項目標記 `status: resolved`
-4. **Append changelog.md**：
+1. **建立 apply intent**：以 `signal_id + normalized candidate diff` 計算 deterministic `candidate_id`，呼叫 `signal_state.py prepare`。若 retry 發現相同 intent，先驗證 post-state，已存在的 skill/test/changelog 變更不得重複 append
+2. **寫入正式 SKILL.md**：用 Edit 工具 idempotently 修改對應段落（路徑由 Step 0 的 scope 決定）
+3. **更新並執行測試**（若有變動）；失敗時 queue 保持 pending + prepared，不得 transition resolved
+4. **Append changelog.md once**：以 `signal_id + candidate_id` 作唯一鍵，已存在則跳過
+5. **Transition + verify**：呼叫 `signal_state.py transition --to resolved --candidate-id <id>`，再執行同 signal 的 reconcile dry-run；只有 queue、raw evidence presence、transition event、graph projection 與 `memory_sync=synced` 全部收斂才宣告完成
+6. **Append changelog.md 內容**：
 
 ```markdown
 ## {YYYY-MM-DD} — {target_skill} / {section}
@@ -484,3 +506,4 @@ Auto-trigger 機制：signal 產生時，skill **在當下輸出提示**，不�
 - 若 skill-creator plugin 未安裝，eval 步驟自動跳過並標記 skipped
 - Skill Evolution Memory 只追蹤 skill/rule/signal/eval/version/outcome，不建立完整個人知識庫
 - 定期整理 memory 時，使用 `scripts/consolidate-memory.sh --memory-dir <dir>` 合併 duplicates、標記 superseded claims、產出 high-priority candidate claims
+- `signals.jsonl` 是 immutable capture evidence；任何 current pending 統計只能來自 `signal-queue.md`
