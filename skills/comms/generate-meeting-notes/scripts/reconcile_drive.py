@@ -565,7 +565,6 @@ def main() -> int:
 
     state_path = Path(args.state).expanduser()
     first_run = not state_path.exists()
-    dry_run = args.dry_run or first_run
 
     from googleapiclient.discovery import build
     try:
@@ -597,7 +596,7 @@ def main() -> int:
         print(f"\n這是首次執行，強制 dry-run，沒有產任何記錄。狀態檔已建立：{state_path}")
         print("確認上面的差集無誤之後，下一輪就會真的產。")
         return 0
-    if dry_run:
+    if args.dry_run:
         print("\n這是 dry-run，沒有產任何記錄。")
         return 0
     if not round_.pending:
