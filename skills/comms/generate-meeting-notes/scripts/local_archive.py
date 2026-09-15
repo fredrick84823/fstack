@@ -22,6 +22,11 @@ DEFAULT_ARCHIVE_DIRNAME = "meeting-notes"
 # 都在掃同一批資料夾，各自編一份的話版面改了只會改到其中一份。
 DATE_DIR = re.compile(r"\d{8}")
 
+# 正式稿檔名／Doc 名的前綴。同上，owner 是這支模組 —— reconcile 靠它認出「這場已經有
+# 記錄」，歷史索引靠它 glob 出歷史場次，而 `note_title` 是寫檔名的那一端。三處各抄一份
+# 的話，版型改了只會改到其中一處，而症狀是「這場永遠不產」或「每小時重產一次」。
+NOTE_PREFIX = "會議記錄"
+
 
 def _configured_root() -> Path:
     """歸檔根目錄，由 config.json 的 local_archive_root 決定。
@@ -60,7 +65,7 @@ def clean_for_filename(text: str | None) -> str:
 
 def note_title(series_name: str, date: str, title_suffix: str | None = None) -> str:
     """正式稿標題。Doc 名稱與本機檔名共用這個值，兩邊才不會漂開。"""
-    title = f"會議記錄_{series_name}_{date}"
+    title = f"{NOTE_PREFIX}_{series_name}_{date}"
     cleaned = clean_for_filename(title_suffix)
     return f"{title}_{cleaned}" if cleaned else title
 
