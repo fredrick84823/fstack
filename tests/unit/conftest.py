@@ -144,3 +144,20 @@ def sent_body(service: MagicMock, *path: str) -> dict[str, Any]:
             f"{_describe(path)} was called without body=; got {sorted(kwargs)}"
         )
     return kwargs["body"]
+
+
+SKILL_MD = Path(__file__).resolve().parents[2] / "skills/comms/generate-meeting-notes/SKILL.md"
+
+
+def skill_md_section(heading: str) -> str:
+    """SKILL.md 的某一節（`## ` 開頭到下一個 `## ` 為止）。
+
+    SKILL.md 當**程式碼**審，所以有不只一支測試要對著某一節下斷言（版本來源檢查、
+    流程 C 的交棒契約）。切節那幾行手刻兩份之後，改掉其中一份的切法只會讓另一支
+    靜靜地量到別的範圍 —— 那種假綠沒有任何斷言看得見。
+    """
+    text = SKILL_MD.read_text(encoding="utf-8")
+    start = text.find(heading)
+    assert start != -1, f"SKILL.md 找不到「{heading}」一節"
+    end = text.find("\n## ", start + len(heading))
+    return text[start:] if end == -1 else text[start:end]

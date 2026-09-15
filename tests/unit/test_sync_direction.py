@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from .conftest import child_env, load_script
+from .conftest import child_env, load_script, skill_md_section
 from .test_sync_diff import pair, write_tree  # noqa: F401  `pair` 是 fixture，靠名字解析
 from .test_sync_from_installed import DEST_REL
 
@@ -31,7 +31,6 @@ parity = load_script("parity")
 
 REPO = Path(__file__).resolve().parents[2]
 PARITY_PY = Path(parity.__file__)
-SKILL_MD = REPO / "skills/comms/generate-meeting-notes/SKILL.md"
 MAKEFILE = REPO / "Makefile"
 
 # 兩個差得夠開的 mtime，避免檔案系統的時間解析度介入。
@@ -276,12 +275,8 @@ INSTALLED_AS_SOURCE = [
 
 
 def version_source_section() -> str:
-    """SKILL.md 的「版本來源檢查」一節（到下一個 `## ` 為止）。"""
-    text = SKILL_MD.read_text(encoding="utf-8")
-    start = text.find(SECTION_HEADING)
-    assert start != -1, f"SKILL.md 找不到「{SECTION_HEADING}」一節"
-    end = text.find("\n## ", start + len(SECTION_HEADING))
-    return text[start:] if end == -1 else text[start:end]
+    """SKILL.md 的「版本來源檢查」一節。"""
+    return skill_md_section(SECTION_HEADING)
 
 
 def test_the_version_source_section_sends_drift_to_the_reverse_script():
