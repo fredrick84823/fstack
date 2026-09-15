@@ -197,12 +197,11 @@ def open_items(markdown: str) -> list[str]:
             layer = title.split(" · ")[0].strip() if level == 4 else None
             if level <= 2:
                 in_actions = ACTION_HEADING in title
-            # ponytail: 這一行目前測不到，而且理由不是「很難湊」而是結構性的 ——
-            # 下面 `if not in_actions: continue` 擋在表格解析**之前**，所以
-            # `after_table_header` 只可能被行動項目節自己的表格設成 True，而節內
-            # 兩張表之間必有空行（空行那條路徑已經 reset 過了）。留著是因為那道 gate
-            # 一旦移到表格解析之後，這一行就是唯一擋著「表頭被抽成假待辦」的東西。
-            # 成本一行；要拿掉的話，連同 gate 的位置一起當成契約寫進測試再拿。
+            # ponytail: 值翻成 `True` 由 `test_open_items_never_turns_the_table_header_into_an_item`
+            # 的第二個 assert 守著（heading 與表格之間沒有空行時，只剩這一行在擋表頭）。
+            # **整行刪掉**才測不到，而且是結構性的：下面 `if not in_actions: continue`
+            # 擋在表格解析之前，所以要湊出差別得「行動項目節以表格列結尾 → 緊接 heading
+            # 無空行 → 下一節又是行動項目節」。成本一行，留著。
             after_table_header = False
             continue
 
