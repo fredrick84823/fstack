@@ -14,10 +14,10 @@ disable-model-invocation: true
 - **source artifacts** —— 一個目錄裡的四個檔：`transcript.md`（本次會議的事實）、
   `extract.md`（議題／決策／行動／風險索引）、`meeting-context.md`（會議類型、與會者、
   custom prompt、active glossary terms、來源與日期）、`history-index.md`（同系列近三場的
-  heading 大綱與指標；**是索引不是語料**，不含內容行）。
+  heading 大綱與指標，日期嚴格早於本次；**是索引不是語料**，不含內容行）。
   所有 source 流程的產物都是這個，**不是正式稿**。目錄位置：`/tmp/meeting_sources/<meeting_key>_<YYYYMMDD>[_<meeting_instance>]`。
 - **接地** —— 正式稿的每個事實都指得回 `transcript.md`。`extract.md`、`meeting-context.md`、
-  glossary、歷史會議記錄只提升可讀性與連續性，不能長出 transcript 沒講過的決策、
+  glossary、`history-index.md` 只提升可讀性與連續性，不能長出 transcript 沒講過的決策、
   待辦、數字或時間。無法接地的寫 `[待確認]`。衝突時 `transcript.md` 勝。
 - **交棒契約** —— 每段流程結束把 `RESULT_*` 印到 stdout，下一段**只吃這些值**，不重新推導路徑：
 
@@ -219,7 +219,7 @@ A 與 B 都收在這裡。main agent 讀：
 | `RESULT_HISTORY_INDEX` | 連續性：前次決策的延續、未完成待辦、術語演進、已知命名 |
 | `references/default-prompt.md` 或 config 指定的 prompt | 格式 |
 
-證據優先序：`RESULT_TRANSCRIPT` > `RESULT_EXTRACT` > `RESULT_CONTEXT` > `RESULT_HISTORY_INDEX`。
+證據優先序：`transcript.md` > `extract.md` > `meeting-context.md` > `history-index.md`。
 
 **歷史索引是大綱不是全文。** 掃一遍 heading 判斷「這個議題以前談過」。只有本次議題確實
 延伸自某一場、而大綱那行接不上時，才沿那一場的 `本機:` 路徑讀**那一場**的全文 ——

@@ -18,13 +18,11 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from tests.unit.conftest import load_script
+from tests.unit.conftest import load_script, skill_md_section
 from tests.unit.test_history_index import _run_cli, cli_home, flow_b  # noqa: F401  fixture 靠名字解析
 
 hi = load_script("history_index")
 
-REPO = Path(__file__).resolve().parents[2]
-SKILL_MD = REPO / "skills/comms/generate-meeting-notes/SKILL.md"
 SECTION_HEADING = "## 流程 C：Main Synthesis"
 
 # 這張票要換掉的那句散文：沒有路徑、沒有數量、沒有取得方式，於是 agent 每次都跳過。
@@ -41,12 +39,8 @@ POINTER_URL = "https://docs.google.com/document/d/pointer-probe/edit"
 
 
 def flow_c_section() -> str:
-    """SKILL.md 的「流程 C」一節（到下一個 `## ` 為止）。"""
-    text = SKILL_MD.read_text(encoding="utf-8")
-    start = text.find(SECTION_HEADING)
-    assert start != -1, f"SKILL.md 找不到「{SECTION_HEADING}」一節"
-    end = text.find("\n## ", start + len(SECTION_HEADING))
-    return text[start:] if end == -1 else text[start:end]
+    """SKILL.md 的「流程 C」一節。"""
+    return skill_md_section(SECTION_HEADING)
 
 
 def flow_c_intro() -> str:
@@ -103,12 +97,11 @@ def local_path_label() -> str:
 
 
 def output_rules() -> str:
-    """流程 C 的「輸出規則」那一段（到 `### ` 小節為止）。"""
+    """流程 C 的「輸出規則」那一段 —— 導言已經切到第一個 `### ` 為止，所以只要往後取。"""
     section = flow_c_intro()
     start = section.find("輸出規則")
     assert start != -1, "流程 C 找不到「輸出規則」"
-    end = section.find("\n### ", start)
-    return section[start:] if end == -1 else section[start:end]
+    return section[start:]
 
 
 # --------------------------------------------------------------------------- 來源表
@@ -124,7 +117,9 @@ def test_history_is_a_contract_row_beside_the_transcript():
     keys = source_table_keys()
 
     assert "RESULT_TRANSCRIPT" in keys, f"來源表裡沒有逐字稿那列：{keys}"
-    assert history_key() in keys
+    # 不寫 `assert history_key() in keys` —— 那個 key 本來就從 `keys` 推出來，恆真。
+    # 有鑑別力的是 `history_key()` 自己那句「剛好一列」：少一列或多一列都在這裡 fail-loud。
+    history_key()
 
 
 def test_flow_a_prints_the_key_the_doc_tells_the_agent_to_read(cli_home: Path, tmp_path: Path):
@@ -170,8 +165,17 @@ def test_the_local_path_label_matches_what_the_index_actually_writes():
     Doc URL 那欄不在這裡：它是給人開的，agent 開不了 URL。
     """
     label = local_path_label()
+    intro = flow_c_intro()
 
-    assert label in flow_c_intro(), f"流程 C 的來源說明沒提到索引實際用的本機路徑欄位：{label}"
+    # 不能只做 `label in intro` 的裸子字串比對：標籤是很短的常用詞，撞上文件裡別處
+    # 的同字（`source artifact 路徑`）就假綠 —— 實測把 `本機:` 改成 `路徑:`，裸比對
+    # 照樣綠。所以要求它以「文件在指一個欄位」的形狀出現：code span 裡，或後面接冒號。
+    quoted = re.search(rf"`[^`\n]*{re.escape(label)}[^`\n]*`", intro)
+    with_colon = re.search(rf"{re.escape(label)}\s*[:：]", intro)
+
+    assert quoted or with_colon, (
+        f"流程 C 的來源說明沒把索引的本機路徑欄位 `{label}:` 當成欄位名指出來"
+    )
 
 
 def test_the_flow_c_section_no_longer_asks_for_history_in_prose():
@@ -192,12 +196,14 @@ def test_history_stays_last_in_the_evidence_order():
     lines = [line for line in flow_c_intro().splitlines() if "證據優先序" in line]
     assert len(lines) == 1, f"流程 C 要剛好一行證據優先序，找到 {len(lines)} 行"
 
-    # 四個來源各給兩種寫法（檔名或契約 key）—— 釘的是順序，不是這一行用哪種稱呼。
+    # 每個來源給幾種寫法（檔名或契約 key）—— 釘的是順序，不是這一行用哪種稱呼。
+    # 來源表用 `RESULT_*`（去哪拿）、優先序用檔名（誰勝過誰）是文件原本的分工，
+    # 兩種都要認：只認一種的話，改用另一種寫法會讓這條紅在「同物兩名」而不是順序上。
     order = [
         ("transcript.md", "RESULT_TRANSCRIPT"),
         ("extract.md", "RESULT_EXTRACT"),
         ("meeting-context.md", "RESULT_CONTEXT"),
-        ("歷史", history_key()),
+        ("歷史", hi.INDEX_FILENAME, history_key()),
     ]
     positions = [
         min((lines[0].find(alias) for alias in aliases if alias in lines[0]), default=-1)
@@ -207,13 +213,26 @@ def test_history_stays_last_in_the_evidence_order():
     assert positions == sorted(positions), f"歷史沒有排在最後：{lines[0]}"
 
 
-def test_the_output_rules_keep_the_history_index_out_of_the_formal_note():
-    """驗收條件 5：歷史索引與「我參考了歷史記錄」這類 pipeline 敘述不進正式稿。
+def test_the_output_rules_keep_the_history_index_file_out_of_the_formal_note():
+    """驗收條件 5 的前半：索引**檔本身**（路徑、檔名）不進正式稿。
 
-    刪掉這條 → 索引變成交棒契約的一員之後，它的路徑與「參考了哪幾場」會跟著被寫進
-    發佈出去的 Doc。那是給 agent 看的中間產物，讀者看到的是一份摻著流程雜訊的會議記錄。
+    刪掉這條 → 索引變成交棒契約的一員之後，它的路徑會跟著被寫進發佈出去的 Doc，
+    讀者看到一份摻著 source artifact 路徑的會議記錄。
+    這條與下一條不能合成一個 `or`：兩個條件會互相遮蔽，拿掉其中一件事照樣綠
+    （實測把 `history-index.md` 從輸出規則刪掉，`or` 版本零紅）。
     """
     rules = output_rules()
 
     assert "agent 回報" in rules, "輸出規則沒有『只出現在 agent 回報裡』那條"
-    assert "歷史" in rules or hi.INDEX_FILENAME in rules, f"輸出規則沒把歷史索引擋在正式稿外面：\n{rules}"
+    assert hi.INDEX_FILENAME in rules, f"輸出規則沒點名索引檔：\n{rules}"
+
+
+def test_the_output_rules_keep_the_history_narration_out_of_the_formal_note():
+    """驗收條件 5 的後半：「我參考了歷史記錄」這類出處敘述也不進正式稿。
+
+    刪掉這條 → 索引檔被擋住了，但 agent 仍會在正式稿裡寫「本次參考了前三場記錄」。
+    那是 pipeline 敘述不是會議內容，而擋檔名那條看不見它。
+    """
+    rules = output_rules()
+
+    assert "歷史" in rules, f"輸出規則沒擋掉「參考了歷史記錄」這類敘述：\n{rules}"

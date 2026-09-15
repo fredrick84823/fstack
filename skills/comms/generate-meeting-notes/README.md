@@ -24,7 +24,7 @@ flowchart TD
   L -->|否| N["只輸出 Google Doc URL"]
 ```
 
-逐字稿與錄音兩種輸入都會先整理成同一組 source artifacts。逐字稿輸入由 local coding agent spawn subagent 產生 `transcript.md` 與 `extract.md`；錄音輸入由 NotebookLM source extraction 產生相同 artifacts。歷史會議記錄的主要用途是提供連續性 context，例如前次決策、待辦延續、專案背景、議題演進與術語脈絡；不是單純作為輸出格式範例。
+逐字稿與錄音兩種輸入都會先整理成同一組 source artifacts。逐字稿輸入由 local coding agent spawn subagent 產生 `transcript.md` 與 `extract.md`；錄音輸入由 NotebookLM source extraction 產生相同 artifacts。`history-index.md` 的主要用途是提供連續性 context，例如前次決策、待辦延續、專案背景、議題演進與術語脈絡；不是單純作為輸出格式範例。
 
 ## 適合誰用
 
@@ -120,7 +120,7 @@ Plaude 只是常見來源之一，不是必要條件。
 7. Agent 執行 `create_gdoc_from_md.py --source-dir <RESULT_SOURCE_DIR>` 建立 Google Doc，並把 source artifacts 上傳到同一個日期資料夾。
 8. 若設定了 Slack channel，會發送通知。
 
-`extract.md` 是本次逐字稿的議題、決策、行動項目、風險與待確認事項索引。它必須只根據 `transcript.md` 產生；歷史會議記錄只提供連續性 context，不能補成本次會議事實。
+`extract.md` 是本次逐字稿的議題、決策、行動項目、風險與待確認事項索引。它必須只根據 `transcript.md` 產生；`history-index.md` 只提供連續性 context，不能補成本次會議事實。
 
 ### 2. Audio Source Extraction
 
@@ -142,7 +142,7 @@ Plaude 只是常見來源之一，不是必要條件。
 2. 上傳到指定 NotebookLM Notebook。
 3. 等 NotebookLM 處理音訊 source。
 4. 腳本輸出 `transcript.md`、`extract.md`、`meeting-context.md`、`history-index.md`。
-5. Main agent 讀取 source artifacts、default prompt 與歷史會議記錄作為連續性 context，產生正式 Markdown 會議記錄。
+5. Main agent 讀取 source artifacts 與 default prompt（`history-index.md` 提供連續性 context），產生正式 Markdown 會議記錄。
 6. Agent 執行 `create_gdoc_from_md.py --source-dir <RESULT_SOURCE_DIR>` 建立 Google Doc，並把 source artifacts 上傳到同一個日期資料夾。
 7. 若設定了 Slack channel，會發送通知。
 
@@ -231,7 +231,7 @@ Audio Source Extraction 不會直接採用 NotebookLM Studio report 當正式會
 ### Agent runtime
 
 - Agent Skills CLI：安裝 skill 到 Codex、Claude Code、Gemini CLI、OpenCode 等 agent。
-- Local coding agent：負責讀取 input、spawn source-preparation subagent、讀歷史會議 context、產生 `meeting_notes.md`。
+- Local coding agent：負責讀取 input、spawn source-preparation subagent、讀 `history-index.md`、產生 `meeting_notes.md`。
 - Subagent / Task 能力：文字輸入路徑用來產生 `transcript.md` 與 `extract.md`。若 runtime 不支援 subagent，main agent 可代行，但仍要先產出 artifacts。
 
 ### Python runtime
@@ -635,7 +635,7 @@ User input
 config.json + glossary.json
   └─ main agent → meeting-context.md
 
-source artifacts + prompt.md + historical context
+source artifacts + prompt.md + history-index.md
   └─ main agent → meeting_notes.md
 
 meeting_notes.md + config.json + source artifacts
