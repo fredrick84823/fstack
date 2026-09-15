@@ -14,7 +14,7 @@ disable-model-invocation: true
 - **source artifacts** —— 一個目錄裡的四個檔：`transcript.md`（本次會議的事實）、
   `extract.md`（議題／決策／行動／風險索引）、`meeting-context.md`（會議類型、與會者、
   custom prompt、active glossary terms、來源與日期）、`history-index.md`（同系列近三場的
-  heading 大綱與指標，日期嚴格早於本次；**是索引不是語料**，不含內容行）。
+  heading 大綱與指標；**是索引不是語料**，不含內容行）。
   所有 source 流程的產物都是這個，**不是正式稿**。目錄位置：`/tmp/meeting_sources/<meeting_key>_<YYYYMMDD>[_<meeting_instance>]`。
 - **接地** —— 正式稿的每個事實都指得回 `transcript.md`。`extract.md`、`meeting-context.md`、
   glossary、歷史會議記錄只提升可讀性與連續性，不能長出 transcript 沒講過的決策、
@@ -148,7 +148,7 @@ cd "$SKILL_DIR" && uv run scripts/history_index.py \
 ```
 
 `--date` 一定給**本次**日期 —— 索引只收嚴格早於它的場次。另有 `--sessions N`（預設 3）。
-本機歸檔沒有更早的場次時照樣寫出索引檔並以 0 收場，那是合法結果不是錯誤。
+沒有更早的場次時照樣寫出索引檔並以 0 收場 —— 空索引是合法結果。
 
 完成後印出**交棒契約**（含 `RESULT_HISTORY_INDEX`），進流程 C。
 
@@ -202,8 +202,7 @@ cd "$SKILL_DIR" && uv run scripts/extract_audio_sources.py <audio_file> \
 `meeting-context.md`，用途只有人名／專案名正規化、縮寫展開與錯字修正
 （例 `NCP` → `MCP`）、口語別名對齊 canonical name。glossary 不是會議事實來源。
 
-腳本同時產 `history-index.md`（同系列近三場的大綱索引），不必另外執行
-`history_index.py`。
+腳本同時產 `history-index.md`，不必另外執行 `history_index.py`。
 
 從 stdout 解析**交棒契約**（另有 `RESULT_SERIES_NAME`），進流程 C。
 不要拿 NotebookLM 內容直接當正式稿。
@@ -217,18 +216,22 @@ A 與 B 都收在這裡。main agent 讀：
 | `RESULT_TRANSCRIPT` | 主事實來源 |
 | `RESULT_EXTRACT` | 議題／決策／行動／風險 checklist |
 | `RESULT_CONTEXT` | 人名、專案名、縮寫、會議類型脈絡 |
+| `RESULT_HISTORY_INDEX` | 連續性：前次決策的延續、未完成待辦、術語演進、已知命名 |
 | `references/default-prompt.md` 或 config 指定的 prompt | 格式 |
-| 同類型歷史會議記錄 | 連續性：前次決策的延續、未完成待辦、術語演進、已知命名 |
 
-證據優先序：`transcript.md` > `extract.md` > `meeting-context.md` > 歷史會議記錄。
-歷史記錄與 glossary 都受**接地**約束。
+證據優先序：`RESULT_TRANSCRIPT` > `RESULT_EXTRACT` > `RESULT_CONTEXT` > `RESULT_HISTORY_INDEX`。
+
+**歷史索引是大綱不是全文。** 掃一遍 heading 判斷「這個議題以前談過」。只有本次議題確實
+延伸自某一場、而大綱那行接不上時，才沿那一場的 `本機:` 路徑讀**那一場**的全文 ——
+預設不讀，整包讀進來就退回索引要解決的那個問題。`Doc:` 是給人開的，agent 開不了 URL。
 
 輸出規則：
 - 完整繁體中文 Markdown
 - Speaker 標籤維持原格式（`Speaker 1`、`SPEAKER_00`、人名、平台標籤）。
   除非使用者給明確對照，不自行替換姓名
-- 正式稿只放會議內容。NotebookLM、`extract.md`、source artifact 路徑、腳本步驟、
-  驗證狀態、pipeline／debug 備註、agent 操作說明一律只出現在 agent 回報裡
+- 正式稿只放會議內容。NotebookLM、`extract.md`、`history-index.md`、source artifact
+  路徑、腳本步驟、驗證狀態、pipeline／debug 備註（含「我參考了歷史記錄」這類出處
+  敘述）、agent 操作說明一律只出現在 agent 回報裡
 
 ### Step 1：儲存 Markdown + 發佈
 

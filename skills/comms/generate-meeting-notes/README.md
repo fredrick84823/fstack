@@ -11,9 +11,9 @@ flowchart TD
   A["使用者提供會議素材"] --> B{"有可讀文字？"}
   B -->|逐字稿 / 文字紀錄 / 字幕 / Google Doc| C["Text Source Preparation<br/>local coding agent spawn subagent"]
   B -->|只有錄音檔| D["Audio Source Extraction<br/>ffmpeg 切段 + NotebookLM 萃取"]
-  C --> E["source artifacts<br/>transcript.md / extract.md / meeting-context.md"]
-  D --> E["source artifacts<br/>transcript.md / extract.md / meeting-context.md"]
-  E --> F["main agent 讀取同類型歷史會議記錄<br/>取得連續性 context"]
+  C --> E["source artifacts<br/>transcript.md / extract.md / meeting-context.md / history-index.md"]
+  D --> E["source artifacts<br/>transcript.md / extract.md / meeting-context.md / history-index.md"]
+  E --> F["main agent 掃 history-index.md 大綱<br/>接不上才沿指標讀那一場全文"]
   F --> G["套用 default prompt<br/>可選 glossary"]
   G --> H["main agent 產生 meeting_notes.md"]
   H --> I["create_gdoc_from_md.py"]
@@ -116,7 +116,7 @@ Plaude 只是常見來源之一，不是必要條件。
 3. Main agent spawn source-preparation subagent。
 4. Subagent 只根據文字輸入產出 `transcript.md` 與 `extract.md`。
 5. Main agent 產出 `meeting-context.md`，並執行 `history_index.py` 產出 `history-index.md`。
-6. Main agent 讀取 source artifacts、default prompt 與同類型歷史會議記錄作為連續性 context，產生正式 `meeting_notes.md`。
+6. Main agent 讀取 source artifacts 與 default prompt（`history-index.md` 提供連續性 context），產生正式 `meeting_notes.md`。
 7. Agent 執行 `create_gdoc_from_md.py --source-dir <RESULT_SOURCE_DIR>` 建立 Google Doc，並把 source artifacts 上傳到同一個日期資料夾。
 8. 若設定了 Slack channel，會發送通知。
 
@@ -535,19 +535,19 @@ Input：
 - `RESULT_TRANSCRIPT`
 - `RESULT_EXTRACT`
 - `RESULT_CONTEXT`
+- `RESULT_HISTORY_INDEX`
 - `prompt_path`
-- 同類型歷史會議記錄
 
-歷史會議記錄用途是連續性 context：
+`RESULT_HISTORY_INDEX` 用途是連續性 context：
 
 - 前次決策與本次討論的延續。
 - 未完成待辦、風險與 open questions。
 - 專案背景、術語演進、已知命名。
 
-歷史會議記錄不是本次會議事實來源。證據優先序：
+歷史索引不是本次會議事實來源。它只有大綱與指標 —— 大綱接不上時才沿指標讀那一場全文。證據優先序：
 
 ```text
-transcript.md > extract.md > meeting-context.md > historical context
+RESULT_TRANSCRIPT > RESULT_EXTRACT > RESULT_CONTEXT > RESULT_HISTORY_INDEX
 ```
 
 Output：
