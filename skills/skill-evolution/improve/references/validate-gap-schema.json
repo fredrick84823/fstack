@@ -1,0 +1,71 @@
+{
+  "type": "object",
+  "properties": {
+    "verdict": {
+      "type": "string",
+      "enum": [
+        "accept",
+        "reject"
+      ],
+      "description": "accept only when every ACCEPT condition in validate-gap-prompt.md holds. Uncertain is reject."
+    },
+    "target_skill": {
+      "type": "string",
+      "description": "Skill the gap is attributed to, after re-attribution. Echo the input when the attribution is right."
+    },
+    "gap": {
+      "type": "string",
+      "description": "One-line repeatable rule deficit, normalized. Echo the input when it is already well formed."
+    },
+    "duplicate_of": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "id of the signal in ===KNOWN_SIGNALS=== that this candidate restates, even when the wording differs. null only when the gap is genuinely new. Always null when verdict is accept."
+    },
+    "evidence_quote": {
+      "type": "string",
+      "description": "Verbatim user sentence from the excerpt that proves the gap. Empty string when verdict is reject."
+    },
+    "expected": {
+      "type": "string",
+      "description": "What the skill should have done. Empty string when verdict is reject."
+    },
+    "actual": {
+      "type": "string",
+      "description": "What the skill did instead. Empty string when verdict is reject."
+    },
+    "risk_class": {
+      "type": "string",
+      "enum": [
+        "valid_gap",
+        "placeholder",
+        "doc_echo",
+        "one_shot_pref",
+        "data_issue",
+        "misroute",
+        "duplicate",
+        "self_referential",
+        "uncertain"
+      ],
+      "description": "valid_gap only when verdict is accept; otherwise the best-fitting reject class."
+    },
+    "reason": {
+      "type": "string",
+      "description": "One sentence naming the deciding evidence."
+    }
+  },
+  "required": [
+    "verdict",
+    "target_skill",
+    "gap",
+    "duplicate_of",
+    "evidence_quote",
+    "expected",
+    "actual",
+    "risk_class",
+    "reason"
+  ],
+  "additionalProperties": false
+}

@@ -18,3 +18,6 @@ thoughts/
 /.coverage
 /.coverage.json
 /.radon-cc.json
+
+# validator eval 的每跑結果；記錄在 evals/VALIDATOR-RESULTS.md，json 是跑完的中間產物。
+/skills/skill-evolution/improve/evals/validator-eval-results.json

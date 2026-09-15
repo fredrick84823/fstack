@@ -271,18 +271,47 @@ Wires the `improve` skill's signal capture into session lifecycle:
   訊號雜訊，偵測要改成 out-of-band、每 session 一次）。
 - **Stop** → captures `<<GAP skill: desc>>` markers and skill candidates automatically
 
-## Post-install: Enable auto gap detection
+## Post-install: gap detection
 
-Add the following to your `~/.claude/CLAUDE.md` so Claude emits gap signals after skill execution:
+**Nothing to add to your `~/.claude/CLAUDE.md`.** Earlier versions of this README asked
+you to paste in a rule telling Claude to report a gap whenever it noticed one. Don't.
+That rule ran at the end of every turn, with no cap and no de-duplication, and it buried
+the real gaps: of 135 captured signals, 91% were agent self-reports and roughly 70% of
+those were duplicates, one-off environment failures, or the automation filing complaints
+about itself. The loop was switched off in 2026-07 because nobody could face the queue.
+Background in [#40](https://github.com/fredrick84823/fstack/issues/40).
 
-```markdown
-# Skill Gap Detection
+Detection is being rebuilt the other way round — **out-of-band, once per session**:
 
-After executing any skill, if a gap or improvement opportunity is found, output at the end of the response (not inside a code block):
-<<GAP skill-name: one-line description of the gap>>
+```text
+session ends
+      |
+      v
+a classifier reads the transcript          <- not the agent reporting on itself
+      |
+      v
+skills/skill-evolution/improve/scripts/validate-gap.sh
+  rules:  references/validate-gap-prompt.md   (precision-first: uncertain -> reject)
+  model:  $IMPROVE_VALIDATOR_MODEL            (default claude-haiku-4-5-20251001)
+      |
+      v
+{"verdict": "accept"|"reject", "target_skill", "gap", "duplicate_of",
+ "evidence_quote", "expected", "actual", "risk_class", "reason"}
+      |
+      v (accept only)
+signal_state.py capture  ->  signal-queue.md
 ```
 
-This rule tells Claude to emit `<<GAP>>` markers that the Stop hook captures into `signal-queue.md`. Run `/improve` to process pending signals.
+An `accept` has to quote the user sentence that proves it, name what the skill should
+have done instead, and point at no signal already on file. Anything short of that is a
+reject. The judgement rules live in one place only — the prompt file above — and are
+measured by `evals/run_validator_eval.py` against 14 fixtures drawn from the real queue
+(see [`evals/VALIDATOR-RESULTS.md`](skills/skill-evolution/improve/evals/VALIDATOR-RESULTS.md)).
+
+The session hook that calls the classifier is not wired up yet
+([#44](https://github.com/fredrick84823/fstack/issues/44)). Until it lands, signals only
+arrive through the explicit path: say 收工 at the end of a session and the `session-ender`
+agent reviews it with you. Run `/improve` to process whatever is pending.
 
 ## License
 

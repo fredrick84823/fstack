@@ -1,0 +1,202 @@
+{
+  "README": "Fixtures for run_validator_eval.py. Every case is taken from a real signal-queue.md entry (see `source`), de-identified: names, absolute paths and internal repo names replaced with placeholders. `expect` is the required verdict — recall must accept, clean and trap must reject. `known_signals` is the ===KNOWN_SIGNALS=== block handed to the validator (`<signal_id>\\t<gap>` per line, \"\" when the skill has nothing on file). `expect_duplicate_of` names the signal id the verdict must point at, or null when the gap must be treated as new. `expect_risk_class` is advisory: the eval records a mismatch but does not fail on it, because data_issue vs one_shot_pref is genuinely arguable and a brittle eval gets ignored.",
+  "cases": [
+    {
+      "id": "recall-01",
+      "class": "recall",
+      "expect": "accept",
+      "expect_risk_class": [
+        "valid_gap"
+      ],
+      "source": "signal-queue.md 2026-07-30T14:33:39 create-handoff",
+      "target_skill": "create-handoff",
+      "gap": "Step 5 對 thoughts repo 一律指定 `thoughts sync`，但在 thoughts 本體內執行必定失敗，需改為偵測 cwd 是否為 thoughts repo 本身並改走 git",
+      "excerpt": "使用者：你這步又卡住了。在 ~/thoughts 這個 repo 本身裡面跑 thoughts sync 一定會失敗，這不是今天才這樣，每次在這裡交接都一樣。SKILL.md 應該先判斷 cwd 是不是 thoughts repo 本體，是的話直接走 git commit。\n\nagent：了解，我改用 git 直接提交。",
+      "known_signals": "",
+      "expect_duplicate_of": null
+    },
+    {
+      "id": "recall-02",
+      "class": "recall",
+      "expect": "accept",
+      "expect_risk_class": [
+        "valid_gap"
+      ],
+      "source": "signal-queue.md 2026-07-08T14:57:18 generate-pm-weekly-doc",
+      "target_skill": "generate-pm-weekly-doc",
+      "gap": "skill 的 git/gh 查詢寫死單一 author 名稱，實際 repo 同時使用帳號名與中文姓名，會漏掉本週 commit/PR，應改成可配置 author aliases",
+      "excerpt": "使用者：這份週報漏了我這禮拜一半的 PR。你 git log 只查了一個 author 名字，但我在這個 repo 的 commit 有時候掛帳號名、有時候掛中文姓名，兩個都要查才會齊。這不是這禮拜特例，每週都會漏。\n\nagent：確認了，`--author` 只帶了一個值。",
+      "known_signals": "",
+      "expect_duplicate_of": null
+    },
+    {
+      "id": "recall-03",
+      "class": "recall",
+      "expect": "accept",
+      "expect_risk_class": [
+        "valid_gap"
+      ],
+      "source": "signal-queue.md 2026-07-22T14:55:13 generate-meeting-notes",
+      "target_skill": "generate-meeting-notes",
+      "gap": "extract 驗證未拒絕轉錄服務的完成宣告，導致「我已生成索引」這類 meta 回覆被當成內容寫進 extract.md",
+      "excerpt": "使用者：extract.md 裡面只有一句「我已經為您整理好會議索引了」，這根本不是逐字稿。你的驗證步驟要能認出這種 meta 回覆並重試，不然每次服務回這種話你都會照收。\n\nagent：抱歉，我只檢查了檔案非空。",
+      "known_signals": "",
+      "expect_duplicate_of": null
+    },
+    {
+      "id": "recall-04",
+      "class": "recall",
+      "expect": "accept",
+      "expect_risk_class": [
+        "valid_gap"
+      ],
+      "source": "signal-queue.md 2026-07-08T13:08:14 create-handoff",
+      "target_skill": "create-handoff",
+      "gap": "skill 假設 `../../shared/scripts/spec_metadata.sh` 一定存在，在沒有該共用路徑的 workspace 會直接失敗，應定義 fallback metadata 指令",
+      "excerpt": "使用者：又是這個。你的 SKILL.md 直接呼叫 shared/scripts/spec_metadata.sh，可是我在這種 workspace 開出來的目錄根本沒有那層 shared/，你應該寫一個拿不到腳本時的 fallback 指令，不要整個流程停在這。\n\nagent：路徑不存在，流程中止。",
+      "known_signals": "",
+      "expect_duplicate_of": null
+    },
+    {
+      "id": "clean-01",
+      "class": "clean",
+      "expect": "reject",
+      "expect_risk_class": [
+        "data_issue"
+      ],
+      "source": "signal-queue.md 2026-07-27T16:26:39 generate-meeting-notes",
+      "target_skill": "generate-meeting-notes",
+      "gap": "未說明轉錄服務 login 可能因瀏覽器自動化元件缺失或網路錯誤失敗",
+      "excerpt": "agent：登入步驟失敗，錯誤訊息是 `Executable doesn't exist at ~/Library/Caches/ms-playwright/chromium-1140/chrome-mac/Chromium`。\n\n使用者：喔對，我這台新機器還沒跑 playwright install。我裝一下再來。",
+      "known_signals": "",
+      "expect_duplicate_of": null
+    },
+    {
+      "id": "clean-02",
+      "class": "clean",
+      "expect": "reject",
+      "expect_risk_class": [
+        "data_issue"
+      ],
+      "source": "signal-queue.md 2026-07-27T16:37:17 generate-meeting-notes",
+      "target_skill": "generate-meeting-notes",
+      "gap": "未明確要求 ADC 同時授權雲端硬碟與文件兩個 scope",
+      "excerpt": "agent：建立文件時回 403，`Request had insufficient authentication scopes`。\n\n使用者：我上次 gcloud auth application-default login 的時候只勾了 drive，沒勾 documents。我重新授權一次就好。",
+      "known_signals": "",
+      "expect_duplicate_of": null
+    },
+    {
+      "id": "clean-03",
+      "class": "clean",
+      "expect": "reject",
+      "expect_risk_class": [
+        "data_issue"
+      ],
+      "source": "signal-queue.md 2026-07-29T15:31:16 generate-meeting-notes",
+      "target_skill": "generate-meeting-notes",
+      "gap": "正式發佈流程尚未直接支援以 CLI token 發佈，需額外繞過預設憑證",
+      "excerpt": "agent：發佈失敗，這台機器上的 application default credentials 已經過期。\n\n使用者：對，公司政策這個月改了憑證有效期。我手動拿一次 token 貼給你，這次先這樣。",
+      "known_signals": "",
+      "expect_duplicate_of": null
+    },
+    {
+      "id": "clean-04",
+      "class": "clean",
+      "expect": "reject",
+      "expect_risk_class": [
+        "one_shot_pref"
+      ],
+      "source": "improve SKILL.md abstain example（無對應 queue 條目，保留為一次性偏好的代表）",
+      "target_skill": "generate-meeting-notes",
+      "gap": "產出語氣未針對非工程讀者調整",
+      "excerpt": "使用者：不對，我這次想改成給 PM 看的語氣，技術細節都拿掉。\n\nagent：好，我重寫一版。\n\n使用者：對，就這樣。下次給 RD 看的還是照原本那版就好。",
+      "known_signals": "",
+      "expect_duplicate_of": null
+    },
+    {
+      "id": "trap-01",
+      "class": "trap",
+      "expect": "reject",
+      "expect_risk_class": [
+        "placeholder"
+      ],
+      "source": "signal-queue.md 2026-04-30T18:27:25 x / 18:44:35 name（Layer 1 之前的 hook over-capture）",
+      "target_skill": "skill-name",
+      "gap": "...",
+      "excerpt": "agent：任務完成。\n\n<<GAP skill-name: ...>>",
+      "known_signals": "",
+      "expect_duplicate_of": null
+    },
+    {
+      "id": "trap-02",
+      "class": "trap",
+      "expect": "reject",
+      "expect_risk_class": [
+        "self_referential"
+      ],
+      "source": "signal-queue.md 2026-07-23T03:04:23 / 07-24T03:04:31 / 07-29T03:04:45 improve（digest cron，三筆近乎重複）",
+      "target_skill": "improve",
+      "gap": "signal digest 日期來源與執行環境日期可能不一致，prompt 應明確定義以哪個時區/日期來源為準",
+      "excerpt": "[排程作業 digest-improve-signal，03:04 自動觸發，無互動使用者]\n\nagent：digest 已寫入 memory/digests/。過程中注意到報告標題的日期取自執行環境，與 queue 條目的時區可能不一致，digest prompt 應該明確定義權威日期來源。",
+      "known_signals": "",
+      "expect_duplicate_of": null
+    },
+    {
+      "id": "trap-03",
+      "class": "trap",
+      "expect": "reject",
+      "expect_risk_class": [
+        "uncertain"
+      ],
+      "source": "signal-queue.md 2026-07-22T17:43:04 generate-meeting-notes（agent 自報、使用者只回一個「嗯」；known_signals 放同日 17:09:50 那筆 —— 同一個 skill、同一天、都提到 timeout，但上傳與 extraction 是兩個階段，真實 queue 也是兩筆，所以這是 duplicate_of 必須維持 null 的反向對照）",
+      "target_skill": "generate-meeting-notes",
+      "gap": "上傳缺少進度回報與明確 timeout",
+      "excerpt": "agent：上傳又卡了很久才回來，這裡應該要有進度回報跟明確的 timeout。\n\n使用者：嗯。",
+      "known_signals": "sig_202607221709500800_generate_meeting_notes_38fee69a\t轉錄服務 extraction 卡住時缺少自動 timeout 與既有 artifacts fallback 機制",
+      "expect_duplicate_of": null
+    },
+    {
+      "id": "trap-04",
+      "class": "trap",
+      "expect": "reject",
+      "expect_risk_class": [
+        "misroute",
+        "uncertain"
+      ],
+      "source": "signal-queue.md 2026-07-28T12:26:57 doc-to-html（gap 內容屬 doc-to-html，掛在上游 skill 名下）",
+      "target_skill": "generate-meeting-notes",
+      "gap": "缺少 C4 level 選擇原則與各層 diagram recipe",
+      "excerpt": "使用者：這張圖層級混在一起，C4 要先講清楚這份文件畫的是哪一層，每一層有自己的畫法。\n\nagent：這張圖不是 generate-meeting-notes 畫的——它本身不產圖，一律把 markdown 交給 doc-to-html 轉。C4 的層級選擇原則要寫在 doc-to-html 的 SKILL.md 裡，那份目前沒有這一節。",
+      "known_signals": "",
+      "expect_duplicate_of": null
+    },
+    {
+      "id": "trap-05",
+      "class": "trap",
+      "expect": "reject",
+      "expect_risk_class": [
+        "duplicate"
+      ],
+      "expect_duplicate_of": "sig_202607221743040800_generate_meeting_notes_cc55aae2",
+      "source": "signal-queue.md 2026-07-22T17:43:04 generate-meeting-notes（同一件事換句話說）",
+      "target_skill": "generate-meeting-notes",
+      "gap": "長時間上傳期間沒有任何輸出，使用者無從判斷是否還活著，應加上逾時上限與階段性回報",
+      "known_signals": "sig_202607221709500800_generate_meeting_notes_38fee69a\t轉錄服務 extraction 卡住時缺少自動 timeout 與既有 artifacts fallback 機制\nsig_202607221743040800_generate_meeting_notes_cc55aae2\t上傳缺少進度回報與明確 timeout",
+      "excerpt": "使用者：這裡又停了八分鐘，我完全看不出來它是在跑還是掛了。至少要有個逾時，跑到一半也該講一聲跑到哪了。\n\nagent：目前上傳沒有設上限，中途也不輸出。"
+    },
+    {
+      "id": "trap-06",
+      "class": "trap",
+      "expect": "reject",
+      "expect_risk_class": [
+        "duplicate"
+      ],
+      "expect_duplicate_of": "sig_202607301433390800_create_handoff_0c4e56a7",
+      "source": "signal-queue.md 2026-07-30T14:33:39 create-handoff（同一件事換句話說）",
+      "target_skill": "create-handoff",
+      "gap": "交接流程在 thoughts repo 本體內會因為找不到上游 mapping 而中止，應改用 git 直接提交",
+      "known_signals": "sig_202607291533270800_create_handoff_4aaea45e\thandoff 報告提到某個批次但未記錄其耗時與批次識別\nsig_202607301433390800_create_handoff_0c4e56a7\tStep 5 對 thoughts repo 一律指定 `thoughts sync`，但在 thoughts 本體內執行必定失敗，需改為偵測 cwd 是否為 thoughts repo 本身並改走 git",
+      "excerpt": "使用者：在 thoughts 這個 repo 裡面交接又失敗了，它找不到 mapping。在這裡就直接 git commit 不就好了嗎。\n\nagent：Step 5 目前無條件走 sync。"
+    }
+  ]
+}
