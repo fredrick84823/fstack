@@ -41,8 +41,9 @@
               ┌────────────────────────┐
               │   🧠 memory/           │
               │                        │
-              │  signals.jsonl         │
-              │  skill-graph.json      │
+              │  signals.jsonl (raw)   │
+              │  transitions.jsonl     │
+              │  skill-graph (derived) │
               │  claims / eval-cases   │
               └────────────┬───────────┘
                            │
@@ -127,6 +128,10 @@
 Stop hook (`capture-signal.sh`) 捕捉後寫入 `signal-queue.md` 與 `memory/signals.jsonl`，下次 session 啟動時
 `check-signal-queue.sh` 自動提示。
 
+Lifecycle contract：`signal-queue.md` 是 current status 的唯一 source of truth；
+`signals.jsonl` 是 immutable capture evidence，舊 `status` 只代表 capture 當下；
+`transitions.jsonl` 保存 append-only decisions，`skill-graph.json` 是可重建 projection。
+
 ### 手動觸發
 
 ```
@@ -152,13 +157,19 @@ Stop hook (`capture-signal.sh`) 捕捉後寫入 `signal-queue.md` 與 `memory/si
 
 ## Cowork 環境
 
-Cowork 中沒有 Stop hook，偵測到 gap 時直接用 Bash 工具寫入：
+Cowork 中沒有 Stop hook，偵測到 gap 時使用同一 lifecycle helper，禁止分別手寫 queue 與 JSONL：
 
 ```bash
 ts=$(date -Iseconds)
 queue="$HOME/.agents/skills/improve/signal-queue.md"
-printf '\n## [%s] %s\n\n- **type**: %s\n- **source**: cowork auto-detected\n- **gap**: %s\n- **status**: pending\n' \
-  "$ts" "skill-name" "S2" "gap description" >> "$queue"
+~/.agents/skills/improve/scripts/signal_state.py capture \
+  --queue "$queue" \
+  --memory-dir "$(dirname "$queue")/memory" \
+  --timestamp "$ts" \
+  --target-skill "skill-name" \
+  --type S2 \
+  --source "cowork auto-detected" \
+  --gap "gap description"
 ```
 
 ## Hooks 安裝
@@ -181,6 +192,7 @@ improve/
 ├── changelog.md                      # 改寫歷史（只 append）
 ├── memory/
 │   ├── signals.jsonl                  # raw signal events
+│   ├── transitions.jsonl              # append-only lifecycle decisions
 │   ├── skill-graph.json               # compact lookup index
 │   ├── claims/                        # consolidated recurring gap claims
 │   ├── eval-cases/                    # generated / approved eval cases
@@ -192,6 +204,7 @@ improve/
 │   ├── resolve_scope.sh              # Scope 自動偵測
 │   ├── list_candidate_downstream.sh  # 動態推斷下游 skill
 │   ├── memory.sh                     # Skill Evolution Memory 寫入與查詢
+│   ├── signal_state.py               # queue-authoritative capture / transition / reconcile
 │   ├── consolidate-memory.sh         # 合併 duplicates 並產出 candidate claims
 │   └── propose.sh                    # 手動提交 candidate（Codex CLI 用）
 └── references/
