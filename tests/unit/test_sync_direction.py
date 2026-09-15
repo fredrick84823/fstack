@@ -80,14 +80,28 @@ def test_a_path_only_in_the_installed_copy_means_installed_newer():
 
 
 def test_a_shared_path_with_the_newer_mtime_in_the_repo_is_repo_newer():
-    """同一個路徑兩邊內容不同，repo 那份比較新 → `repo 較新`。"""
+    """同一個路徑兩邊內容不同，repo 那份比較新 → `repo 較新`。
+
+    這是**驗收條件 2（repo 端既有既存檔案被改過 → 拒絕同步）在純函式層唯一的正向
+    具名 case**。它在計分板上看起來零貢獻：能殺的 mutant 被下面「平手」那條全包
+    （平手是 `>` / `>=` 的邊界，repo 較新只是它的內部點）。留著的理由不是 kill-set，
+    是「AC2 被守在哪」要找得到 —— 只剩一條平手邊界的話，讀測試的人得自己推導
+    「平手回 repo ⇒ repo 更新時當然也回 repo」才能相信 AC2 有被守。
+    """
     assert parity.sync_direction({"a.md": OLDER}, {"a.md": NEWER}) == parity.REPO_NEWER
 
 
 def test_a_shared_path_with_the_newer_mtime_in_the_installed_copy_is_installed_newer():
     """同一個路徑兩邊內容不同，安裝版那份比較新 → `安裝版較新`。
 
-    與上一條成對：少了任何一條，一個不看 mtime、只回固定值的實作都全綠。
+    **這是唯一一條靠 mtime 得到「安裝版較新」的 case**（上面那條是靠路徑只出現在
+    安裝版那側，走的是另一個分支）。刪掉它 → 一個「同名檔案只要有差異就回
+    `repo 較新`」、完全不看 mtime 的實作全綠：它在兩邊都空、單邊只有一個路徑的
+    case 上照樣答對，錯的只有這一種輸入。那個實作會讓驗收條件 3 消失 ——
+    安裝版改過的檔案再也掉不回 repo，正向同步被自己的閘門永遠擋住。
+
+    （不是「只回固定值的實作全綠」：回固定 `repo 較新` 的實作在 `IN_SYNC` 與
+    installed-only 兩條上就紅了。這條守的是**比較本身**，不是常數。）
     """
     assert parity.sync_direction({"a.md": NEWER}, {"a.md": OLDER}) == parity.INSTALLED_NEWER
 
