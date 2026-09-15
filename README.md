@@ -22,35 +22,42 @@ queues, eval cases, and human review gates.
 
 ## Installation
 
-```bash
-claude plugin install https://github.com/fredrick84823/fstack
+fstack is a Claude Code plugin marketplace. Adding it needs no GitHub account,
+no clone, no build — the repo is public. In Claude Code:
+
+```text
+/plugin marketplace add fredrick84823/fstack
+/plugin install fstack@fstack
 ```
 
-### Non-engineer quick start (no clone, no build)
+Or from a terminal:
 
-If you don't use Claude Code plugins, or you're on Codex, Cursor, or another
-agent, use the [`skills` CLI](https://github.com/vercel-labs/skills) to pull
-skills straight from this repo. Just tell your agent:
+```bash
+claude plugin marketplace add fredrick84823/fstack
+claude plugin install fstack@fstack
+```
 
-> Run `npx skills add https://github.com/fredrick84823/fstack --all -y` to
-> install all skills from this repo.
+### Other agents (Codex, Cursor, …)
 
-Or paste the command directly into any terminal your agent has access to:
+Skills are plain `SKILL.md` directories, so the
+[`skills` CLI](https://github.com/vercel-labs/skills) can copy them straight
+from this repo:
 
 ```bash
 # install everything (all skills, all detected agents)
-npx skills add https://github.com/fredrick84823/fstack --all
+npm exec --yes --package=skills -- skills add https://github.com/fredrick84823/fstack --all
 
 # install just one skill, e.g. doc-to-html
-npx skills add https://github.com/fredrick84823/fstack -s doc-to-html
+npm exec --yes --package=skills -- skills add https://github.com/fredrick84823/fstack -s doc-to-html
 
 # preview what's available before installing
-npx skills add https://github.com/fredrick84823/fstack --list
+npm exec --yes --package=skills -- skills add https://github.com/fredrick84823/fstack --list
 ```
 
 Add `-g` to install globally (available in every project) instead of just the
-current project. No git clone, no Node build step, no manual file copying —
-`npx skills` handles fetching and wiring the skill into your agent's config.
+current project. `npx skills add …` is the same command; the `npm exec` form is
+spelled out because on some machines `npx <pkg>` silently resolves to npm
+itself.
 
 ## Core Workflows
 

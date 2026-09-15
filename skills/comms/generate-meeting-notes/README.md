@@ -31,16 +31,29 @@ flowchart TD
 - 非工程師：把檔案交給 Agent，請 Agent 安裝、設定、產出 Google Doc。
 - 工程師：可以直接用 CLI 安裝與執行腳本。
 
-## 請 Agent 安裝
+## 安裝
 
-如果你使用 Codex、Claude Code 或其他支援 Agent Skills 的工具，直接把這段話貼給 Agent：
+### Claude Code（推薦）
+
+fstack 是 public 的 plugin marketplace：不需要 GitHub 帳號、不需要 clone。在 Claude Code 裡貼這兩行：
+
+```text
+/plugin marketplace add fredrick84823/fstack
+/plugin install fstack@fstack
+```
+
+裝完後這個 skill 的名稱是 `fstack:generate-meeting-notes`，接著直接跳到「第一次設定」。
+
+### Codex 或其他支援 Agent Skills 的工具
+
+直接把這段話貼給 Agent：
 
 ```text
 請幫我安裝這個會議記錄 skill。
 請使用 Agent Skills CLI，從 https://github.com/fredrick84823/fstack 安裝 generate-meeting-notes。
 安裝後請幫我完成第一次設定。
 如果需要指令，請使用：
-npx skills add https://github.com/fredrick84823/fstack --skill generate-meeting-notes --agent <目前 agent> -g -y
+npm exec --yes --package=skills -- skills add https://github.com/fredrick84823/fstack --skill generate-meeting-notes --agent <目前 agent> -g -y
 ```
 
 如果你不知道 agent 名稱，請貼這句：
@@ -53,11 +66,13 @@ npx skills add https://github.com/fredrick84823/fstack --skill generate-meeting-
 
 ```bash
 # Codex
-npx skills add https://github.com/fredrick84823/fstack --skill generate-meeting-notes --agent codex -g -y
+npm exec --yes --package=skills -- skills add https://github.com/fredrick84823/fstack --skill generate-meeting-notes --agent codex -g -y
 
-# Claude Code
-npx skills add https://github.com/fredrick84823/fstack --skill generate-meeting-notes --agent claude-code -g -y
+# Claude Code（不走 marketplace 時）
+npm exec --yes --package=skills -- skills add https://github.com/fredrick84823/fstack --skill generate-meeting-notes --agent claude-code -g -y
 ```
+
+`npx skills add …` 是同一個指令；這裡寫成 `npm exec` 是因為有些機器上 `npx <pkg>` 會靜靜地解析成 npm 自己而不是該套件。
 
 ## 第一次設定
 
