@@ -96,35 +96,30 @@ skills/improve/memory/
 | **S2: 人工修正** | 使用者手動修正 skill 的產出或行為 | 使用者推翻了 skill 的判斷結果 |
 | **S3: 執行偏差** | Agent 使用 skill 時傳錯參數、遺漏步驟、誤判分支 | agent 呼叫腳本時格式不符規格 |
 
-## Universal Signal Detection — 無需 Opt-in
+## Signal Detection — 判準只有一份
 
-**執行任何 skill 的過程中**，只有同時滿足以下三個證據時，才在 response 末尾加入 `<<GAP>>` 標記，Stop hook 自動捕捉到 signal-queue.md，不需要 skill 本身做任何設定：
+**判準不在這裡。** accept / abstain 的完整規則住在
+[`references/validate-gap-prompt.md`](references/validate-gap-prompt.md)，由 Layer 2
+validator（`scripts/validate-gap.sh`）執行。這一節只說明 signal 怎麼進來，不複述規則。
 
-1. 能指出 active / target skill 名稱
-2. 能描述「skill 文件中的可重複規則缺口」，不是單次任務失誤
-3. 能寫出 expected behavior vs actual behavior
+規則曾經同時寫在這一節與 validator prompt 兩處，而分類真正發生時只有 prompt 那份在
+context 裡 —— 這一節的 abstain 條件從來沒有被套用過。兩份就是遲早會分岔的兩份；
+改判準請改 prompt，不要在這裡加回一份摘要。
 
-| 情況 | 辨識關鍵字範例 |
-|------|--------------|
-| 使用者說結果不對、漏掉什麼、不是想要的 | 「不對」「漏掉了」「少了 X」「這不是我要的」「你忘了 Y」 |
-| 使用者對 skill 產出進行實質修正 | 使用者直接改寫或否定 agent 的輸出 |
-| 某 skill 的產出被下一個 skill 處理時格式不符 | 下游 skill 報錯或提到上游格式問題 |
-| Skill 指示的工具呼叫失敗、參數錯誤 | exit code 非零、工具回傳 schema error |
+判準的形狀（細節去讀 prompt）：
 
-**Do not emit GAP / Abstain 條件**：
+- **precision-first**：不確定一律 reject。accept 等於宣稱你指得出證明它的那句使用者原話。
+- accept 必須同時有正確歸因、可重複的規則缺口、逐字的 `evidence_quote`、以及
+  expected vs actual。
+- 歸因是第一道閘門：缺口是真的但掛錯 skill，仍然是 reject（`misroute`）。
+- 自動化流程（digest cron、排程、`claude -p` 子 agent）不得對 `improve` /
+  `skill-memory-reflect` 自己提 signal。
+- `===KNOWN_SIGNALS===` 裡已有的缺口，換句話說仍是 `duplicate`，以 `duplicate_of` 指回原 id。
 
-- 使用者只是在改需求、補偏好、調整一次性輸出，不代表 skill 規則要永久改寫
-- 問題來自缺少資料、外部系統失敗、權限不足、或一次性上下文不足
-- 使用者修正的是產物內容，但沒有證據顯示 skill workflow / trigger / output contract 需要更新
-- 句子包含「不對 / 少了 / 你忘了」，但根因是 product decision、資料來源不完整、或任務範圍改變
-
-**Abstain examples**：
-
-| 使用者訊息 | 判斷 |
-|------------|------|
-| 「不對，我這次想改成給 PM 看的語氣」 | 不標 GAP；這是單次偏好調整 |
-| 「少了昨天那份資料，因為我剛剛才補上檔案」 | 不標 GAP；資料當時不存在 |
-| 「你忘了在 work-wrap-up 後同步 gsheet，這是每次收尾都應該做的固定步驟」 | 標 GAP；有 target skill、可重複規則、expected vs actual |
+**偵測發生在哪裡**：session 結束後、out-of-band、讀 transcript，不是每輪回應自報。
+agent 的主 context 裡沒有任何 GAP 指令 —— 那正是 2026-07 讓訊號量失控的設計
+（見 [#40](https://github.com/fredrick84823/fstack/issues/40)）。接線由 #44 負責；
+在那之前，`<<GAP>>` 標記只由「收工」時的 `session-ender` 這條顯式路徑產生。
 
 **標記格式（單行，放 response 末尾，不要放在 code block 內）：**
 
