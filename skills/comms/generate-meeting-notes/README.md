@@ -640,10 +640,39 @@ python3 scripts/channel.py --meeting <key> --channel C0XXXXXXXXX
 
 寫入前會把原設定檔複製成 `config.json.bak`（它是非版控的手改檔）。
 
+### 7. reconcile_drive.py
+
+排程入口，不是互動流程。每小時掃 Shared Drive 上既有的會議資料夾結構，日期資料夾
+有音檔而且沒有會議記錄 Doc 時，自己跑完流程 B → 流程 C → 發佈。
+
+```bash
+cd "$SKILL_DIR" && uv run scripts/reconcile_drive.py              # 正常一輪
+cd "$SKILL_DIR" && uv run scripts/reconcile_drive.py --dry-run    # 只印差集
+```
+
+Input：
+
+- `meetings.<key>.folder_id` / `folder_name`：反查「這個系列資料夾是哪種會議」，
+  並從 `folder_id` 的 parent 反推 Shared Drive 容器（config 沒有 drive id 欄位）
+- Drive 上 `{系列資料夾}/{YYYYMMDD}/` 的檔案清單
+- `~/.config/generate-meeting-notes/reconcile-state.json`：不存在＝首次執行
+
+Output：差集清單印在 stdout；需要人介入的那幾場 DM `slack_dm_user`；產出的每一場印
+`create_gdoc_from_md.py` 的 `RESULT_URL`。
+
+邊界（首次強制 dry-run、每輪上限 2 場、7 天窗、未知系列只 DM、認證先驗）那張表在
+`SKILL.md` 的「排程 · Shared Drive reconcile」一節，**這裡不再抄一份** —— 同一張表
+原本有三份，而三份之間已經漂移過一次。
+
+Drive 上的音檔是原件，一律保留不動；本機暫存目錄跑完整個移除。所以發佈那步**不帶**
+`--audio-file`／`--delete-local-audio`。
+
 ## End-to-End Data Flow
 
 ```text
 User input
+  ├─ Shared Drive（排程）
+  │   └─ reconcile_drive.py → 下載暫存音檔 → 以下 audio input 那條
   ├─ text input
   │   └─ local subagent → transcript.md + extract.md
   └─ audio input

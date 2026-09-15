@@ -41,6 +41,17 @@ MUT_LOG := .mutmut-run.log
 # channel.py 的三支全掛：`channel_state` / `dm_reminder` 是 dict/str in → str out，
 # `set_channel` 碰檔案系統但碰的是測試自己建的 tmp 檔（同 history_index 的理由）——
 # 「備份有沒有先於寫入」正是最該被 mutant 問一次的地方。`main` 是 CLI 進入點，不掛。
+# reconcile_drive.py 的純函式全掛（`in_window` 到 `dm_blocked`）：這支是**無人看管**跑的，
+# 它的判準錯了沒有人會在旁邊看到 —— 差集算多一場的代價是重跑 NotebookLM 並覆寫既有記錄。
+# `in_window` 的 `0 <= delta < window_days` 兩個邊界、`compute_pending` 的 `[:limit]`、
+# `is_note` 的「Doc **且** 檔名前綴」那個 `and`，全都是靜靜地多算或少算的形狀。
+# `credential_gap` / `prompt_file` 碰檔案系統，但碰的是測試自己建的 tmp 目錄（同
+# `set_channel` 的理由），照樣掛。Drive 掃描、下載與三個子行程那幾支不掛：它們要憑證、
+# 要網路、要 NotebookLM，是 I/O 那一層。
+# `synthesis_prompt`（22 顆）與 `credential_gap`（17 顆）會留下殺不掉的：全部是 prompt
+# 與錯誤訊息的**字面值**，以及 `encoding="utf-8"` → `None`／`"UTF-8"`、
+# `"credentials.json"` → `"CREDENTIALS.JSON"`（這台的檔案系統大小寫不敏感）。那些不寫
+# 測試 —— 要殺就得逐字釘死文案，而那正是棒④ 會刪掉的裝飾性測試（同 `build_index`）。
 PURE := \
 	outline \
 	open_items \
@@ -78,7 +89,19 @@ PURE := \
 	channel_id \
 	channel_from_answer \
 	dm_reminder \
-	set_channel
+	set_channel \
+	in_window \
+	_as_date \
+	is_audio \
+	is_note \
+	compute_pending \
+	series_map \
+	credential_gap \
+	parse_handoff \
+	prompt_file \
+	synthesis_prompt \
+	dm_skipped \
+	dm_blocked
 
 # key 的形狀是 `<路徑轉點>.x_<函式名>__mutmut_<n>` —— `x_` 前綴是 mutmut 加的，
 # 少了它 fnmatch 一個都配不到，而配不到時 mutmut 是 assert 不是靜靜跳過。

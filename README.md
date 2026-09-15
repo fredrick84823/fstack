@@ -266,7 +266,9 @@ Implement workflow (from
 
 Wires the `improve` skill's signal capture into session lifecycle:
 
-- **SessionStart** → checks signal queue for pending improvements
+- **SessionStart** → 不注入 pending 清單。`scripts/check-signal-queue.sh` 保留但刻意未接線，
+  不要接回；原因見 [#40](https://github.com/fredrick84823/fstack/issues/40)（每輪自報造成的
+  訊號雜訊，偵測要改成 out-of-band、每 session 一次）。
 - **Stop** → captures `<<GAP skill: desc>>` markers and skill candidates automatically
 
 ## Post-install: Enable auto gap detection

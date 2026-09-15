@@ -354,6 +354,53 @@ cd "$SKILL_DIR" && uv run scripts/replace_speakers.py \
 5. Slack：補入顯著新內容 → 補發一則到同 channel，說明已補充音訊分析並附 URL；
    只是細節修正（例如人名）→ 不必補發
 
+## 排程 · Shared Drive reconcile
+
+同事把錄音丟進 Shared Drive 的會議資料夾，記錄自己出現 —— 不用開對話、不用回答流程 B
+的四個問題、不用有人盯著。
+
+```bash
+cd "$SKILL_DIR" && uv run scripts/reconcile_drive.py              # 正常一輪
+cd "$SKILL_DIR" && uv run scripts/reconcile_drive.py --dry-run    # 只印差集
+```
+
+掃的是**發佈流程自己建的那個資料夾結構**，不另建收件匣：
+
+```
+{Shared Drive}/{系列資料夾}/{YYYYMMDD}/
+                    │            └─ 日期來自資料夾名，不需要檔名含 8 位連續數字
+                    └─ 反查 config 的 folder_name → 這是哪種會議
+
+該日期資料夾有音檔 && 沒有會議記錄 Doc  ──▶ 產（流程 B → 流程 C → 發佈）
+```
+
+**用 reconcile 不用事件觸發**：事件觸發靠「發生了什麼」，Mac 關機、Drive 同步延遲、
+腳本當掉，錯過就永遠錯過；reconcile 靠「現在長怎樣」，漏掉一輪下一輪自己補回來。
+掃描窗固定最近 7 天，沒有差集就不動。
+
+**這支是無人看管的**，所以失敗時的行為比成功時的行為重要：
+
+| 情況 | 行為 |
+|---|---|
+| 首次執行（沒有狀態檔 `~/.config/generate-meeting-notes/reconcile-state.json`） | 強制 dry-run，只印差集；`--dry-run` 不會用掉這道閘門 |
+| 每輪處理上限 | 2 場。判準寫錯時不會一次燒 20 次 NotebookLM。**沒有旗標可以調** |
+| 系列資料夾在 config 裡完全找不到 | 不產，只 DM。缺會議類型脈絡，硬產出來的是壞的 |
+| 同一個日期資料夾有多個音檔 | 不產，只 DM。見 `references/multi-session.md` 手動處理 |
+| 該會議類型沒設 channel | 記錄照產，通知走 DM fallback（`channel.py` 的三態） |
+| Google 憑證會開瀏覽器 / NotebookLM 認證失效 | **切音訊前**就擋，DM 並停，退出碼非 `0` |
+| Drive 翻頁超過上限 | 報錯收工。無上限的翻頁是「跑不完」不是「變紅」 |
+
+**音檔歸屬與流程 C 相反。** 流程 C 的 `--delete-local-audio` 是為「本機是原件、Drive
+是副本」寫的；這裡 Drive 是原件、本機只是暫存下載。所以 reconcile 發佈時**不帶**
+`--audio-file`／`--delete-local-audio`，Drive 上的音檔一個位元都不動，本機暫存目錄
+跑完整個移除。
+
+排程（`crontab -e`，每小時 5 分）：
+
+```
+5 * * * * cd <SKILL_DIR> && uv run scripts/reconcile_drive.py >> /tmp/gmn-reconcile.log 2>&1
+```
+
 ## 延伸參考
 
 | 需要時 | 讀 |

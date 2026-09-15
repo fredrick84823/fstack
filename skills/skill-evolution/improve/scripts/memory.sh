@@ -3,6 +3,7 @@
 # Usage:
 #   memory.sh capture --memory-dir <dir> --timestamp <ts> --target-skill <skill> --type <S1|S2|S3> --source <source> --gap <text>
 #   memory.sh lookup --memory-dir <dir> --target-skill <skill> [--affected-rule <rule>] [--gap-type <type>]
+# Lifecycle capture/transition must use signal_state.py; this script stores and queries raw evidence.
 
 set -euo pipefail
 
@@ -25,6 +26,7 @@ ensure_memory_dir() {
   local memory_dir="$1"
   mkdir -p "$memory_dir/claims" "$memory_dir/eval-cases" "$memory_dir/versions"
   [ -f "$memory_dir/signals.jsonl" ] || : > "$memory_dir/signals.jsonl"
+  [ -f "$memory_dir/transitions.jsonl" ] || : > "$memory_dir/transitions.jsonl"
   if [ ! -f "$memory_dir/skill-graph.json" ]; then
     cat > "$memory_dir/skill-graph.json" <<'JSON'
 {
@@ -109,6 +111,7 @@ capture_signal() {
         actual_behavior: $actual_behavior,
         evidence_count: 1,
         status: "pending",
+        status_semantics: "captured_at_ingest",
         type: $type,
         source: $source,
         gap: $gap,
@@ -180,11 +183,15 @@ lookup_memory() {
         affected_rule: (if $affected_rule == "" then null else $affected_rule end),
         gap_type: (if $gap_type == "" then null else $gap_type end)
       },
+      lifecycle_authority: "signal-queue.md",
+      status_note: "prior_signals[].status is capture-time evidence, not current lifecycle state",
       prior_signals: [
         .[]
         | select(.target_skill == $target_skill)
         | select($affected_rule == "" or .affected_rule == $affected_rule)
         | select($gap_type == "" or .gap_type == $gap_type)
+        | .captured_status = (.status // "pending")
+        | .status_semantics = (.status_semantics // "captured_at_ingest")
       ],
       claims_file: $claims_file,
       eval_cases_file: $eval_file
