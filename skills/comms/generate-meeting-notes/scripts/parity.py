@@ -35,6 +35,11 @@ SKILL_REL = Path("skills/comms/generate-meeting-notes")
 # 警告的第一行。發佈流程的輸出是交棒契約的一部分，這個字串會被斷言。
 DRIFT_HEADER = "⚠️  安裝版與 fstack 已經漂移"
 
+# 警告裡要印的掉齊指令。是**反向**那支：repo-first 之後，發佈當下看到漂移最可能的原因
+# 是「合併了還沒掉齊」，而正向那支在這種情況會拒絕執行（exit 3）。指向正向那支等於讓
+# 人先撞一次牆才知道要跑哪支。
+FIX_SCRIPT = Path("bin/sync-to-installed.sh")
+
 
 def drift_warning(paths: Sequence[str]) -> str:
     """差異清單 → 要印出來的警告。沒有差異回空字串。
@@ -47,7 +52,7 @@ def drift_warning(paths: Sequence[str]) -> str:
     return (
         f"\n{DRIFT_HEADER}（{len(paths)} 項）：\n"
         f"{listed}\n"
-        f"   掉齊：{SYNC_SCRIPT}\n"
+        f"   掉齊：{FIX_SCRIPT}\n"
     )
 
 
@@ -58,7 +63,7 @@ def _differs(cmp: filecmp.dircmp, prefix: str = "") -> list[str]:
     return out
 
 
-def sync_diff(installed: Path, repo: Path) -> list[str]:
+def sync_diff(installed: Path, repo: Path, *, require_clean_guard: bool = True) -> list[str]:
     """把 `installed` 同步進暫存目錄，回傳它與 `repo` 版之間的差異路徑。
 
     比不了的時候回空清單（`installed` 不像安裝目錄、repo 內沒有同步腳本）——
@@ -66,8 +71,13 @@ def sync_diff(installed: Path, repo: Path) -> list[str]:
 
     同步**沒有乾淨收尾**（退出碼不是 0）則 raise `RuntimeError`。這裡回空清單的話，
     一支壞掉的腳本會讓所有比對永遠通過 —— 連 integration test 都會跟著變成永遠綠。
-    退出碼 2（guard 命中內部指涉）也算沒收乾淨：檔案雖然同步到了，但那條 integration
+    退出碼 2（guard 命中內部指涉）預設也算沒收乾淨：檔案雖然同步到了，但那條 integration
     測試原本就是靠「退出碼 0」在守那件事，放行等於把它交出去。
+
+    `require_clean_guard=False` 只給方向判斷用。那條路徑要的只有「暫存目錄裡的檔案」，
+    而 exit 2 的時候檔案是齊的 —— guard 命中是 commit 前要處理的事，不該讓方向退化成
+    「不知道」：真正的同步緊接著就會跑到它自己的 guard 並以 2 收場（腳本 header 文件化
+    的那條安全閥），前提是閘門先讓它走到那裡。
     """
     script = repo / SYNC_SCRIPT
     if not (installed / "SKILL.md").is_file() or not script.is_file():
@@ -83,13 +93,16 @@ def sync_diff(installed: Path, repo: Path) -> list[str]:
             text=True,
             cwd="/",
         )
-        if done.returncode != 0:
+        if done.returncode != 0 and (require_clean_guard or done.returncode != 2):
             why = (done.stderr or done.stdout).strip().rsplit("\n", 1)[-1]
             raise RuntimeError(f"{SYNC_SCRIPT.name} exit {done.returncode}: {why}")
         return _differs(filecmp.dircmp(stage / SKILL_REL, repo / SKILL_REL))
 
 
-# `sync_direction` 的三個回傳值。bin/sync-from-installed.sh 逐字比對 REPO_NEWER。
+# `sync_direction` 的三個回傳值。
+# bin/sync-from-installed.sh 的閘門是**白名單**：只認得 INSTALLED_NEWER 與 IN_SYNC 這兩個
+# 字面值才放行，其餘一律拒絕。所以改 REPO_NEWER 的字面值是安全的，改另外兩個會讓那支
+# 腳本從此拒絕一切同步（吵，但不會刪東西）—— 兩個都改才會靜默放行。
 INSTALLED_NEWER = "安裝版較新"
 REPO_NEWER = "repo 較新"
 IN_SYNC = "一致"
@@ -122,8 +135,23 @@ def direction_against_installed(installed: Path, repo: Path) -> str:
     差異清單走 `sync_diff`（同一份比對邏輯，#24 收斂的那份），mtime 則直接讀兩邊的
     **原始**檔案 —— 不能讀暫存基準的：sanitize 那道 `sed` 會把被替換過的檔案 mtime
     改成現在，於是每個含佔位符的檔案都會看起來像「安裝版剛改過」。
+
+    比不了的時候 **raise**，不繼承 `sync_diff` 的「回空清單」。那個契約是為
+    `report_drift` 寫的（沒有安裝版 == 沒東西要講），照搬到這裡就是：比不了 → 空清單 →
+    `IN_SYNC` → 閘門放行 `rsync --delete`。兩個呼叫端要的相反，差別寫在這裡。
+
+    ponytail: repo 側的「多新」用 mtime。剛開的 worktree 裡每個檔案的 mtime 都是
+    checkout 當下，所以「安裝版被直接改過、想用正向同步撿回來」在新 worktree 幾乎一定
+    被判成 repo 較新而擋掉（那個情境下正向同步本來也多半是危險的 —— 同一個工作樹裡有
+    還沒掉齊的合併）。真的要分得更細，乾淨的檔案改讀 `git log -1 --format=%ct`、
+    改過沒 commit 的才退回 mtime。
     """
-    rels = sync_diff(installed, repo)
+    if not (installed / "SKILL.md").is_file():
+        raise RuntimeError(f"不像 generate-meeting-notes 安裝目錄，無法判斷方向：{installed}")
+    script = repo / SYNC_SCRIPT
+    if not script.is_file():
+        raise RuntimeError(f"repo 內找不到同步腳本，無法判斷方向：{script}")
+    rels = sync_diff(installed, repo, require_clean_guard=False)
     return sync_direction(_mtimes(installed, rels), _mtimes(repo / SKILL_REL, rels))
 
 

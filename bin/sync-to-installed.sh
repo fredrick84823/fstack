@@ -43,6 +43,9 @@ DST="${1:-$HOME/.agents/skills/generate-meeting-notes}"
 
 # rsync 排除的那四類在 base 裡不會出現，所以走檔案時也要跳過，否則每一顆
 # __pycache__ 都會被當成「repo 新增的檔案」複製過去。
+# ponytail: 同一份清單在 sync-from-installed.sh 是 rsync 的 --exclude、在這裡是 find 的
+# 述詞，兩種語法沒辦法共用一份字面值。**改一邊記得改另一邊** —— 漂移是無聲的（漏刪，
+# 或把 __pycache__ 推進安裝版）。真的變長就改成讓這支走 `git ls-files` 問 repo 自己。
 PRUNE=(! -path '*/.venv/*' ! -path '*/__pycache__/*' ! -path '*/.pytest_cache/*' ! -name '.DS_Store')
 
 # ── 基準：sanitize(安裝版) ────────────────────────────────────────────────
@@ -84,9 +87,16 @@ while IFS= read -r -d '' f; do
   # 撞上算少數，而撞上時的輸出是「請人看一眼」不是「靜靜挑一邊」。真的常撞再換成
   # 以 base↔安裝版的逐行對照表反推佔位符。
   cp "$ours" "$STAGE/.merge"
-  if git merge-file "$STAGE/.merge" "$base" "$f"; then
+  set +e; git merge-file "$STAGE/.merge" "$base" "$f"; mrc=$?; set -e
+  # `git merge-file` 的回傳值：0 乾淨、1..127 是衝突的段數、>127 是它自己執行失敗。
+  # 兩者都不搬檔案，但不能報同一句話 —— 把執行失敗說成「衝突」會讓人去看一個不存在的
+  # 衝突，而真正的原因（檔案讀不到、git 壞了）沒人查。
+  if [ "$mrc" = 0 ]; then
     cp "$STAGE/.merge" "$ours"
     echo "  ~ $rel"
+  elif [ "$mrc" -gt 127 ]; then
+    echo "  ✗ ${rel}（git merge-file 執行失敗 rc=${mrc}，安裝版保持原樣）" >&2
+    conflicts=$((conflicts + 1))
   else
     echo "  ! ${rel}（衝突，安裝版保持原樣）"
     conflicts=$((conflicts + 1))

@@ -107,7 +107,7 @@ def test_no_drift_prints_no_warning_and_exits_zero(publish_once):
 
 
 def test_drift_prints_the_warning_and_still_exits_zero(publish_once):
-    """驗收條件 2 ＋ 3：有差異時印警告 ＋ `bin/sync-from-installed.sh`，退出碼仍是 0。
+    """驗收條件 2 ＋ 3：有差異時印警告 ＋ `bin/sync-to-installed.sh`，退出碼仍是 0。
 
     刪掉這條 → 整個偵測被拿掉也不會有人發現（沒有輸出的功能跟不存在一樣）；
     或者反過來，漂移被當成錯誤回非零，把一個已經成功的發佈弄成看起來失敗。
@@ -115,7 +115,7 @@ def test_drift_prints_the_warning_and_still_exits_zero(publish_once):
     code, out = publish_once(lambda installed, repo: DRIFTED)
 
     assert parity.DRIFT_HEADER in out
-    assert str(parity.SYNC_SCRIPT) in out
+    assert str(parity.FIX_SCRIPT) in out
     assert (code, DONE in out) == (0, True)
 
 

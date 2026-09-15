@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.unit.conftest import ROOT
+from tests.unit.conftest import ROOT, child_env
 
 CRAP = ROOT / "bin" / "crap.py"
 
@@ -35,6 +35,7 @@ def _run(tmp_path: Path, blocks: list[dict], executed: list[int], missing: list[
         capture_output=True,
         text=True,
         check=True,
+        env=child_env(),
     )
     return done.stdout
 

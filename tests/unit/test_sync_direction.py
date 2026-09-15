@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from .conftest import load_script
+from .conftest import child_env, load_script
 from .test_sync_diff import pair, write_tree  # noqa: F401  `pair` 是 fixture，靠名字解析
 from .test_sync_from_installed import DEST_REL
 
@@ -181,9 +181,17 @@ def test_a_shared_file_edited_later_in_the_installed_copy_is_installed_newer(
 
 
 def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
-    """跑 `python3 parity.py ...`。cwd 固定在 `/`，順帶釘住「路徑不從 cwd 推」。"""
+    """跑 `python3 parity.py ...`。cwd 固定在 `/`，順帶釘住「路徑不從 cwd 推」。
+
+    環境走 `child_env`（理由見 `conftest.child_env`）。`cwd="/"` 留著 ——
+    那個釘子在測「路徑不從 cwd 推」，不要為了繞過 mutmut 拿掉。
+    """
     return subprocess.run(
-        [sys.executable, str(PARITY_PY), *args], capture_output=True, text=True, cwd="/"
+        [sys.executable, str(PARITY_PY), *args],
+        capture_output=True,
+        text=True,
+        cwd="/",
+        env=child_env(),
     )
 
 
@@ -290,3 +298,25 @@ def test_sync_direction_is_inside_the_mutation_scope():
     pure = MAKEFILE.read_text(encoding="utf-8").split("PURE :=", 1)[-1].split("\n\n", 1)[0]
 
     assert "sync_direction" in pure.split()
+
+
+@pytest.mark.parametrize("missing", ["installed-skill-md", "sync-script"])
+def test_an_incomparable_pair_raises_instead_of_reporting_in_sync(
+    pair: tuple[Path, Path], missing: str
+):
+    """比不了就 raise —— 不可以回 `一致`。
+
+    `sync_diff` 在比不了的時候回空清單（「沒東西要講」對漂移警告是對的），但方向判斷
+    把空清單讀成 `一致`，而 `一致` 是**放行** `rsync --delete` 的那個答案。所以同一份
+    「比不了」在這一層必須翻成例外：fail closed。
+    刪掉這條 → 安裝版不存在、或 repo 指到一個不是 fstack 的目錄時，閘門靜靜地放行。
+    反面是 `test_identical_trees_have_no_direction`：比得了的時候照樣回 `一致`。
+    """
+    installed, repo = pair
+    if missing == "installed-skill-md":
+        (installed / "SKILL.md").unlink()
+    else:
+        (repo / parity.SYNC_SCRIPT).unlink()
+
+    with pytest.raises(RuntimeError):
+        parity.direction_against_installed(installed, repo)

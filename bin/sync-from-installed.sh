@@ -117,6 +117,8 @@ if [[ -f $DST/SKILL.md ]]; then
         echo "   這個方向帶 --delete：照跑會刪掉 repo 端新增的檔案、把修改過的蓋回舊內容，"
         echo "   而蓋回去之後 parity 會在舊內容上轉綠，沒有任何東西會叫。"
         echo "   先掉齊安裝版：bin/sync-to-installed.sh"
+        echo "   （若確定是安裝版比較新、要把它的改動撿回 repo：那幾個檔案手動複製過來。"
+        echo "     剛開的 worktree 裡 repo 端每個檔案的 mtime 都是 checkout 當下，這條會擋。）"
       } >&2
       exit 3
       ;;

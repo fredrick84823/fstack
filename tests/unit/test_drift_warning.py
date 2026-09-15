@@ -38,13 +38,17 @@ def items(text: str) -> list[str]:
 
 
 def test_the_public_strings_are_what_the_interface_promises():
-    """`DRIFT_HEADER` / `SYNC_SCRIPT` / `SKILL_REL` 是被斷言的介面。
+    """`DRIFT_HEADER` / `SYNC_SCRIPT` / `FIX_SCRIPT` / `SKILL_REL` 是被斷言的介面。
 
     下面每條測試都拿 `DRIFT_HEADER` 當期望值，所以常數本身要有一條把值釘死的測試 ——
     少了這條，把 header 整個改掉（或改成空字串）不會有任何一條變紅。
+
+    兩支腳本是**不同用途的兩個路徑**，不可以合併成一個常數：`SYNC_SCRIPT` 是比對時
+    拿來產暫存基準的那支（正向），`FIX_SCRIPT` 是漂移時使用者該跑的那支（反向）。
     """
     assert parity.DRIFT_HEADER == "⚠️  安裝版與 fstack 已經漂移"
     assert str(parity.SYNC_SCRIPT) == "bin/sync-from-installed.sh"
+    assert str(parity.FIX_SCRIPT) == "bin/sync-to-installed.sh"
     assert str(parity.SKILL_REL) == "skills/comms/generate-meeting-notes"
 
 
@@ -101,4 +105,15 @@ def test_the_last_line_names_the_script_that_fixes_it(warning: str):
 
     刪掉這條 → 尾行不見了，使用者看到警告但不知道下一步要跑什麼。
     """
-    assert warning.endswith(f"   掉齊：{parity.SYNC_SCRIPT}\n")
+    assert warning.endswith(f"   掉齊：{parity.FIX_SCRIPT}\n")
+
+
+def test_the_warning_does_not_point_at_the_script_that_would_refuse(warning: str):
+    """指的必須是**能修好它的**那支 —— 正向腳本在這個情況下會拒絕執行（exit 3）。
+
+    repo-first 之後，發佈當下看到漂移最可能的原因是「合併了還沒掉齊」，而那正是
+    正向同步的方向閘門會擋下來的情況。刪掉這條 → 尾行改回 `SYNC_SCRIPT` 照樣全綠
+    （字面值只被一條測試釘著），使用者照著訊息跑一次、撞牆、然後自己手動覆蓋 ——
+    回到本票要修的那個病。
+    """
+    assert str(parity.SYNC_SCRIPT) not in warning

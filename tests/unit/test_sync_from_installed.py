@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-from .conftest import _qid
+from .conftest import _qid, child_env
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "bin" / "sync-from-installed.sh"
@@ -99,13 +99,17 @@ def home(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 def run(script: Path, *args: str, home: Path) -> subprocess.CompletedProcess[str]:
-    """跑腳本。cwd 固定在 `/`，順帶釘住「目的地不從 cwd 推」。"""
+    """跑腳本。cwd 固定在 `/`，順帶釘住「目的地不從 cwd 推」。
+
+    環境走 `child_env`：這支腳本自己會再起一個 `python3 parity.py --direction`
+    問方向，那個孫行程一樣會繼承 `MUTANT_UNDER_TEST`（理由見 `conftest.child_env`）。
+    """
     return subprocess.run(
         [str(script), *args],
         capture_output=True,
         text=True,
         cwd="/",
-        env={**os.environ, "HOME": str(home)},
+        env=child_env(HOME=str(home)),
     )
 
 
@@ -530,3 +534,33 @@ def test_a_refused_sync_does_not_overwrite_the_repo_edit(sandbox: Path, home: Pa
     run(sandbox / "bin" / SCRIPT.name, str(src), home=home)
 
     assert (dest / "t.md").read_text(encoding="utf-8") == "repo 改過\n"
+
+
+def test_a_missing_direction_judge_refuses_to_sync(sandbox: Path, home: Path):
+    """方向判斷本身不見了 → exit 1，不可以當成「沒有方向問題」放行。
+
+    這道閘門唯一的判斷依據住在被同步的那個目錄裡，而 `rsync --delete` 會把它一起蓋掉：
+    fail open 的話，第一次跑（或 repo 端剛好刪掉／改名 `parity.py`）就等於沒有閘門，
+    而症狀是**安靜的** —— 退出碼 0、看起來同步成功。
+    反面是 `test_a_mirrored_tree_still_syncs`：同一組 fixture，`parity.py` 在的時候
+    照常回 0，所以一個永遠回 1 的實作在這兩條之間過不去。
+    """
+    src, dest = make_mirror(sandbox, **{"t.md": "same\n"})
+    (dest / "scripts" / PARITY.name).unlink()
+
+    assert run(sandbox / "bin" / SCRIPT.name, str(src), home=home).returncode == 1
+
+
+def test_a_missing_direction_judge_does_not_touch_the_destination(sandbox: Path, home: Path):
+    """判斷不出方向的那次同步，目的地一個檔案都不能動。
+
+    刪掉這條 → 腳本可以先 rsync 再發現自己沒有判斷依據，回 1 的時候
+    repo 端的改動已經被蓋掉了；退出碼看起來是擋住了，資料已經損失。
+    """
+    src, dest = make_mirror(sandbox, **{"t.md": "same\n"})
+    (dest / "scripts" / PARITY.name).unlink()
+    before = snapshot(dest)
+
+    run(sandbox / "bin" / SCRIPT.name, str(src), home=home)
+
+    assert snapshot(dest) == before
