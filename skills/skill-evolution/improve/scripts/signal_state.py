@@ -51,6 +51,20 @@ def normalize_gap(value: str) -> str:
     return " ".join(value.split())
 
 
+def find_duplicate(records: list[dict[str, Any]], target_skill: str, gap: str) -> dict[str, Any] | None:
+    """The same (skill, gap) said twice is one signal with two witnesses, not two signals.
+
+    Matching is on raw evidence, not on the queue: a signal whose queue entry is already
+    terminal still absorbs the repeat, so a stale gap cannot climb back into `pending`
+    just by recurring. `/improve` reads evidence_count to see how often it came back.
+    """
+    wanted = normalize_gap(gap)
+    for record in records:
+        if record.get("target_skill") == target_skill and normalize_gap(record.get("gap", "")) == wanted:
+            return record
+    return None
+
+
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
@@ -191,6 +205,7 @@ def raw_record_from_entry(entry: dict[str, Any], signal_id: str, *, recovered: b
         "type": fields.get("type", "S2"),
         "source": fields.get("source", "reconciliation recovery" if recovered else "unknown"),
         "gap": fields.get("gap", ""),
+        "evidence_quote": fields.get("evidence_quote", ""),
         "capture_recovered": recovered,
         "links": {"duplicates": [], "tested_by": [], "caused_false_positive": []},
     }
@@ -290,9 +305,16 @@ def command_capture(args: argparse.Namespace) -> None:
     signal_id = make_signal_id(args.timestamp, args.target_skill, args.gap)
     with lifecycle_lock(queue):
         text, lines, entries = queue_lines(queue)
+        raw_path = memory_dir / "signals.jsonl"
+        raw_records = read_jsonl(raw_path)
+        duplicate = find_duplicate(raw_records, args.target_skill, args.gap)
+        if duplicate is not None:
+            duplicate["evidence_count"] = int(duplicate.get("evidence_count", 1)) + 1
+            atomic_write(raw_path, render_jsonl(raw_records))
+            print(duplicate["signal_id"])
+            return
         if any(entry["fields"].get("signal_id") == signal_id for entry in entries):
             raise StateError(f"duplicate queue signal_id: {signal_id}")
-        raw_records = read_jsonl(memory_dir / "signals.jsonl")
         if ensure_unique(raw_records, signal_id, "raw signal", allow_missing=True) is not None:
             raise StateError(f"orphan raw signal_id already exists: {signal_id}")
         graph = read_graph(memory_dir / "skill-graph.json")
@@ -306,7 +328,8 @@ def command_capture(args: argparse.Namespace) -> None:
             f"- **type**: {args.type}\n"
             f"- **source**: {args.source}\n"
             f"- **gap**: {args.gap}\n"
-            "- **status**: pending\n"
+            + (f"- **evidence_quote**: {args.evidence_quote}\n" if args.evidence_quote else "")
+            + "- **status**: pending\n"
             "- **memory_sync**: pending\n"
         )
         atomic_write(queue, text + block)
@@ -316,7 +339,7 @@ def command_capture(args: argparse.Namespace) -> None:
             entry = find_queue_entry(entries, signal_id)
             raw = raw_record_from_entry(entry, signal_id)
             raw_records.append(raw)
-            atomic_write(memory_dir / "signals.jsonl", render_jsonl(raw_records))
+            atomic_write(raw_path, render_jsonl(raw_records))
             graph["signals"].append(graph_record_from_raw(raw, "pending"))
             graph["updated_at"] = now_iso()
             atomic_write(memory_dir / "skill-graph.json", json.dumps(graph, ensure_ascii=False, indent=2) + "\n")
@@ -453,6 +476,7 @@ def build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--type", choices=["S1", "S2", "S3"], required=True)
     capture.add_argument("--source", required=True)
     capture.add_argument("--gap", required=True)
+    capture.add_argument("--evidence-quote", default="")
     capture.set_defaults(func=command_capture)
 
     adopt = subparsers.add_parser("adopt-legacy")
