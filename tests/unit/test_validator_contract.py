@@ -349,3 +349,18 @@ def test_missing_required_args_is_a_usage_error(args: tuple[str, ...]) -> None:
     proc = subprocess.run([str(VALIDATOR_SH), *args], capture_output=True, text=True)
     assert proc.returncode == 2
     assert "usage:" in proc.stderr
+
+
+def test_the_prompt_does_not_give_away_a_fixture_answer() -> None:
+    """prompt 不得含任何 fixture `gap` 的長片段。
+
+    第一版的 `## Duplicates` 例子跟 trap-05 的 gap 幾乎逐字相同 —— 那一輪 42 跑量到的
+    是「模型會不會背例子」。這種汙染不會讓任何東西變紅，只會讓分數好看，所以用一條
+    機械檢查擋住：連續 12 字重疊為零。空白不算，中英文都吃得到。
+    """
+    squash = lambda s: "".join(s.split())
+    prompt = squash(PROMPT.read_text(encoding="utf-8"))
+    for case in fixtures:
+        gap = squash(case["gap"])
+        overlaps = [gap[i:i + 12] for i in range(len(gap) - 11) if gap[i:i + 12] in prompt]
+        assert not overlaps, f"{case['id']}: prompt 含 {overlaps[0]!r}"

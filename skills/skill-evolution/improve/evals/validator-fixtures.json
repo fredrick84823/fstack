@@ -146,14 +146,14 @@
       "class": "trap",
       "expect": "reject",
       "expect_risk_class": [
-        "duplicate"
+        "uncertain"
       ],
-      "source": "signal-queue.md 2026-07-22 同日四筆 generate-meeting-notes（17:09 與 17:43 同一個 timeout 問題）",
+      "source": "signal-queue.md 2026-07-22T17:43:04 generate-meeting-notes（agent 自報、使用者只回一個「嗯」；known_signals 放同日 17:09:50 那筆 —— 同一個 skill、同一天、都提到 timeout，但上傳與 extraction 是兩個階段，真實 queue 也是兩筆，所以這是 duplicate_of 必須維持 null 的反向對照）",
       "target_skill": "generate-meeting-notes",
       "gap": "上傳缺少進度回報與明確 timeout",
       "excerpt": "agent：上傳又卡了很久才回來，這裡應該要有進度回報跟明確的 timeout。\n\n使用者：嗯。",
       "known_signals": "sig_202607221709500800_generate_meeting_notes_38fee69a\t轉錄服務 extraction 卡住時缺少自動 timeout 與既有 artifacts fallback 機制",
-      "expect_duplicate_of": "sig_202607221709500800_generate_meeting_notes_38fee69a"
+      "expect_duplicate_of": null
     },
     {
       "id": "trap-04",
