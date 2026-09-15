@@ -618,6 +618,7 @@ def test_open_items_does_not_mistake_a_suffixed_layer_for_the_status_layer():
         ("#### 狀態 · 承 8/24", ["執行中 · 說明文字"]),
         ("#### 狀態 更新", []),
         ("#### 議題因果鏈 · 承 8/20 → 8/24", []),
+        ("### 狀態", []),
     ],
     ids=_qid,
 )
