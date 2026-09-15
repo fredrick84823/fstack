@@ -12,6 +12,11 @@ vacuously true，那正是這兩個 helper 存在的唯一理由。raise 同時�
 mutmut 把那個 exit 4 記成 `killed`，印出假的全綠。這個 skill 的語料是繁中 markdown，
 用 `repr()` 必踩。
 
+`child_env` —— 起子行程時用它算 `env=`。mutmut 的 stats pass 把 `MUTANT_UNDER_TEST`
+放進環境，子行程（與孫行程）會繼承；被插樁的模組看到它就去載 mutmut 的設定，而設定是
+**相對 cwd** 找的。測試把 cwd 釘在 `/` 的地方（那個釘子在測「路徑不從 cwd 推」）於是
+整輪 mutation 停在 stats collection。
+
 `load_script` —— 腳本住在 `skills/comms/generate-meeting-notes/scripts/`，目錄名有連
 字號，不是可 import 的套件路徑。路徑一律從**本檔案**推出來：mutmut 把原始碼與測試
 一起複製進 `mutants/` 之後，這樣載到的是 mutant；寫死 repo 路徑的話載到的是原檔，
@@ -67,6 +72,31 @@ def load_script(name: str) -> ModuleType:
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+MUTANT_VAR = "MUTANT_UNDER_TEST"
+
+
+def child_env(**overrides: str) -> dict[str, str]:
+    """子行程的環境：`os.environ` 的複本，去掉 `MUTANT_VAR`，再套上 `overrides`。
+
+    mutmut 的 stats pass 用 `MUTANT_UNDER_TEST=stats` 起測試行程，子行程與**孫行程**
+    都會繼承它（`run()` 起 shell 腳本、腳本自己再起 `python3 parity.py` 就是兩層）。
+    `mutants/` 底下那份被插樁的模組看到它會去載 mutmut 的設定，而設定是**相對 cwd**
+    找的 —— cwd 被釘在 `/` 的地方那裡沒有 `setup.cfg`，子行程以
+    `FileNotFoundError: Could not figure out where the code to mutate is` 收場。
+    症狀是整輪 mutation 停在 stats collection，一個數字都印不出來。
+    真實呼叫端不會帶著那個變數，所以剔除它測到的才是真的介面。
+
+    **只能動子行程的 `env=`，絕對不要碰 `os.environ` 本身**（`monkeypatch.delenv`、
+    autouse fixture 清掉它都不行）：測試行程自己就是 mutmut 用那個變數啟動的，
+    trampoline 靠它決定要啟用哪顆 mutant。在行程內刪掉 → 每顆 mutant 都跑到原始碼 →
+    整輪靜靜地量不到東西，而且兩道事後守衛都看不見（例外是 0、🫥 也是 0），
+    印出來的是滿分假綠。這是這份清單裡第五種假綠。
+    """
+    env = {k: v for k, v in os.environ.items() if k != MUTANT_VAR}
+    env.update(overrides)
+    return env
 
 
 def _qid(value: str) -> str:

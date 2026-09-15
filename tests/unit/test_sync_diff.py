@@ -231,3 +231,41 @@ def test_a_sync_that_cannot_finish_raises_instead_of_reporting_clean(
     message = str(exc.value)
     assert re.search(rf"\b{code}\b", message)
     assert stderr_needle in message
+
+
+# --------------------------------------------------------------------------
+# `require_clean_guard=False` —— guard 命中不代表比不了
+# --------------------------------------------------------------------------
+#
+# exit 2 是「同步結果裡有殘留內部指涉」，而那時檔案**已經**同步到暫存目錄了：比對本身
+# 有效。方向判斷因此可以在 guard 髒的情況下照樣回答，否則它會變成「不知道」，而真正的
+# 同步就再也走不到它自己的 guard —— 使用者拿到的是一個沒有理由的拒絕。
+# exit 1 不一樣：那是同步根本沒跑起來，沒有東西可以比。
+
+
+def test_a_guard_hit_still_produces_a_comparison_when_the_guard_is_not_required(
+    pair, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """guard 命中（exit 2）＋ `require_clean_guard=False` → 照常回差異清單。
+
+    刪掉這條 → 那個參數可以完全不被讀（或兩個分支都 raise），
+    方向判斷在安裝版有內部指涉時永遠答不出來，正向同步從此一律被擋。
+    """
+    plant_an_internal_reference(pair, tmp_path, monkeypatch)
+
+    assert parity.sync_diff(*pair, require_clean_guard=False) == ["SKILL.md"]
+
+
+def test_a_sync_that_cannot_run_at_all_raises_even_when_the_guard_is_not_required(
+    pair, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """exit 1（同步沒跑起來）→ 不管 `require_clean_guard` 是什麼都要 raise。
+
+    刪掉這條 → 那個參數被當成「全部不檢查」，沒建設定檔的機器上比對回空清單，
+    方向判斷讀成「一致」，`rsync --delete` 照跑 —— 正是本票要擋的那條路徑，
+    只是換一個開關打開它。
+    """
+    break_the_config(pair, tmp_path, monkeypatch)
+
+    with pytest.raises(RuntimeError):
+        parity.sync_diff(*pair, require_clean_guard=False)

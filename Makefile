@@ -21,8 +21,9 @@ MUT_LOG := .mutmut-run.log
 # NotebookLM／Drive I/O 混在同一支。所以範圍在這裡再切一層到函式：只掛 Seam ① 的純
 # 函式。I/O 那些現在零測試，掛進去只會噴一牆 🫥 no-tests，數字沒有意義。
 # 新增純函式時把名字加進來 —— 不加就是量不到它。
-# parity.py 同理只掛 drift_warning：sync_diff / report_drift 碰檔案系統與子行程，
-# 是 I/O 那一層，不是 Seam ①（它們有自己的測試，只是不該拿 mutation 去量）。
+# parity.py 同理只掛 drift_warning 與 sync_direction：sync_diff / report_drift /
+# direction_against_installed / _mtimes 碰檔案系統與子行程，是 I/O 那一層，不是 Seam ①
+#（它們有自己的測試，只是不該拿 mutation 去量）。
 # 沒列進來的純函式：build_glossary_prompt / is_non_content_extract / inject_attendees。
 # 它們現在零測試，掛進去是 147 顆 🫥 no-tests —— 跟掛 NotebookLM／Drive I/O 同一種
 # 稀釋，只是走函式那道門。有測試了再加回來（glossary 那支是 #8；is_non_content_extract
@@ -54,6 +55,7 @@ PURE := \
 	_classify_line \
 	preprocess_content \
 	drift_warning \
+	sync_direction \
 	_norm \
 	flatten \
 	classify \

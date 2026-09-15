@@ -13,7 +13,6 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 import sys
@@ -21,14 +20,14 @@ from pathlib import Path
 
 import pytest
 
-from tests.unit.conftest import ROOT
+from tests.unit.conftest import ROOT, child_env
 
 INTEGRATION_CONFTEST = ROOT / "tests" / "integration" / "conftest.py"
 PROBE = "def test_probe():\n    pass\n"
 
 
 def _pytest(*args: str, cwd: Path, ci: bool = False) -> subprocess.CompletedProcess:
-    env = {**os.environ, "PYTEST_ADDOPTS": ""}
+    env = child_env(PYTEST_ADDOPTS="")
     env.pop("CI", None)
     if ci:
         env["CI"] = "1"

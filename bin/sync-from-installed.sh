@@ -6,7 +6,12 @@
 # 等連續幾次同步都不需要人工修正，再考慮接進 hook 或排程。
 #
 # 把本機安裝版 skill 掉齊進 fstack，並把公司特定事實換成佔位符。
-# canonical 是 fstack；安裝版是實際被編輯的那份，所以檔案方向固定 installed → repo。
+# canonical 是 fstack，改動也從 repo 端開始（repo-first）—— 所以這個方向是**補救用**：
+# 有人直接改了安裝版，把那些改動撿回 repo。日常掉齊走反向的 sync-to-installed.sh。
+#
+# 這支帶 `rsync --delete`：repo 端新增的檔案會被刪掉、修改過的會被安裝版的舊內容蓋回去，
+# 而蓋回去之後兩邊又一致，parity 會在**舊內容上**轉綠 —— 合併的工作靜靜消失（#29）。
+# 所以動檔案之前先問方向，repo 較新就拒絕執行。
 #
 # 用法
 #   sync-from-installed.sh [SRC]        同步 SRC（預設安裝版）到 repo，然後跑 guard
@@ -20,12 +25,15 @@
 #   0  同步完成且 guard 乾淨 ／ --check 乾淨
 #   1  用法或環境錯誤（SRC 不存在、不像 skill 目錄、掃描目標不存在、設定檔未建立）
 #   2  guard 命中內部指涉 —— 不要 commit
+#   3  repo 比安裝版新 —— 拒絕同步，先跑 bin/sync-to-installed.sh 掉齊
 #
 # macOS 限定：`sed -i ''` 與 BSD `grep` 的旗標。
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-DST="$(cd "$HERE/.." && pwd)/skills/comms/generate-meeting-notes"
+REPO="$(cd "$HERE/.." && pwd)"
+SKILL_REL="skills/comms/generate-meeting-notes"
+DST="$REPO/$SKILL_REL"
 
 # ── 設定 ────────────────────────────────────────────────────────────────
 # fstack 是 public repo，而「內部指涉清單」本身就是一份同事名 ＋ 客戶名 ＋
@@ -88,6 +96,34 @@ SRC="${1:-$HOME/.agents/skills/generate-meeting-notes}"
 [[ -f $SRC/SKILL.md ]] || { echo "SRC 不像 generate-meeting-notes 安裝目錄：$SRC" >&2; exit 1; }
 need_conf "$SANITIZE" sanitize.example.sed
 need_conf "$PATTERNS" guard-patterns.example.txt
+
+# ── 方向閘門 ──────────────────────────────────────────────────────────────
+# 目的地還沒有 skill（parity 把這支複製進暫存假 repo 那種跑法）時沒有東西要保護，
+# 跳過。這同時擋掉遞迴：方向判斷自己會再叫一次這支腳本去產 sanitize 過的基準，
+# 那一次的目的地就是空的。
+if [[ -f $DST/SKILL.md ]]; then
+  PARITY="$DST/scripts/parity.py"
+  # 找不到就停，不要當成「沒有意見」放行 —— 一道靜默跳過的閘門等於沒有閘門。
+  [[ -f $PARITY ]] || { echo "找不到方向判斷：$PARITY" >&2; exit 1; }
+  DIRECTION="$(python3 "$PARITY" --direction "$SRC" "$REPO")"
+  # 白名單而不是黑名單：認得的兩個值才放行。parity.py 的常數改了字面值、或哪天多出
+  # 第四種方向時，這裡配不到就是**拒絕**，不是放行 —— 一個跨語言的字串比對遲早會對不
+  # 上，而對不上的那一次不能剛好是 rsync --delete 照跑。
+  case $DIRECTION in
+    "安裝版較新" | "一致") ;;
+    *)
+      {
+        echo "⛔ 拒絕同步（方向：${DIRECTION}）。"
+        echo "   這個方向帶 --delete：照跑會刪掉 repo 端新增的檔案、把修改過的蓋回舊內容，"
+        echo "   而蓋回去之後 parity 會在舊內容上轉綠，沒有任何東西會叫。"
+        echo "   先掉齊安裝版：bin/sync-to-installed.sh"
+        echo "   （若確定是安裝版比較新、要把它的改動撿回 repo：那幾個檔案手動複製過來。"
+        echo "     剛開的 worktree 裡 repo 端每個檔案的 mtime 都是 checkout 當下，這條會擋。）"
+      } >&2
+      exit 3
+      ;;
+  esac
+fi
 
 echo "⚠️  BETA：sanitize 是列舉式的，commit 前務必人眼看過 git diff"
 echo

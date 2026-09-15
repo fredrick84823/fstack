@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-from .conftest import _qid
+from .conftest import _qid, child_env
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "bin" / "sync-from-installed.sh"
@@ -99,13 +99,17 @@ def home(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 def run(script: Path, *args: str, home: Path) -> subprocess.CompletedProcess[str]:
-    """跑腳本。cwd 固定在 `/`，順帶釘住「目的地不從 cwd 推」。"""
+    """跑腳本。cwd 固定在 `/`，順帶釘住「目的地不從 cwd 推」。
+
+    環境走 `child_env`：這支腳本自己會再起一個 `python3 parity.py --direction`
+    問方向，那個孫行程一樣會繼承 `MUTANT_UNDER_TEST`（理由見 `conftest.child_env`）。
+    """
     return subprocess.run(
         [str(script), *args],
         capture_output=True,
         text=True,
         cwd="/",
-        env={**os.environ, "HOME": str(home)},
+        env=child_env(HOME=str(home)),
     )
 
 
@@ -398,3 +402,165 @@ def test_default_src_is_home_agents_skill_dir(sandbox: Path, home: Path):
     assert (sandbox / DEST_REL / "SKILL.md").read_text(
         encoding="utf-8"
     ) == "from default src\n"
+
+
+# --------------------------------------------------------------------------
+# 方向閘門 —— repo 比安裝版新時拒絕同步（exit 3）
+# --------------------------------------------------------------------------
+#
+# 一票一 worktree 之後 repo 端也會被編輯，而這支腳本是 `rsync --delete`：repo 端新增的
+# 檔案會被刪掉、修改過的會被安裝版的舊內容蓋回去，然後兩邊「一致」，parity 在舊內容上
+# 轉綠 —— 沒有任何東西會叫。所以拒絕的那一半要有「什麼都沒動」的斷言，放行的那一半
+# 要有對應的正向案例：一個永遠回 3 的實作在只有拒絕案例的情況下照樣全綠。
+
+OLDER = 1_000_000_000
+NEWER = 2_000_000_000
+PARITY = REPO / DEST_REL / "scripts" / "parity.py"
+
+
+def make_mirror(root: Path, **files: str) -> tuple[Path, Path]:
+    """一組內容與 mtime 都一致的 (SRC, 目的地) —— 方向判斷在這上面必須是「一致」。
+
+    `scripts/parity.py` 一起鋪進去：方向判斷自己就住在被同步的那個目錄裡，
+    假 repo 少了它，閘門只會回「找不到方向判斷」。
+    """
+    src = make_src(root, **files)
+    (src / "scripts").mkdir(exist_ok=True)
+    shutil.copy2(PARITY, src / "scripts" / PARITY.name)
+    dest = root / DEST_REL
+    shutil.copytree(src, dest)
+    return src, dest
+
+
+def touch(path: Path, when: int) -> None:
+    os.utime(path, (when, when))
+
+
+def test_a_mirrored_tree_still_syncs(sandbox: Path, home: Path):
+    """兩邊一致 → 閘門放行，行為與加閘門之前相同。
+
+    刪掉這條 → 閘門可以永遠命中（`exit 3`），日常那條唯一的用法從此不可用，
+    而下面每條「拒絕」的斷言都還是綠的。
+    """
+    src, _ = make_mirror(sandbox, **{"t.md": "same\n"})
+
+    assert run(sandbox / "bin" / SCRIPT.name, str(src), home=home).returncode == 0
+
+
+def test_an_installed_edit_newer_than_the_repo_still_syncs(sandbox: Path, home: Path):
+    """安裝版才是比較新的那邊 → 照常同步，內容覆蓋過去。
+
+    刪掉這條 → 閘門改成「只要有差異就擋」，安裝版的改動再也掉不回 repo。
+    """
+    src, dest = make_mirror(sandbox, **{"t.md": "舊的\n"})
+    (src / "t.md").write_text("安裝版改過\n", encoding="utf-8")
+    touch(src / "t.md", NEWER)
+    touch(dest / "t.md", OLDER)
+
+    result = run(sandbox / "bin" / SCRIPT.name, str(src), home=home)
+
+    assert result.returncode == 0
+    assert (dest / "t.md").read_text(encoding="utf-8") == "安裝版改過\n"
+
+
+def test_a_repo_only_file_makes_the_sync_refuse(sandbox: Path, home: Path):
+    """repo 端有安裝版沒有的檔案 → 退出碼 3。
+
+    刪掉這條 → `--delete` 把 repo 端新增的檔案刪掉，而刪完兩邊就一致了，
+    parity 轉綠，沒有任何東西會叫。
+    """
+    src, dest = make_mirror(sandbox, **{"t.md": "same\n"})
+    (dest / "NEW.md").write_text("repo 端新增\n", encoding="utf-8")
+
+    assert run(sandbox / "bin" / SCRIPT.name, str(src), home=home).returncode == 3
+
+
+def test_a_refused_sync_does_not_touch_the_destination(sandbox: Path, home: Path):
+    """退出碼 3 的情況下目的地一個檔案都不能動（內容與 mtime 都一樣）。
+
+    刪掉這條 → 腳本可以先 rsync 再檢查方向，回 3 的時候改動已經沒了；
+    退出碼看起來對，資料已經損失。
+    """
+    src, dest = make_mirror(sandbox, **{"t.md": "same\n"})
+    (dest / "NEW.md").write_text("repo 端新增\n", encoding="utf-8")
+    before = snapshot(dest)
+
+    run(sandbox / "bin" / SCRIPT.name, str(src), home=home)
+
+    assert snapshot(dest) == before
+
+
+def test_a_refused_sync_names_the_reverse_script(sandbox: Path, home: Path):
+    """拒絕時要在 stderr 指出掉齊指令，不然使用者只看到一個沒見過的退出碼。
+
+    刪掉這條 → 訊息變成「方向不對」而沒有下一步，使用者最順手的解法是
+    手動刪掉 repo 端的改動再跑一次 —— 正是這道閘門要擋的事。
+    """
+    src, dest = make_mirror(sandbox, **{"t.md": "same\n"})
+    (dest / "NEW.md").write_text("repo 端新增\n", encoding="utf-8")
+
+    result = run(sandbox / "bin" / SCRIPT.name, str(src), home=home)
+
+    assert "bin/sync-to-installed.sh" in result.stderr
+
+
+def test_a_repo_edit_newer_than_the_installed_copy_makes_the_sync_refuse(
+    sandbox: Path, home: Path
+):
+    """repo 端改過的既有檔案比安裝版新 → 退出碼 3。
+
+    刪掉這條 → 閘門只認得「新增檔案」，而 repo 端**修改**既有檔案才是一票一 worktree
+    的常態：改動被安裝版的舊內容蓋回去。
+    """
+    src, dest = make_mirror(sandbox, **{"t.md": "舊的\n"})
+    (dest / "t.md").write_text("repo 改過\n", encoding="utf-8")
+    touch(src / "t.md", OLDER)
+    touch(dest / "t.md", NEWER)
+
+    assert run(sandbox / "bin" / SCRIPT.name, str(src), home=home).returncode == 3
+
+
+def test_a_refused_sync_does_not_overwrite_the_repo_edit(sandbox: Path, home: Path):
+    """被拒絕的那次同步不可以把 repo 端的修改蓋回舊內容。
+
+    刪掉這條 → 覆蓋照樣發生，只是多印一行紅字；蓋掉之後兩邊一致，
+    parity 在舊內容上轉綠。
+    """
+    src, dest = make_mirror(sandbox, **{"t.md": "舊的\n"})
+    (dest / "t.md").write_text("repo 改過\n", encoding="utf-8")
+    touch(src / "t.md", OLDER)
+    touch(dest / "t.md", NEWER)
+
+    run(sandbox / "bin" / SCRIPT.name, str(src), home=home)
+
+    assert (dest / "t.md").read_text(encoding="utf-8") == "repo 改過\n"
+
+
+def test_a_missing_direction_judge_refuses_to_sync(sandbox: Path, home: Path):
+    """方向判斷本身不見了 → exit 1，不可以當成「沒有方向問題」放行。
+
+    這道閘門唯一的判斷依據住在被同步的那個目錄裡，而 `rsync --delete` 會把它一起蓋掉：
+    fail open 的話，第一次跑（或 repo 端剛好刪掉／改名 `parity.py`）就等於沒有閘門，
+    而症狀是**安靜的** —— 退出碼 0、看起來同步成功。
+    反面是 `test_a_mirrored_tree_still_syncs`：同一組 fixture，`parity.py` 在的時候
+    照常回 0，所以一個永遠回 1 的實作在這兩條之間過不去。
+    """
+    src, dest = make_mirror(sandbox, **{"t.md": "same\n"})
+    (dest / "scripts" / PARITY.name).unlink()
+
+    assert run(sandbox / "bin" / SCRIPT.name, str(src), home=home).returncode == 1
+
+
+def test_a_missing_direction_judge_does_not_touch_the_destination(sandbox: Path, home: Path):
+    """判斷不出方向的那次同步，目的地一個檔案都不能動。
+
+    刪掉這條 → 腳本可以先 rsync 再發現自己沒有判斷依據，回 1 的時候
+    repo 端的改動已經被蓋掉了；退出碼看起來是擋住了，資料已經損失。
+    """
+    src, dest = make_mirror(sandbox, **{"t.md": "same\n"})
+    (dest / "scripts" / PARITY.name).unlink()
+    before = snapshot(dest)
+
+    run(sandbox / "bin" / SCRIPT.name, str(src), home=home)
+
+    assert snapshot(dest) == before
