@@ -24,7 +24,7 @@ fi
 
 ts="$(date -Iseconds)"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-memory_script="$script_dir/memory.sh"
+state_script="$script_dir/signal_state.py"
 memory_dir="$(dirname "$queue")/memory"
 
 # Extract and append each <<GAP skill-name: description>> marker.
@@ -38,23 +38,17 @@ echo "$message" | grep -oE '<<GAP [^>]+>>' | while IFS= read -r marker; do
   [ "$skill" = "$content" ] && skill="unknown"
   [ -z "$gap" ] && continue
 
-  {
-    echo ""
-    echo "## [$ts] $skill"
-    echo ""
-    echo "- **type**: $type"
-    echo "- **source**: agent auto-detected"
-    echo "- **gap**: $gap"
-    echo "- **status**: pending"
-  } >> "$queue"
-
-  if [ -x "$memory_script" ]; then
-    "$memory_script" capture \
+  if [ -x "$state_script" ]; then
+    "$state_script" capture \
+      --queue "$queue" \
       --memory-dir "$memory_dir" \
       --timestamp "$ts" \
       --target-skill "$skill" \
       --type "$type" \
       --source "agent auto-detected" \
-      --gap "$gap" >/dev/null || true
+      --gap "$gap" >/dev/null
+  else
+    echo "Error: missing executable lifecycle helper: $state_script" >&2
+    exit 1
   fi
 done

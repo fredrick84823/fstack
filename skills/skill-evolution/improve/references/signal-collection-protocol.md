@@ -11,7 +11,7 @@
 ```markdown
 ## Signal Collection
 
-偵測到以下情況時，自動 append 到對應的 `signal-queue.md`，並透過 `improve/scripts/memory.sh capture` 寫入 Skill Evolution Memory：
+偵測到以下情況時，透過 `improve/scripts/signal_state.py capture` 原子寫入對應的 `signal-queue.md` 與 Skill Evolution Memory。不要分別手寫兩份資料：
 - <具體情況描述，例如：若有 ❌ 未覆蓋項目>
 - <另一個情況>
 
@@ -23,6 +23,8 @@
 - **source**: {觸發來源路徑或描述}
 - **gap**: {一句話描述缺口}
 - **status**: pending
+- **signal_id**: {shared deterministic id}
+- **memory_sync**: synced
 \`\`\`
 
 執行後輸出：`⚠️ 已新增 N 個 pending signal，建議執行 /improve`
@@ -58,7 +60,7 @@ Signal 應 append 到以下路徑（優先順序）：
 1. 若 cwd 有 `.agents/skills/improve/signal-queue.md` → 寫入此處
 2. 否則 → 寫入 `~/.agents/skills/improve/signal-queue.md`
 
-若兩者都不存在，建立 user-level 檔案後再 append。
+若兩者都不存在，建立 user-level 檔案後，再使用 `signal_state.py capture`；不要直接 append queue 後另寫 JSONL。
 
 ## Precision Guard
 
