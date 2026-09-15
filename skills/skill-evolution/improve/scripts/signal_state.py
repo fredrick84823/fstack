@@ -51,6 +51,37 @@ def normalize_gap(value: str) -> str:
     return " ".join(value.split())
 
 
+def find_duplicate(records: list[dict[str, Any]], target_skill: str, gap: str) -> dict[str, Any] | None:
+    """The newest raw signal sharing this (skill, gap), or None.
+
+    Newest, not first: a regression opens a second record under the same key, and the
+    third occurrence belongs to the live one, not to the resolved ancestor it descends
+    from. Records are appended in order, so the last match is the current one.
+    """
+    wanted = normalize_gap(gap)
+    found = None
+    for record in records:
+        if record.get("target_skill") == target_skill and normalize_gap(record.get("gap", "")) == wanted:
+            found = record
+    return found
+
+
+def bump_evidence(records: list[dict[str, Any]], signal_id: str) -> dict[str, Any] | None:
+    """One more witness for a signal already on file. Mutates the record in place."""
+    for record in records:
+        if record.get("signal_id") == signal_id:
+            record["evidence_count"] = int(record.get("evidence_count", 1)) + 1
+            return record
+    return None
+
+
+def queue_status_of(entries: list[dict[str, Any]], signal_id: str) -> str | None:
+    for entry in entries:
+        if entry["fields"].get("signal_id") == signal_id:
+            return entry["fields"].get("status", "pending")
+    return None
+
+
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
@@ -185,12 +216,14 @@ def raw_record_from_entry(entry: dict[str, Any], signal_id: str, *, recovered: b
         "gap_type": fields.get("gap_type", "unknown"),
         "expected_behavior": fields.get("expected_behavior", ""),
         "actual_behavior": fields.get("actual_behavior", ""),
+        "risk_class": fields.get("risk_class", ""),
         "evidence_count": 1,
         "status": "pending",
         "status_semantics": "captured_at_ingest",
         "type": fields.get("type", "S2"),
         "source": fields.get("source", "reconciliation recovery" if recovered else "unknown"),
         "gap": fields.get("gap", ""),
+        "evidence_quote": fields.get("evidence_quote", ""),
         "capture_recovered": recovered,
         "links": {"duplicates": [], "tested_by": [], "caused_false_positive": []},
     }
@@ -290,9 +323,47 @@ def command_capture(args: argparse.Namespace) -> None:
     signal_id = make_signal_id(args.timestamp, args.target_skill, args.gap)
     with lifecycle_lock(queue):
         text, lines, entries = queue_lines(queue)
+        raw_path = memory_dir / "signals.jsonl"
+        raw_records = read_jsonl(raw_path)
+        if args.duplicate_of:
+            # The validator recognised the same gap in different words and answered with
+            # an id. Exact text matching would never have joined these two, but once
+            # joined they are the same signal, so they take the same branch below —
+            # the regression rule is written once, not once per way of finding a repeat.
+            duplicate = next((r for r in raw_records if r.get("signal_id") == args.duplicate_of), None)
+            if duplicate is None:
+                raise StateError(f"unknown duplicate_of: {args.duplicate_of}")
+        else:
+            duplicate = find_duplicate(raw_records, args.target_skill, args.gap)
+        regression_of = ""
+        if duplicate is not None:
+            # A gap that recurs after it was fixed is news; one that recurs while it is
+            # still pending, deferred or rejected is the same gap saying itself twice.
+            # Folding a regression into the resolved record would bury the only evidence
+            # that the fix did not hold. An orphan raw record with no queue entry keeps
+            # the conservative side: absorb it rather than invent a second signal.
+            if queue_status_of(entries, duplicate["signal_id"]) == "resolved":
+                regression_of = duplicate["signal_id"]
+                # A repeat the validator matched by meaning is a reject carrying an id,
+                # and the schema blanks evidence on every reject. The regression is the
+                # same gap as the record it descends from, which still holds the user
+                # sentence that proved it — so it inherits rather than opening a signal
+                # nobody can trace back to anything.
+                for flag, field in (
+                    ("evidence_quote", "evidence_quote"),
+                    ("expected", "expected_behavior"),
+                    ("actual", "actual_behavior"),
+                    ("risk_class", "risk_class"),
+                ):
+                    if not getattr(args, flag):
+                        setattr(args, flag, duplicate.get(field, ""))
+            else:
+                bump_evidence(raw_records, duplicate["signal_id"])
+                atomic_write(raw_path, render_jsonl(raw_records))
+                print(duplicate["signal_id"])
+                return
         if any(entry["fields"].get("signal_id") == signal_id for entry in entries):
             raise StateError(f"duplicate queue signal_id: {signal_id}")
-        raw_records = read_jsonl(memory_dir / "signals.jsonl")
         if ensure_unique(raw_records, signal_id, "raw signal", allow_missing=True) is not None:
             raise StateError(f"orphan raw signal_id already exists: {signal_id}")
         graph = read_graph(memory_dir / "skill-graph.json")
@@ -306,7 +377,17 @@ def command_capture(args: argparse.Namespace) -> None:
             f"- **type**: {args.type}\n"
             f"- **source**: {args.source}\n"
             f"- **gap**: {args.gap}\n"
-            "- **status**: pending\n"
+            + "".join(
+                f"- **{name}**: {value}\n"
+                for name, value in (
+                    ("evidence_quote", args.evidence_quote),
+                    ("expected_behavior", args.expected),
+                    ("actual_behavior", args.actual),
+                    ("risk_class", args.risk_class),
+                )
+                if value
+            )
+            + "- **status**: pending\n"
             "- **memory_sync**: pending\n"
         )
         atomic_write(queue, text + block)
@@ -315,8 +396,10 @@ def command_capture(args: argparse.Namespace) -> None:
             _, _, entries = queue_lines(queue)
             entry = find_queue_entry(entries, signal_id)
             raw = raw_record_from_entry(entry, signal_id)
+            if regression_of:
+                raw["links"]["regression_of"] = regression_of
             raw_records.append(raw)
-            atomic_write(memory_dir / "signals.jsonl", render_jsonl(raw_records))
+            atomic_write(raw_path, render_jsonl(raw_records))
             graph["signals"].append(graph_record_from_raw(raw, "pending"))
             graph["updated_at"] = now_iso()
             atomic_write(memory_dir / "skill-graph.json", json.dumps(graph, ensure_ascii=False, indent=2) + "\n")
@@ -453,6 +536,11 @@ def build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--type", choices=["S1", "S2", "S3"], required=True)
     capture.add_argument("--source", required=True)
     capture.add_argument("--gap", required=True)
+    capture.add_argument("--evidence-quote", default="")
+    capture.add_argument("--expected", default="")
+    capture.add_argument("--actual", default="")
+    capture.add_argument("--risk-class", default="")
+    capture.add_argument("--duplicate-of", default="")
     capture.set_defaults(func=command_capture)
 
     adopt = subparsers.add_parser("adopt-legacy")
