@@ -14,7 +14,8 @@ disable-model-invocation: true
 - **source artifacts** —— 一個目錄裡的四個檔：`transcript.md`（本次會議的事實）、
   `extract.md`（議題／決策／行動／風險索引）、`meeting-context.md`（會議類型、與會者、
   custom prompt、active glossary terms、來源與日期）、`history-index.md`（同系列近三場的
-  heading 大綱與指標，日期嚴格早於本次；**是索引不是語料**，不含內容行）。
+  heading 大綱、**未結案項目**與指標，日期嚴格早於本次；**是索引不是語料**，
+  除未結案那幾條之外不含內容行）。
   所有 source 流程的產物都是這個，**不是正式稿**。目錄位置：`/tmp/meeting_sources/<meeting_key>_<YYYYMMDD>[_<meeting_instance>]`。
 - **接地** —— 正式稿的每個事實都指得回 `transcript.md`。`extract.md`、`meeting-context.md`、
   glossary、`history-index.md` 只提升可讀性與連續性，不能長出 transcript 沒講過的決策、
@@ -225,6 +226,12 @@ A 與 B 都收在這裡。main agent 讀：
 延伸自某一場、而大綱那行接不上時，才沿那一場的 `本機:` 路徑讀**那一場**的全文 ——
 預設不讀，整包讀進來就退回索引要解決的那個問題。`Doc:` 是給人開的，agent 開不了 URL。
 
+**索引裡的 `未結案` 要逐條走過，不是掃過。** 每一條都問一次「本次有沒有再提到」：
+有提到就寫進對應議題；**完全沒人提的，寫進 `## 前次未結案項目` 並標明本次未提**
+（版型見 `references/default-prompt.md` 第 4 節）。沒人提的那一條正是最容易消失的 ——
+它不會出現在本次逐字稿的任何一個字裡，沒有任何東西會提醒你它還懸著。
+**不得替它補進度或改狀態**：本次沒人提就是沒有新事實。
+
 輸出規則：
 - 完整繁體中文 Markdown
 - Speaker 標籤維持原格式（`Speaker 1`、`SPEAKER_00`、人名、平台標籤）。
@@ -232,6 +239,10 @@ A 與 B 都收在這裡。main agent 讀：
 - 正式稿只放會議內容。NotebookLM、`extract.md`、`history-index.md`、source artifact
   路徑、腳本步驟、驗證狀態、pipeline／debug 備註（含「我參考了歷史記錄」這類出處
   敘述）、agent 操作說明一律只出現在 agent 回報裡
+- **上一條擋的是「我怎麼做出這份記錄」，不是「本次沒討論的事」。** 兩件事寫在一起會被
+  讀成同一條，而唯一的受害者就是前次未結案項目 —— 它本次零發言，看起來最像「不該寫的
+  東西」。**前次未結案項目是會議內容，要寫**（`## 前次未結案項目`，標明來源場次與本次
+  未提）。不能寫的是「我讀了歷史索引」這種**出處敘述**，不是那件事本身
 
 ### Step 1：儲存 Markdown + 發佈
 

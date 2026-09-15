@@ -516,8 +516,10 @@ uv run scripts/history_index.py --meeting <meeting_key> --date <YYYYMMDD> \
   --output-dir /tmp/meeting_sources/<meeting_key>_<date>
 ```
 
-索引只含各場的 heading 大綱（層級上限 Heading 3）與指標：本機正式稿路徑，以及側檔裡
-記著的 Doc URL。沒有 URL 時該欄位缺席，不會寫 `None`。日期**嚴格早於** `--date`，
+索引只含各場的 heading 大綱（層級上限 Heading 3）、**未結案項目**與指標：本機正式稿
+路徑，以及側檔裡記著的 Doc URL。沒有 URL 時該欄位缺席，不會寫 `None`。
+未結案 = `#### 狀態` 底下非 `已確認` 的條目，加上 `## 行動項目` 表裡部署狀態非 `已上線`
+的列，一場最多列 `MAX_OPEN_ITEMS` 條、超出時明寫還有幾條（#36）。日期**嚴格早於** `--date`，
 所以 agent 不會讀到自己的產出。來源是 `create_gdoc_from_md.py` 寫下的本機歸檔。
 
 Output：

@@ -2,13 +2,21 @@
 """
 history_index.py - 同系列近 N 場的歷史索引。
 
-**這是索引不是語料。** 每場只給兩樣東西：
+**這是索引不是語料。** 每場只給三樣東西：
 
 1. heading 大綱（層級上限 `MAX_DEPTH`，預設到 Heading 3）—— 不含任何內容行
-2. 指標：本機正式稿路徑，以及側檔裡記著的 Doc URL
+2. **未結案項目**：`#### 狀態` 底下非 `已確認` 的條目，與 `## 行動項目` 表裡
+   部署狀態非 `已上線` 的列（見 `open_items`）
+3. 指標：本機正式稿路徑，以及側檔裡記著的 Doc URL
 
 設計意圖是「只有本次議題延伸自過去議題時才需要歷史」。agent 掃大綱判斷「這個以前
 談過」，再決定要不要沿指標去讀那一場的全文 —— 而不是把三場正式稿整包塞進 context。
+
+第 2 項是 #298 加的，而且是**刻意的鬆綁**：#11 的 eval 量到「上一場留下、本次沒人提
+的待辦」兩版都 0/3。根因是 heading 不帶狀態 —— 大綱裡只有議題標題，看不出它還懸著；
+而「不帶狀態」又讓 agent 沒有任何理由沿指標去讀全文，於是那條待辦在兩層都隱形。
+鬆綁的邊界是**只多抽未結案的那幾行**，不是把內容行整批放進來：已結案的項目一行都不進
+索引（`RESOLVED_STATUS` / `SHIPPED_DEPLOY`），長度由 `MAX_OPEN_ITEMS` 封頂。
 
 日期邊界是**嚴格小於**本次日期：索引含本次或之後的場次時，agent 會讀到自己的產出。
 
@@ -46,29 +54,61 @@ NOTE_PREFIX = "會議記錄"
 DEFAULT_SESSIONS = 3
 MAX_DEPTH = 3
 
+# 「這一項已經結案了」在正式稿裡的兩種寫法。**其餘每個值都算未結案** —— 白名單而不是
+# 黑名單：版型的狀態值域將來多一個（`已驗收` 之類），黑名單會靜靜地把它當成已結案而
+# 漏掉，白名單只會多帶一條進索引。多帶看得見，漏掉看不見。
+RESOLVED_STATUS = "已確認"   # `#### 狀態` 底下的 inline code 標記
+SHIPPED_DEPLOY = "已上線"    # `## 行動項目` 表最後一欄（部署狀態）
+
+STATUS_LAYER = "狀態"        # 要抽的那個 Heading 4 層名
+ACTION_HEADING = "行動項目"  # 要抽的那個 Heading 2 節名（用 `in` 比對，容得下編號前綴）
+ACTION_MIN_CELLS = 3         # 少於這個欄數的表不是行動項目表的形狀，不抽
+
+# 一場最多列幾條未結案。**索引長度的上限是驗收條件**（一場 40 行內），而未結案的條數
+# 是這裡唯一沒有天花板的東西：大綱的條數由 heading 決定、指標固定兩行。這個值是從那條
+# 上限回推的，不是隨手挑的：
+#
+#     40 − 19（語料裡最長的一場大綱）− 3（`## 標籤`／`本機:`／`Doc:`）
+#        − 1（未結案的標籤行）− 1（超出時的「還有幾條」）− 6（檔頭與空行）= 10
+#
+# 超出的不靜靜丟掉 —— `render` 會多寫一行說還有幾條，並指回全文。
+MAX_OPEN_ITEMS = 10
+
 _HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 _FENCE = re.compile(r"^\s*(```|~~~)")
 # 索引只要讀得懂的標題文字，不要行內標記。粗體與 inline code 的標記字元原樣留著會讓
 # 大綱多一堆 `**`，對「掃過去判斷以前談過沒有」沒有幫助。
 _INLINE_MARK = re.compile(r"\*\*|__|`")
+# `* `執行中` 排程重複觸發的修復（Speaker2，本週）` → (`執行中`, 說明)。
+# 版型規定狀態條目一律 inline code 標記開頭，所以認標記而不是認行首形狀。
+_STATUS_BULLET = re.compile(r"^\s*[*-]\s+`([^`]+)`\s+(\S.*?)\s*$")
+# Markdown 表格的分隔列（`| :--- | :--- |`）。它是「上面那列是表頭」的唯一訊號 ——
+# 認表頭的文字（`部署狀態`）會在欄名換句話時靜靜地把表頭當成一條未結案項目。
+_TABLE_SEP = re.compile(r"[\s:|-]+")
 
 # 索引檔開頭那幾句是**資料不是邏輯**，所以放在模組層而不是 render() 裡面。
 # 擺在函式裡的話 mutation 會把每一句都變異一次，而「這句話少了一個字」殺不掉也不該
 # 殺得掉 —— 要殺就得寫逐字釘死版面的測試，那正是棒④會刪掉的裝飾性測試。
 INDEX_HEADER = (
-    "**這是索引不是語料**：只有各場的 heading 大綱與指標，沒有內容行。\n"
-    "接地優先序低於 `transcript.md`：歷史不能長出本次會議沒講過的事實。"
+    "**這是索引不是語料**：各場只有 heading 大綱、未結案項目與指標，沒有其餘內容行。\n"
+    "`未結案` 那幾條還懸著。**逐條確認本次有沒有再提到**；完全沒人提的寫進正式稿的\n"
+    "「前次未結案項目」並標明本次未提。接地優先序低於 `transcript.md`。"
 )
 EMPTY_NOTICE = "（本機歸檔沒有早於 {before_date} 的同系列場次。）"
 
 
 class Session(NamedTuple):
-    """索引裡的一場。`doc_url` 是 None 表示側檔缺席或沒記 URL。"""
+    """索引裡的一場。`doc_url` 是 None 表示側檔缺席或沒記 URL。
+
+    `open_items` 給預設值不是為了方便 —— 是為了讓「這一場沒有任何未結案」與「呼叫端
+    忘了傳」在型別上就分不出來的那種 bug 不可能發生：兩者都是空的，而空的就是不 render。
+    """
 
     label: str
     note_path: Path
     doc_url: str | None
     outline: list[tuple[int, str]]
+    open_items: tuple[str, ...] = ()
 
 
 def outline(markdown: str) -> list[tuple[int, str]]:
@@ -99,6 +139,108 @@ def outline(markdown: str) -> list[tuple[int, str]]:
         if level <= MAX_DEPTH and text:
             found.append((level, text))
     return found
+
+
+def open_items(markdown: str) -> list[str]:
+    """一場裡**還沒結案**的項目，由上而下、原文順序。
+
+    兩個來源，因為兩種版型都真的存在於歸檔裡：
+
+    | 來源 | 判為未結案的條件 |
+    |---|---|
+    | `#### 狀態` 底下的條目 | inline code 標記**不是** `已確認` |
+    | `## 行動項目` 表的資料列 | 最後一欄（部署狀態）**不是** `已上線` |
+
+    只做第一個來源的話，2026-09-10 版型落地之前的每一份正式稿都抽不出東西 —— 那是歸檔
+    裡的多數。只做第二個來源的話，沒有行動項目表的短會議抽不出東西。
+
+    表格的資料列只認**分隔列之後**的：表頭那一列的最後一欄是欄名（`部署狀態`），不是
+    狀態值，照收會讓每張表都長出一條假的未結案項目。
+
+    回傳的是**全部**未結案項目，不截斷 —— 要列幾條是版面的事，由 `render` 決定
+    （`MAX_OPEN_ITEMS`）。抽取函式自己截斷的話，「這場只有三條」與「這場被切到剩三條」
+    在回傳值上一模一樣。
+
+    圍欄程式區塊照 `outline` 的規矩跳過：裡面的 `|` 表格與 `* ` 條目都不是正式稿的結構。
+
+    **已知邊界：正式稿的 `## 前次未結案項目` 那一節不是來源。** 一條待辦連續好幾場沒人提
+    的話，第二場之後它只出現在那一節裡，所以它撈得出來的期限就是索引的視窗
+    （`DEFAULT_SESSIONS`，預設 3 場）—— 視窗外就跟著滑掉。這是**刻意**的：把那一節也當
+    來源會讓「沒人提」自我延續下去，而索引本來只承諾近 N 場。要更長的記憶，要的是議題
+    關係圖（#14 已列 Out of Scope），不是在這裡多接一個來源。
+    """
+    items: list[str] = []
+    fence: str | None = None
+    layer: str | None = None
+    in_actions = False
+    after_table_header = False
+
+    for line in markdown.splitlines():
+        opener = _FENCE.match(line)
+        if fence is not None:
+            if opener and opener.group(1) == fence:
+                fence = None
+            continue
+        if opener:
+            fence = opener.group(1)
+            continue
+
+        heading = _HEADING.match(line)
+        if heading:
+            level = len(heading.group(1))
+            title = _INLINE_MARK.sub("", heading.group(2)).strip()
+            # 任何 heading 都會蓋掉 `layer`，所以「豁免漏到下一個議題」本來就不會發生。
+            # `level == 4` 真正擋的是**別的層級上叫「狀態」的標題**（`### 狀態` 之類）——
+            # 版型規定狀態層是 Heading 4，非 H4 的同名標題不當成它。代價是歸檔裡真有
+            # `### 狀態` 的話會一條都抽不到而且不出聲；版型固定，接受這個代價。
+            # `· 承 8/20 → 8/24` 這類後綴切掉（`議題因果鏈` 的形狀）。
+            layer = title.split(" · ")[0].strip() if level == 4 else None
+            if level <= 2:
+                in_actions = ACTION_HEADING in title
+            # ponytail: 這一行目前測不到，而且理由不是「很難湊」而是結構性的 ——
+            # 下面 `if not in_actions: continue` 擋在表格解析**之前**，所以
+            # `after_table_header` 只可能被行動項目節自己的表格設成 True，而節內
+            # 兩張表之間必有空行（空行那條路徑已經 reset 過了）。留著是因為那道 gate
+            # 一旦移到表格解析之後，這一行就是唯一擋著「表頭被抽成假待辦」的東西。
+            # 成本一行；要拿掉的話，連同 gate 的位置一起當成契約寫進測試再拿。
+            after_table_header = False
+            continue
+
+        if layer == STATUS_LAYER:
+            bullet = _STATUS_BULLET.match(line)
+            if bullet and bullet.group(1) != RESOLVED_STATUS:
+                text = _INLINE_MARK.sub("", bullet.group(2)).strip()
+                items.append(f"{bullet.group(1)} · {text}")
+            continue
+
+        if not in_actions:
+            continue
+
+        row = line.strip()
+        if not row.startswith("|"):
+            after_table_header = False
+            continue
+        if _TABLE_SEP.fullmatch(row):
+            after_table_header = True
+            continue
+        if not after_table_header:
+            continue
+
+        cells = [_INLINE_MARK.sub("", c).strip() for c in row.strip("|").split("|")]
+        state = cells[-1]
+        if len(cells) < ACTION_MIN_CELLS or not state or state == SHIPPED_DEPLOY:
+            continue
+        owner, description = cells[0], cells[1]
+        if description:
+            items.append(f"{state} · {description}（{owner}）" if owner else f"{state} · {description}")
+
+    # 同一件事常常同時寫在 `#### 狀態` 與行動項目表裡，但**措辭不同**，所以只去逐字重複的。
+    # 模糊比對會把兩條講不同面向的項目合成一條，而合掉哪一條沒有任何斷言看得見。
+    seen: list[str] = []
+    for item in items:
+        if item not in seen:
+            seen.append(item)
+    return seen
 
 
 def doc_url(sidecar_path: Path) -> str | None:
@@ -151,12 +293,37 @@ def read_session(note_path: Path, series_name: str) -> Session:
     # 前綴對不上就退回整個檔名（`series_name` 含 `/` 之類時，寫檔那步會把它清成 `-`，
     # 前綴就對不上了）。退化後的 label 仍然唯一且看得懂，所以不當成錯誤。
     label = note_path.stem.removeprefix(f"{NOTE_PREFIX}_{series_name}_")
+    # 讀一次就好 —— 兩支抽取函式吃同一份文字。分兩次讀的話，兩次之間檔案被改寫會讓
+    # 大綱與未結案來自不同版本的同一場，而那種不一致沒有任何斷言看得見。
+    text = note_path.read_text(encoding="utf-8")
     return Session(
         label=label,
         note_path=note_path,
         doc_url=doc_url(note_path.with_name(note_path.stem + SIDECAR_SUFFIX)),
-        outline=outline(note_path.read_text(encoding="utf-8")),
+        outline=outline(text),
+        open_items=tuple(open_items(text)),
     )
+
+
+OPEN_ITEMS_LABEL = "未結案（上一場留下的，逐條確認本次有沒有再提到）"
+MORE_ITEMS = "…另有 {count} 條未結案沒列出，需要完整清單就沿 `本機:` 讀全文"
+
+
+def _open_items_block(items: tuple[str, ...]) -> list[str]:
+    """未結案那一小塊的行。一條都沒有時回空 list —— **不留標籤**。
+
+    留一個空標籤的話，「這場全部結案了」與「抽取壞了」在索引上長得一模一樣，而這正是
+    這一塊要解決的那種隱形。超過 `MAX_OPEN_ITEMS` 時多寫一行說還有幾條並指回全文：
+    靜靜截斷會讓 agent 以為它看到的是全部。
+    """
+    if not items:
+        return []
+    shown = list(items[:MAX_OPEN_ITEMS])
+    lines = [f"- {OPEN_ITEMS_LABEL}"] + [f"  - {item}" for item in shown]
+    rest = len(items) - len(shown)
+    if rest:
+        lines.append(f"  - {MORE_ITEMS.format(count=rest)}")
+    return lines
 
 
 def render(series_name: str, before_date: str, sessions: list[Session]) -> str:
@@ -172,6 +339,7 @@ def render(series_name: str, before_date: str, sessions: list[Session]) -> str:
         if session.doc_url:
             lines.append(f"Doc: {session.doc_url}")
         lines += [f"{'  ' * (level - 1)}- {text}" for level, text in session.outline]
+        lines += _open_items_block(session.open_items)
     return "\n".join(lines) + "\n"
 
 

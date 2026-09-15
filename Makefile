@@ -28,6 +28,10 @@ MUT_LOG := .mutmut-run.log
 # 它們現在零測試，掛進去是 147 顆 🫥 no-tests —— 跟掛 NotebookLM／Drive I/O 同一種
 # 稀釋，只是走函式那道門。有測試了再加回來（glossary 那支是 #8；is_non_content_extract
 # 與 inject_attendees 目前沒有對應的票）。
+# history_index.py 的 `open_items` 與 `_open_items_block` 是 #36 加的：前者是「哪些項目
+# 還沒結案」的判準（`!=` 被變異成 `==` 就會變成只收已結案的），後者是 40 行上限那道切法
+# （`[:MAX_OPEN_ITEMS]` 的邊界、以及「剩幾條」那行在不在）。兩處都是靜靜地少東西的形狀，
+# 正是該被 mutant 問一次的。
 # history_index.py 的那六支碰檔案系統，但碰的是測試自己建的 tmp 目錄 —— 不是
 # NotebookLM／Drive 那種要憑證與網路的 I/O，所以照樣掛。日期邊界（`>=` vs `>`）正是
 # 最該被 mutant 問一次的地方。
@@ -39,6 +43,8 @@ MUT_LOG := .mutmut-run.log
 # 「備份有沒有先於寫入」正是最該被 mutant 問一次的地方。`main` 是 CLI 進入點，不掛。
 PURE := \
 	outline \
+	open_items \
+	_open_items_block \
 	render \
 	doc_url \
 	find_notes \

@@ -123,6 +123,28 @@ def test_documented_constants():
     assert hi.MAX_DEPTH == 3
 
 
+PROMPT_MD = (
+    Path(__file__).resolve().parents[2]
+    / "skills/comms/generate-meeting-notes/references/default-prompt.md"
+)
+
+
+def test_the_open_item_markers_are_the_ones_the_default_prompt_writes():
+    """抽未結案的四個字面值，在預設 prompt 裡真的是那樣寫的。
+
+    這一組跨兩個檔：prompt 規定正式稿長什麼樣，索引照那個形狀去抽。改了其中一邊
+    （把 `已上線` 改成 `已部署`、把 `#### 狀態` 改名）另一邊不會報錯 —— 索引照樣產、
+    大綱照樣在，只是未結案那一塊從此永遠是空的（改狀態詞）或永遠滿手（改結案詞）。
+    這是本票唯一跨檔而且兩邊都不會出聲的接縫。
+    """
+    prompt = PROMPT_MD.read_text(encoding="utf-8")
+
+    assert f"`{hi.RESOLVED_STATUS}`" in prompt, "已結案的狀態標記是 inline code"
+    assert hi.SHIPPED_DEPLOY in prompt, "行動項目表最後一欄的已結案值"
+    assert f"#### {hi.STATUS_LAYER}" in prompt
+    assert f"## {hi.ACTION_HEADING}" in prompt
+
+
 # --------------------------------------------------------------------------- outline
 
 
@@ -196,6 +218,424 @@ def test_outline_strips_inline_markup_from_the_title(line, level, expected):
     第一格就是真實語料的 H1 形狀（Google Doc 匯出一律把 H1 包粗體）。
     """
     assert hi.outline(line + "\n") == [(level, expected)]
+
+
+# --------------------------------------------------------------------------- open_items
+
+
+STATUS_ONLY = """# 會議記錄
+
+## 討論過程
+
+### 議題一：排程重複觸發
+
+#### 狀態
+
+* `執行中` 排程重複觸發的修復（Speaker2，本週）
+* `已確認` 重試上限改成 3 次
+"""
+
+
+def test_open_items_takes_the_status_bullets_that_are_not_resolved():
+    """驗收條件 1／2 的狀態那一半：`已確認` 以外的狀態標記代表還懸著。
+
+    回傳的形狀是「標記 · 項目」—— 標記必須跟著出來，`前次未結案項目` 那一節要寫
+    「當時狀態」。只回項目文字的話 render 出來每一條都長得一樣重要，agent 分不出
+    `待驗證`（快結案了）與 `待啟動`（還沒開始）。
+    """
+    assert hi.open_items(STATUS_ONLY) == ["執行中 · 排程重複觸發的修復（Speaker2，本週）"]
+
+
+ACTION_ONLY = """# 會議記錄
+
+## 行動項目
+
+| 負責人 | 待辦 | 交付物 | 部署狀態 |
+| :---- | :---- | :---- | :---- |
+| Speaker3 | 補上監控告警 | PR ＋ 截圖 | 待驗證 |
+| Speaker1 | 權限設定收斂 | PR | 已上線 |
+"""
+
+
+def test_open_items_takes_the_action_rows_that_are_not_shipped():
+    """驗收條件 1／2 的行動項目那一半：最後一欄不是 `已上線` 就還沒結案。
+
+    形狀是「部署狀態 · 待辦（負責人）」。負責人要在裡面 —— 上一場留下的待辦寫進正式稿時
+    得標明是誰的，少了它那一節只剩一串無主的句子，沒人認領就沒人追。
+    """
+    assert hi.open_items(ACTION_ONLY) == ["待驗證 · 補上監控告警（Speaker3）"]
+
+
+HEADER_ONLY_TABLE = """# 會議記錄
+
+## 行動項目
+
+| 負責人 | 待辦 | 交付物 | 部署狀態 |
+| :---- | :---- | :---- | :---- |
+"""
+
+
+def test_open_items_never_turns_the_table_header_into_an_item():
+    """只有表頭與分隔列、一列資料都沒有的行動項目表 —— 抽出來要是空的。
+
+    表頭的四格長得跟資料列一模一樣（`部署狀態` 不等於 `已上線`），判成資料列的話每一場
+    索引都會固定多出一條「部署狀態 · 待辦（負責人）」的假待辦，而它每場都在、看起來像
+    版型的一部分，沒有人會懷疑它。這份語料把表頭孤立出來，資料列一條都沒有 ——
+    漏掉表頭判斷時，這裡是唯一會露餡的地方。
+    """
+    assert hi.open_items(HEADER_ONLY_TABLE) == []
+    # heading 與表格中間沒有空行時，那行空行擋不到表頭 —— 只剩 heading 分支的
+    # `after_table_header = False` 在擋。Google Doc 匯出的空行不是我們控制的。
+    assert hi.open_items(HEADER_ONLY_TABLE.replace("## 行動項目\n\n|", "## 行動項目\n|")) == []
+
+
+ALL_CLOSED = """# 會議記錄
+
+## 討論過程
+
+### 議題一：排程重複觸發
+
+#### 狀態
+
+* `已確認` 重試上限改成 3 次
+
+## 行動項目
+
+| 負責人 | 待辦 | 交付物 | 部署狀態 |
+| :---- | :---- | :---- | :---- |
+| Speaker1 | 權限設定收斂 | PR | 已上線 |
+"""
+
+
+def test_open_items_is_empty_when_every_item_is_closed():
+    """驗收條件 2：整場都結案了就回空 list。
+
+    這是 render「一條都沒有時整塊不出現」的前提，也是判斷反過來（`!=` 寫成 `==`）時
+    唯一會回**滿手**項目的入口 —— 反過來之後索引每一場都在提醒一堆早就上線的事，
+    agent 會照著寫進「前次未結案項目」，等於每週把已完成的工作重報一次。
+    """
+    assert hi.open_items(ALL_CLOSED) == []
+
+
+ORDERED = """# 會議記錄
+
+## 討論過程
+
+### 議題一：排程重複觸發
+
+#### 狀態
+
+* `執行中` 第一條：排程修復
+
+### 議題二：報表欄位
+
+#### 狀態
+
+* `待驗證` 第二條：欄位校準
+
+## 行動項目
+
+| 負責人 | 待辦 | 交付物 | 部署狀態 |
+| :---- | :---- | :---- | :---- |
+| Speaker3 | 第三條：補上監控告警 | PR | 待啟動 |
+| Speaker4 | 第四條：權限盤點 | 清單 | 待處理 |
+"""
+
+
+def test_open_items_keeps_the_original_top_to_bottom_order():
+    """兩個來源混在一起時，順序是原文由上而下 —— 不是先狀態後表格、也不是反過來。
+
+    render 只列前 `MAX_OPEN_ITEMS` 條，所以順序決定的是**哪幾條被截掉**。順序一亂，
+    被截掉的就不是「最後才提到的那幾條」而是隨機的幾條，而索引看起來完全正常。
+    """
+    assert hi.open_items(ORDERED) == [
+        "執行中 · 第一條：排程修復",
+        "待驗證 · 第二條：欄位校準",
+        "待啟動 · 第三條：補上監控告警（Speaker3）",
+        "待處理 · 第四條：權限盤點（Speaker4）",
+    ]
+
+
+STATUS_LAYER_SCOPE = """# 會議記錄
+
+## 討論過程
+
+### 議題一：排程重複觸發
+
+#### 狀態
+
+* `執行中` 議題一還沒收掉的修復
+
+### 議題二：報表欄位
+
+#### 討論
+
+* `執行中` 這行長得像狀態條目，但它在討論欄
+
+## 風險與未決項目
+
+* `執行中` 這行在另一個 H2 底下
+"""
+
+
+def test_open_items_stops_reading_status_bullets_when_the_issue_ends():
+    """`#### 狀態` 的豁免只在該議題內有效 —— 下一個 `###`／`##` 之後就不再是狀態層。
+
+    狀態標記在議題區塊裡到處都是（`#### 討論` 的要點也常以 inline code 開頭）。
+    豁免外溢的症狀是每場抽出幾十條「未結案」，其中大半是討論要點與風險條目，
+    render 截到 10 條之後真正的待辦被擠出去 —— 索引看起來更豐富，實際上更沒用。
+    兩種邊界各驗一次：同層的下一個 `###`、以及上層的下一個 `##`。
+    """
+    assert hi.open_items(STATUS_LAYER_SCOPE) == ["執行中 · 議題一還沒收掉的修復"]
+
+
+FENCED_OPEN_ITEMS = """# 會議記錄
+
+## 討論過程
+
+### 議題一：貼了一段腳本
+
+#### 狀態
+
+```sql
+* `執行中` 這是程式碼不是狀態條目
+```
+
+* `待驗證` 真的狀態條目
+
+## 行動項目
+
+| 負責人 | 待辦 | 交付物 | 部署狀態 |
+| :---- | :---- | :---- | :---- |
+| Speaker1 | 真的待辦 | PR | 待處理 |
+
+~~~
+| 假負責人 | 假待辦 | 假交付物 | 待處理 |
+~~~
+"""
+
+
+def test_open_items_ignores_fenced_code_blocks():
+    """圍欄裡的 `* ` 條目與 `|` 表格是貼上來的程式碼，不是正式稿結構。
+
+    `outline` 已經擋過圍欄裡的 heading，這裡擋的是另外兩種形狀。假表格故意擺在真表格
+    **之後** —— 擺前面的話「還沒遇到分隔列」就順手擋掉了，測不到圍欄本身。
+    這條刪掉 → 正式稿一貼 shell 或 SQL，索引就長出假的未結案項目，而它們讀起來像
+    真的待辦（`| 假負責人 | …`），agent 會追一個不存在的人。
+    """
+    assert hi.open_items(FENCED_OPEN_ITEMS) == [
+        "待驗證 · 真的狀態條目",
+        "待處理 · 真的待辦（Speaker1）",
+    ]
+
+
+DUPLICATES = """# 會議記錄
+
+## 行動項目
+
+| 負責人 | 待辦 | 交付物 | 部署狀態 |
+| :---- | :---- | :---- | :---- |
+| Speaker1 | 補上監控告警 | PR | 待處理 |
+| Speaker1 | 補上監控告警 | PR | 待處理 |
+| Speaker1 | 補上監控告警門檻 | PR | 待處理 |
+"""
+
+
+def test_open_items_drops_verbatim_duplicates_but_keeps_reworded_ones():
+    """逐字相同的只留第一次；措辭不同的兩條都留 —— 合併與否不由相似度決定。
+
+    正式稿裡同一條待辦被寫進狀態欄又寫進行動項目表是常態，去重是為了不讓 10 條的額度
+    被同一件事吃掉兩格。但門檻一放寬成「看起來像同一件事」，`補上監控告警` 與
+    `補上監控告警門檻` 會被併掉一條 —— 少掉的那條沒有任何痕跡，索引看起來完整。
+    """
+    assert hi.open_items(DUPLICATES) == [
+        "待處理 · 補上監控告警（Speaker1）",
+        "待處理 · 補上監控告警門檻（Speaker1）",
+    ]
+
+
+LOOKALIKE_ACTION_HEADINGS = {
+    "h3": """# 會議記錄
+
+## 討論過程
+
+### 議題三：行動項目檢討機制
+
+**TL;DR** — 一句話。
+
+#### 討論
+
+| 方案 | 優點 | 缺點 |
+| :---- | :---- | :---- |
+| 甲案 | 快 | 貴 |
+""",
+    "h4": """# 會議記錄
+
+## 討論過程
+
+### 議題三：流程檢討
+
+#### 行動項目盤點
+
+| 方案 | 優點 | 缺點 |
+| :---- | :---- | :---- |
+| 甲案 | 快 | 貴 |
+""",
+}
+
+
+@pytest.mark.parametrize("level", ["h3", "h4"], ids=["h3", "h4"])
+def test_a_deeper_heading_named_after_the_action_section_does_not_open_it(level):
+    """只有 `#` 與 `##` 這兩個層級會改變「在不在行動項目節裡」—— 守的是**層級**不是字串。
+
+    `## 行動項目` 是一整節，不是議題內的一層。標題比對刻意用 `in` 而不是 `==`，因為
+    Google Doc 匯出會帶編號前綴（`prof-20260812.md` 的就是 `## 3\\. 行動項目`，
+    見 `test_every_corpus_session_yields_the_open_items_it_should`）—— 而 `in` 是子字串
+    比對，`議題三：行動項目檢討機制`、`行動項目盤點` 全都配得上。所以**層級那道是唯一
+    擋得住誤判的東西**，寬鬆一層就沒有第二道守衛了。
+
+    寬鬆之後的症狀：議題內任何一張對照表（方案比較、錯誤型態、時序）的資料列都會被抽成
+    未結案，長成 `缺點 · 優點（方案）` 這種垃圾。它們佔掉 10 條額度、排在真正的待辦前面
+    （原文順序在前），而索引看起來只是「這場未結案特別多」。
+    """
+    assert hi.open_items(LOOKALIKE_ACTION_HEADINGS[level]) == []
+
+
+def _action_note(*rows: str) -> str:
+    return (
+        "# 會議記錄\n\n## 行動項目\n\n"
+        "| 負責人 | 待辦 | 交付物 | 部署狀態 |\n| :---- | :---- | :---- | :---- |\n"
+        + "".join(row + "\n" for row in rows)
+    )
+
+
+@pytest.mark.parametrize(
+    "row,expected",
+    [
+        ("| Speaker1 | 補上監控告警 | PR | 待處理 |", ["待處理 · 補上監控告警（Speaker1）"]),
+        ("|  | 補上監控告警 | PR | 待處理 |", ["待處理 · 補上監控告警"]),
+        ("| Speaker1 | 補上監控告警 | 待處理 |", ["待處理 · 補上監控告警（Speaker1）"]),
+        ("| Speaker1 | 補上監控告警 |", []),
+        ("| Speaker1 | 補上監控告警 | PR |  |", []),
+        ("| Speaker1 |  | PR | 待處理 |", []),
+    ],
+    ids=_qid,
+)
+def test_open_items_action_row_shapes(row, expected):
+    """一列行動項目要長成什麼樣才抽得出東西，以及抽出來的括號怎麼放。
+
+    每一格都是真實歸檔裡出現過的形狀：負責人欄空白（全隊的事）、只有三欄（早期版型沒有
+    交付物欄）、部署狀態欄空白（表格填到一半）、待辦欄空白（多出來的空列）。
+    寬鬆一格的代價都是同一種：索引長出 `· （Speaker1）` 這種沒有內容的條目，
+    佔掉 10 條額度裡的一格，而它看起來只是「排版怪」不像 bug。
+    """
+    assert hi.open_items(_action_note(row)) == expected
+
+
+BOLD_IN_STATUS = """# 會議記錄
+
+## 討論過程
+
+### 議題一：排程重複觸發
+
+#### 狀態
+
+* `執行中` **排程重複觸發**的修復（Speaker2，`本週`）
+"""
+
+
+def test_open_items_strips_inline_markup_from_the_status_bullet_text():
+    """狀態條目的說明文字帶 `**` 與反引號 —— 回傳的字串裡不留標記，與 `outline` 同一套規矩。
+
+    正式稿的狀態條目幾乎都帶粗體（預設 prompt 的 few-shot 自己就這樣寫）。標記留著的話
+    索引裡是 `執行中 · **排程重複觸發**的修復`，而未結案那一塊會被再抄進正式稿的
+    「前次未結案項目」—— 那一節的格式規定狀態用**純文字**，抄進去就是把議題區塊的
+    行內樣式帶到不該有樣式的地方。
+    """
+    got = hi.open_items(BOLD_IN_STATUS)
+
+    assert got == ["執行中 · 排程重複觸發的修復（Speaker2，本週）"]
+    assert "**" not in got[0] and "`" not in got[0]
+
+
+BOLD_IN_ACTION_CELLS = """# 會議記錄
+
+## 行動項目
+
+| 負責人 | 待辦 | 交付物 | 部署狀態 |
+| :---- | :---- | :---- | :---- |
+| **Speaker1** | 驗證 **12 項** 數據洞察準確性 | `PR` ＋ 截圖 | 執行中 |
+"""
+
+
+def test_open_items_strips_inline_markup_from_the_action_cells():
+    """行動項目表的儲存格帶 `**` 與反引號 —— 三個欄位都要脫乾淨。
+
+    粗體在儲存格裡是**常態**不是邊角：預設 prompt 的 few-shot 行動項目表就寫著
+    `驗證 **12 項** 數據洞察準確性`（含具體數字的待辦一律標粗體）。只脫狀態條目那一路
+    不脫這一路，症狀是索引裡兩種來源長得不一樣 —— 一半乾淨一半帶標記，而兩者都讀得懂，
+    沒有人會說那是 bug。
+    """
+    got = hi.open_items(BOLD_IN_ACTION_CELLS)
+
+    assert got == ["執行中 · 驗證 12 項 數據洞察準確性（Speaker1）"]
+    assert "**" not in got[0] and "`" not in got[0]
+
+
+SUFFIXED_LAYER = """# 會議記錄
+
+## 討論過程
+
+### 議題一：排程重複觸發
+
+#### 議題因果鏈 · 承 8/20 → 8/24
+
+* `執行中` 這行在因果鏈那層，不是狀態
+
+#### 狀態
+
+* `執行中` 真的狀態條目
+"""
+
+
+def test_open_items_does_not_mistake_a_suffixed_layer_for_the_status_layer():
+    """`#### X · 承 8/20 → 8/24` 這種帶後綴的 Heading 4 是別的層，它底下的條目不算狀態。
+
+    議題因果鏈那層的條目也常以 inline code 開頭（時序、錯誤型態的對照），而它就排在
+    `#### 狀態` 前面 —— 認錯層的症狀不是抽不到，是**多抽**，而且多抽的那幾條讀起來
+    跟真的狀態條目一模一樣。所以這裡兩件事一起釘：假的那層不進來、緊接著的真狀態層
+    照抽（層切換要真的換過去，不是一路關著）。
+    """
+    assert hi.open_items(SUFFIXED_LAYER) == ["執行中 · 真的狀態條目"]
+
+
+@pytest.mark.parametrize(
+    "heading,expected",
+    [
+        ("#### 狀態", ["執行中 · 說明文字"]),
+        ("#### **狀態**", ["執行中 · 說明文字"]),
+        ("#### `狀態`", ["執行中 · 說明文字"]),
+        ("#### 狀態 · 承 8/24", ["執行中 · 說明文字"]),
+        ("#### 狀態 更新", []),
+        ("#### 議題因果鏈 · 承 8/20 → 8/24", []),
+        ("### 狀態", []),
+    ],
+    ids=_qid,
+)
+def test_open_items_recognises_the_status_layer_by_its_name_alone(heading, expected):
+    """層名比對的是「行內標記脫掉、` · ` 後綴切掉」之後的那個字串，而且要**整個**相等。
+
+    前四格是同一個層的四種寫法：Google Doc 匯出會把 heading 包粗體、有人寫成 inline
+    code、有人在後面接 `· 承 8/24`。任何一種認不出來，那一場的狀態條目就整層消失 ——
+    而索引照樣產、大綱照樣齊，只是未結案少了一半。
+
+    後兩格是另一側：後綴要用 ` · ` 接才算後綴。切法退化成「切在第一個空白」時
+    `#### 狀態 更新` 會被當成狀態層，而那是版型裡不存在的層名 —— 放行等於把
+    「以 inline code 開頭的條目」這個形狀擴大到任何一個名字以「狀態」開頭的 Heading 4。
+    """
+    text = f"# 會議記錄\n\n## 討論過程\n\n### 議題一\n\n{heading}\n\n* `執行中` 說明文字\n"
+
+    assert hi.open_items(text) == expected
 
 
 # --------------------------------------------------------------------------- doc_url
@@ -663,11 +1103,105 @@ def test_render_drops_only_the_missing_url_not_the_whole_session(tmp_path: Path)
     assert "議題十一：客戶己廣告帳號資料只到 8/8（成員丙）" in text
 
 
-def test_render_contains_no_content_line_from_the_notes(tmp_path: Path):
-    """驗收條件 2，端到端那一版：整份索引裡不得出現正式稿的任何內容行。
+# ------------------------------------------------------------------ render 的未結案那一塊
 
-    `outline` 那條測的是抽取，這條測的是 `render` 沒有在大綱之外偷渡摘要、TL;DR
-    或第一段內文 —— 那正是「索引膨脹成語料」的起手式。
+
+def _session_from_text(tmp_path: Path, text: str, date: str = "20260831"):
+    return hi.read_session(_put(tmp_path, date, text), SERIES)
+
+
+def _open_note(count: int) -> str:
+    """一份只有行動項目表的正式稿，剛好 `count` 條未結案（每條都不重複）。"""
+    rows = [f"| Speaker{i} | 待辦第 {i} 項 | PR | 待處理 |" for i in range(1, count + 1)]
+    return _action_note(*rows)
+
+
+def _open_block(rendered: str) -> list[str]:
+    """索引裡那一小塊未結案：標籤行之後連續的項目行（去掉 `  - `）。標籤不在就回 `[]`。"""
+    lines = rendered.split("\n")
+    label = f"- {hi.OPEN_ITEMS_LABEL}"
+    if label not in lines:
+        return []
+    out = []
+    for line in lines[lines.index(label) + 1 :]:
+        if not line.startswith("  - "):
+            break
+        out.append(line[len("  - ") :])
+    return out
+
+
+def test_render_omits_the_whole_block_when_the_session_has_no_open_items(tmp_path: Path):
+    """一條未結案都沒有時整塊不出現 —— 連標籤都不留。
+
+    留一個空標籤的代價不是版面：流程 C 讀到 `未結案（…逐條確認本次有沒有再提到）` 這行
+    卻沒有任何項目，會照著版型在正式稿裡開一節「前次未結案項目」然後自己填內容，
+    而預設 prompt 明寫「一條都沒有時整節不輸出」。空標籤是在邀請它幻覺。
+    """
+    session = _session_from_text(tmp_path, ALL_CLOSED)
+
+    text = hi.render(SERIES, "20260907", [session])
+
+    assert session.open_items == ()
+    assert hi.OPEN_ITEMS_LABEL not in text
+    assert "- 會議記錄" in text, "大綱照樣要在 —— 不出現的只有未結案那一塊"
+
+
+def test_render_lists_at_most_the_cap_and_says_how_many_it_left_out(tmp_path: Path):
+    """超過 `MAX_OPEN_ITEMS` 時最後多一行說還有幾條 —— **不准靜靜截斷**。
+
+    靜靜截斷的症狀是「索引長度永遠守得住」而那正是它看起來沒事的原因：agent 把索引當成
+    完整清單，第 11 條之後的未結案項目對它而言不存在，而這張票要修的就是「上一場留下的
+    東西靜靜消失」。數字也要對得上 —— 寫死成別的數（或印成總數）等於換一種方式說謊。
+    """
+    dropped = 3
+    session = _session_from_text(tmp_path, _open_note(hi.MAX_OPEN_ITEMS + dropped))
+
+    listed = _open_block(hi.render(SERIES, "20260907", [session]))
+
+    assert len(session.open_items) == hi.MAX_OPEN_ITEMS + dropped, "`open_items` 本身不截斷"
+    assert listed[:-1] == list(session.open_items[: hi.MAX_OPEN_ITEMS])
+    assert listed[-1] == hi.MORE_ITEMS.format(count=dropped)
+
+
+def test_render_adds_no_extra_line_at_exactly_the_cap(tmp_path: Path):
+    """剛好 `MAX_OPEN_ITEMS` 條時不多那一行 —— 邊界的另一側。
+
+    這條刪掉 → 切法從 `>` 退化成 `>=` 時，每一場剛好 10 條的都會多一行
+    「…另有 0 條未結案沒列出」，而它讀起來像正常版型的一部分。
+    """
+    session = _session_from_text(tmp_path, _open_note(hi.MAX_OPEN_ITEMS))
+
+    listed = _open_block(hi.render(SERIES, "20260907", [session]))
+
+    assert listed == list(session.open_items)
+
+
+def test_render_indents_the_label_at_zero_and_the_items_at_two(tmp_path: Path):
+    """標籤行縮排 0、項目行縮排 2 —— 與大綱同一套縮排慣例。
+
+    未結案那一塊是**該場底下**的東西，不是與該場並列的另一場。標籤縮排跑掉時它會讀起來
+    像大綱的一個子節點（往右）或像下一場的開頭（往左）；項目縮排跑到 4 格以上，
+    Markdown 會把整塊 render 成程式區塊。兩種都不會讓任何流程報錯。
+    """
+    session = _session_from_text(tmp_path, _open_note(2))
+    lines = hi.render(SERIES, "20260907", [session]).split("\n")
+
+    labels = [line for line in lines if hi.OPEN_ITEMS_LABEL in line]
+    assert labels == [f"- {hi.OPEN_ITEMS_LABEL}"]
+    for item in session.open_items:
+        assert [line for line in lines if item in line] == [f"  - {item}"]
+
+
+def test_render_contains_no_content_line_from_the_notes(tmp_path: Path):
+    """原稿的行不得**逐字**洩進索引。
+
+    本來寫的是「整份索引裡不得出現正式稿的任何內容行」，#36 之後那句話不再成立：
+    未結案那幾條就是內容。它們進得來是因為改寫過（`* ` 與反引號去掉、表格管線換成
+    `·` 與括號），所以逐字比對照樣是空的 —— 這條守的一直都是「逐字」那一半，
+    只是以前兩者剛好重合。開多大的口由
+    `test_render_lets_only_the_open_items_through_as_content` 守，這條守的是
+    `render` 沒有在大綱與未結案之外整段抄原文：摘要、TL;DR、第一段內文 ——
+    那正是「索引膨脹成語料」的起手式。
     """
     text = (CORPUS / "data-20260824.md").read_text(encoding="utf-8")
     session = _session(tmp_path, "data-20260824.md", "20260824")
@@ -676,6 +1210,33 @@ def test_render_contains_no_content_line_from_the_notes(tmp_path: Path):
 
     leaked = [line for line in _content_lines(text) if line in rendered]
     assert leaked == []
+
+
+
+
+
+def test_render_lets_only_the_open_items_through_as_content(tmp_path: Path):
+    """索引裡的內容**只有**未結案那一類 —— 每一條清單行不是 heading 就是未結案項目。
+
+    上一條守「原稿的行不得逐字洩進索引」，而未結案那幾條是改寫過的（去掉 `* `、反引號、
+    表格管線），所以逐字比對永遠看不到它們 —— 換句話說這張票刻意開的那道口，上一條
+    量不到寬窄。這條補上另一半：口開多大。它掃的是「索引裡每一條清單行的來源」，
+    `outline` 與 `open_items` 以外的任何內容（TL;DR、討論要點、風險列）進來就紅。
+    """
+    session = _session(tmp_path, "data-20260824.md", "20260824")
+
+    rendered = hi.render(SERIES, "20260907", [session])
+
+    assert session.open_items, "這份語料要真的有未結案項目，否則這條在量空氣"
+    allowed = {t for _, t in session.outline} | set(session.open_items)
+    allowed.add(hi.OPEN_ITEMS_LABEL)
+    allowed.add(hi.MORE_ITEMS.format(count=len(session.open_items) - hi.MAX_OPEN_ITEMS))
+    stray = [
+        line.strip()[len("- ") :]
+        for line in rendered.split("\n")
+        if OUTLINE_LINE.fullmatch(line) and line.strip()[len("- ") :] not in allowed
+    ]
+    assert stray == []
 
 
 # --------------------------------------------------------------------------- 真實語料
@@ -708,14 +1269,79 @@ def test_data_20260831_every_issue_heading_survives_and_no_template_layer_does()
     assert max(lvl for lvl, _ in got) == 3
 
 
-def test_data_20260831_compresses_a_two_hundred_line_note_into_thirty(tmp_path: Path):
-    """驗收條件 5：一場 200 行級的正式稿壓到 30 行內。"""
+def test_data_20260831_compresses_a_two_hundred_line_note_into_forty(tmp_path: Path):
+    """驗收條件 5：一場 200 行級的正式稿壓到 40 行內。
+
+    預算從 30 變 40 不是因為這條紅了，是因為 #36 刻意讓索引多帶一類東西：每一場的
+    heading 大綱之後多接未結案清單（最多 `MAX_OPEN_ITEMS` 條 ＋ 一行「還有幾條」）。
+    #14 原本的決定是「索引只給 heading 大綱與指標」，#11 的 eval 量出那樣 agent 看不出
+    哪一條還懸著（題目② 0/3），所以鬆綁 —— 鬆綁的邊界就是這個數字：多的是十幾行，
+    不是把全文塞進來（這一份原稿 224 行）。
+
+    40 在六份語料上是**有限度**的預算，不是隨手寫的上限：PM 會議 9/02 那一場剛好頂到
+    40（見 `test_every_corpus_session_index_fits_in_forty_lines`），所以把上限拿掉、
+    或讓未結案那塊多留幾條，都會有語料變紅。
+    """
     source = (CORPUS / "data-20260831.md").read_text(encoding="utf-8")
     assert len(source.split("\n")) > 200, "樣本本身必須是 200 行級的，否則這條在量空氣"
 
     rendered = hi.render(SERIES, "20260907", [_session(tmp_path, "data-20260831.md", "20260831")])
 
-    assert len(rendered.rstrip("\n").split("\n")) <= 30
+    assert len(rendered.rstrip("\n").split("\n")) <= 40
+
+
+
+
+
+@pytest.mark.parametrize(
+    "fixture,count",
+    [
+        ("data-20260821.md", 11),
+        ("data-20260824.md", 14),
+        ("data-20260831.md", 12),
+        ("pm-20260902.md", 19),
+        ("prof-20260812.md", 7),
+        ("rd-20260730.md", 12),
+    ],
+    ids=_qid,
+)
+def test_every_corpus_session_yields_the_open_items_it_should(fixture, count):
+    """六份真實語料各自抽得到幾條未結案 —— 條數寫死，少一條就紅。
+
+    40 行那條預算是**單向上限**：未結案整批歸零它照樣綠。所以「抽不到」這個方向在真實
+    語料上原本沒有任何守衛，而抽不到正是這張票最貴的失敗（索引還在、大綱還在、長度更
+    漂亮，只是那條懸著的待辦又消失了一次 —— 跟 #11 eval 量到 0/3 的病徵一模一樣）。
+
+    `prof-20260812.md` 那格是真正在守的那一格：它的行動項目標題是 `## 3\\. 行動項目`
+    （Google Doc 匯出的編號前綴），而它 7 條未結案**全部**來自那張表。heading 比對從
+    「包含」收緊成「相等」時只有它會歸零，其餘五格的標題剛好是光禿禿的 `## 行動項目`，
+    完全看不出差別。編號前綴在四種會議裡是常態不是特例（教授會議整份都是 `1\\.` 起跳）。
+    """
+    got = hi.open_items((CORPUS / fixture).read_text(encoding="utf-8"))
+
+    assert len(got) == count
+
+
+@pytest.mark.parametrize(
+    "fixture",
+    ["data-20260821.md", "data-20260824.md", "data-20260831.md",
+     "pm-20260902.md", "prof-20260812.md", "rd-20260730.md"],
+    ids=_qid,
+)
+def test_every_corpus_session_index_fits_in_forty_lines(tmp_path: Path, fixture):
+    """驗收條件 5，六份語料各驗一次：任何一場的索引都在 40 行內。
+
+    上一條只量 Data 內會 8/31（35 行），離上限還有 5 行 —— 拿它當預算的守衛太鬆。
+    真正頂到 40 的是 PM 會議 9/02：17 條 heading ＋ 19 條未結案（截到 10 ＋ 那行
+    「還有幾條」）＝ 剛好 40。**這個預算現在零餘裕**：未結案那塊每多留一條、
+    `INDEX_HEADER` 每多一行，PM 這一格就紅。那正是它該有的靈敏度 —— 索引的體積是
+    這次鬆綁唯一的代價，代價一漲就要有人看見。
+    """
+    session = _session(tmp_path, fixture, "20260831")
+
+    rendered = hi.render(SERIES, "20260907", [session])
+
+    assert len(rendered.rstrip("\n").split("\n")) <= 40
 
 
 def test_three_data_sessions_fit_in_one_hundred_lines(tmp_path: Path):
