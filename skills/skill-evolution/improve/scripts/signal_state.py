@@ -216,6 +216,7 @@ def raw_record_from_entry(entry: dict[str, Any], signal_id: str, *, recovered: b
         "gap_type": fields.get("gap_type", "unknown"),
         "expected_behavior": fields.get("expected_behavior", ""),
         "actual_behavior": fields.get("actual_behavior", ""),
+        "risk_class": fields.get("risk_class", ""),
         "evidence_count": 1,
         "status": "pending",
         "status_semantics": "captured_at_ingest",
@@ -324,7 +325,16 @@ def command_capture(args: argparse.Namespace) -> None:
         text, lines, entries = queue_lines(queue)
         raw_path = memory_dir / "signals.jsonl"
         raw_records = read_jsonl(raw_path)
-        duplicate = find_duplicate(raw_records, args.target_skill, args.gap)
+        if args.duplicate_of:
+            # The validator recognised the same gap in different words and answered with
+            # an id. Exact text matching would never have joined these two, but once
+            # joined they are the same signal, so they take the same branch below —
+            # the regression rule is written once, not once per way of finding a repeat.
+            duplicate = next((r for r in raw_records if r.get("signal_id") == args.duplicate_of), None)
+            if duplicate is None:
+                raise StateError(f"unknown duplicate_of: {args.duplicate_of}")
+        else:
+            duplicate = find_duplicate(raw_records, args.target_skill, args.gap)
         regression_of = ""
         if duplicate is not None:
             # A gap that recurs after it was fixed is news; one that recurs while it is
@@ -334,6 +344,19 @@ def command_capture(args: argparse.Namespace) -> None:
             # the conservative side: absorb it rather than invent a second signal.
             if queue_status_of(entries, duplicate["signal_id"]) == "resolved":
                 regression_of = duplicate["signal_id"]
+                # A repeat the validator matched by meaning is a reject carrying an id,
+                # and the schema blanks evidence on every reject. The regression is the
+                # same gap as the record it descends from, which still holds the user
+                # sentence that proved it — so it inherits rather than opening a signal
+                # nobody can trace back to anything.
+                for flag, field in (
+                    ("evidence_quote", "evidence_quote"),
+                    ("expected", "expected_behavior"),
+                    ("actual", "actual_behavior"),
+                    ("risk_class", "risk_class"),
+                ):
+                    if not getattr(args, flag):
+                        setattr(args, flag, duplicate.get(field, ""))
             else:
                 bump_evidence(raw_records, duplicate["signal_id"])
                 atomic_write(raw_path, render_jsonl(raw_records))
@@ -354,7 +377,16 @@ def command_capture(args: argparse.Namespace) -> None:
             f"- **type**: {args.type}\n"
             f"- **source**: {args.source}\n"
             f"- **gap**: {args.gap}\n"
-            + (f"- **evidence_quote**: {args.evidence_quote}\n" if args.evidence_quote else "")
+            + "".join(
+                f"- **{name}**: {value}\n"
+                for name, value in (
+                    ("evidence_quote", args.evidence_quote),
+                    ("expected_behavior", args.expected),
+                    ("actual_behavior", args.actual),
+                    ("risk_class", args.risk_class),
+                )
+                if value
+            )
             + "- **status**: pending\n"
             "- **memory_sync**: pending\n"
         )
@@ -379,24 +411,6 @@ def command_capture(args: argparse.Namespace) -> None:
             atomic_write(queue, "".join(failed_lines))
             raise
     print(signal_id)
-
-
-def command_witness(args: argparse.Namespace) -> None:
-    """Record one more sighting of a signal named outright, not matched by text.
-
-    Exact text matching only ever catches a gap phrased the same way twice; the validator
-    is what recognises the same gap said differently, and it answers with an id. Either
-    way the count is bumped here, so signals.jsonl keeps a single writer.
-    """
-    queue = Path(args.queue).expanduser().resolve()
-    memory_dir = Path(args.memory_dir).expanduser().resolve()
-    with lifecycle_lock(queue):
-        raw_path = memory_dir / "signals.jsonl"
-        raw_records = read_jsonl(raw_path)
-        if bump_evidence(raw_records, args.signal_id) is None:
-            raise StateError(f"unknown signal_id: {args.signal_id}")
-        atomic_write(raw_path, render_jsonl(raw_records))
-    print(args.signal_id)
 
 
 def command_adopt_legacy(args: argparse.Namespace) -> None:
@@ -523,13 +537,11 @@ def build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--source", required=True)
     capture.add_argument("--gap", required=True)
     capture.add_argument("--evidence-quote", default="")
+    capture.add_argument("--expected", default="")
+    capture.add_argument("--actual", default="")
+    capture.add_argument("--risk-class", default="")
+    capture.add_argument("--duplicate-of", default="")
     capture.set_defaults(func=command_capture)
-
-    witness = subparsers.add_parser("witness")
-    witness.add_argument("--queue", required=True)
-    witness.add_argument("--memory-dir", required=True)
-    witness.add_argument("--signal-id", required=True)
-    witness.set_defaults(func=command_witness)
 
     adopt = subparsers.add_parser("adopt-legacy")
     adopt.add_argument("--queue", required=True)

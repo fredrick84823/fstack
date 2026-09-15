@@ -269,11 +269,18 @@ Wires the `improve` skill's signal capture into session lifecycle:
 - **SessionStart** → 不注入 pending 清單。`scripts/check-signal-queue.sh` 保留但刻意未接線，
   不要接回；原因見 [#40](https://github.com/fredrick84823/fstack/issues/40)（每輪自報造成的
   訊號雜訊，偵測要改成 out-of-band、每 session 一次）。
-- **SessionEnd** → 讀 transcript，對本 session 實際呼叫過的 skill 跑一次 precision-first
-  分類器（`scripts/session_classifier.py`）。沒有 skill 呼叫就不呼叫模型；自動化 session
-  （`claude -p`、subagent、`IMPROVE_CLASSIFIER_DISABLE=1`）一律跳過；每 session 上限
-  `IMPROVE_MAX_SIGNALS` 筆（預設 3）。這是 #40 要的反轉：偵測離開 agent 自己的 context。
-- **Stop** → captures `<<GAP skill: desc>>` markers and skill candidates automatically
+- **SessionEnd**（主路徑）→ 讀 transcript，把每一句使用者訊息配上「說這句話時正在跑的
+  skill」，丟給 precision-first 驗證器（`scripts/session_classifier.py` → `validate-gap.sh`）。
+  沒有 skill 呼叫就不呼叫模型；自動化 session（`claude -p`、subagent、
+  `IMPROVE_CLASSIFIER_DISABLE=1`）一律跳過。這是 #40 要的反轉：偵測離開 agent 自己的 context。
+- **Stop** → 只留給**顯式**的 `<<GAP skill: desc>>`，也就是 `session-ender`（說「收工」）
+  這類由人發動的路徑，以及 skill candidate 捕獲。agent 不再被要求自己 emit `<<GAP>>`，
+  所以這條路平常是空的；保留是因為顯式回報仍然要有地方去。
+
+**每 session 上限 `IMPROVE_MAX_SIGNALS`（預設 3）。** 算的是**驗證器呼叫次數**，不是只算
+捕獲到的筆數 —— 每次呼叫是一次 `claude -p`（[#43](https://github.com/fredrick84823/fstack/issues/43)
+量到約 **$0.04**），所以 N=3 同時也是每 session 約 **$0.12** 的成本上限。只算捕獲的話，
+一個用了十個 skill 的 session 可以燒到 $0.40 才碰到任何上限。額度從**最近**的訊息往回花。
 
 兩條路徑共用同一個 capture：`signal_state.py capture` 以 (target_skill, 正規化後的 gap)
 去重，重複的只把既有 signal 的 `evidence_count` 加一，不在 queue 開第二筆。兩個例外：
@@ -321,10 +328,11 @@ reject. The judgement rules live in one place only — the prompt file above —
 measured by `evals/run_validator_eval.py` against 14 fixtures drawn from the real queue
 (see [`evals/VALIDATOR-RESULTS.md`](skills/skill-evolution/improve/evals/VALIDATOR-RESULTS.md)).
 
-The session hook that calls the classifier is not wired up yet
-([#44](https://github.com/fredrick84823/fstack/issues/44)). Until it lands, signals only
-arrive through the explicit path: say 收工 at the end of a session and the `session-ender`
-agent reviews it with you. Run `/improve` to process whatever is pending.
+The session hook that calls the classifier is the SessionEnd hook above
+([#44](https://github.com/fredrick84823/fstack/issues/44)); it runs by itself at the end
+of every interactive session. The explicit path still works alongside it: say 收工 and the
+`session-ender` agent reviews the session with you. Run `/improve` to process whatever is
+pending.
 
 ## License
 

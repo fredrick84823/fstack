@@ -13,7 +13,8 @@ Three things keep the cost near zero for the sessions that have nothing to say:
 - A session that called no Skill exits before the model is ever invoked.
 - An unattended session (`claude -p`, subagent, anything but a human at a terminal)
   exits at the gate — otherwise the classifier would grade its own runs.
-- At most `--max-signals` findings per session, so one bad session cannot flood the queue.
+- At most `--max-signals` validator calls per session (N=3 ≈ $0.12), so neither the queue
+  nor the bill can run away on one session.
 - A gap already on file for that skill comes back as one more witness, not a second queue
   entry — including when it is worded differently, which the validator decides by
   answering `duplicate_of` against the KNOWN_SIGNALS it is shown.
@@ -35,6 +36,9 @@ import sys
 from typing import Any, Iterable
 
 
+# Caps validator calls, not just captures. Each call is one `claude -p`; #43 measured
+# ~$0.04 each, so N=3 is also the ~$0.12 per-session ceiling. Capping captures alone
+# would leave a ten-skill session free to spend $0.40 before hitting any limit.
 DEFAULT_MAX_SIGNALS = 3
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 # A user turn Claude Code generated on the user's behalf is not the user talking.
@@ -165,6 +169,39 @@ def build_excerpt(skills: list[str], messages: list[str], *, limit: int = 8000) 
     return header + body[-limit:]
 
 
+def candidates(rows: Iterable[dict[str, Any]]) -> list[tuple[str, str]]:
+    """`(skill, user message)` pairs — one proposed gap each, in transcript order.
+
+    validate-gap.sh validates *a* claim; it does not go looking for one. Measured against
+    the real validator (2026-09-15, haiku-4.5, 3 runs each): handing it a probe sentence
+    in the `gap` slot and asking it to find the gap itself accepted **0/3** on a
+    transcript that plainly contained one — it judged the probe, twice as `uncertain` and
+    once as `placeholder`. Handing it every user turn joined together rejected as
+    `misroute`, because a blob spanning two skills belongs to neither. Handing it one
+    user sentence accepted **3/3**. So the candidate is one sentence.
+
+    The skill paired with it is whichever Skill call most recently preceded it — the one
+    that was running when the user said this. That is transcript order, not a guess about
+    what the sentence means; the validator still re-checks attribution and rejects
+    `misroute` when the pairing is wrong.
+    """
+    pairs: list[tuple[str, str]] = []
+    current: str | None = None
+    for row in rows:
+        if row.get("isSidechain"):
+            continue
+        if row.get("type") == "assistant":
+            for block in content_blocks(row):
+                if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "Skill":
+                    skill = (block.get("input") or {}).get("skill")
+                    if skill:
+                        current = skill
+        elif current:
+            for message in user_messages([row]):
+                pairs.append((current, message))
+    return pairs
+
+
 def known_signals(memory_sh: Path, memory_dir: Path, skill: str, *, limit: int = 20) -> list[dict[str, str]]:
     """The most recent signals already on file for this skill, newest last.
 
@@ -191,54 +228,44 @@ def known_signals(memory_sh: Path, memory_dir: Path, skill: str, *, limit: int =
     ]
 
 
-def with_known_signals(excerpt: str, signals: list[dict[str, str]]) -> str:
-    """Append the KNOWN_SIGNALS section the validator answers `duplicate_of` from.
+def render_known_signals(signals: list[dict[str, str]]) -> str:
+    """`<signal_id>\t<gap>` per line — validate-gap.sh's fourth positional argument."""
+    return "\n".join(f"{item['signal_id']}\t{normalize(item['gap'])}" for item in signals)
 
-    It rides inside the excerpt because validate-gap.sh belongs to #43 and takes three
-    positional arguments today. When that script grows a slot of its own this moves into
-    it; the section marker is already the one the prompt looks for.
-    """
-    if not signals:
-        return excerpt
-    lines = "\n".join(f"{item['signal_id']}: {item['gap']}" for item in signals)
-    return f"{excerpt}\n\n===KNOWN_SIGNALS===\n{lines}\n"
+
+def normalize(value: str) -> str:
+    return " ".join(value.split())
 
 
 # --- validator -------------------------------------------------------------------
 
 
-def run_validator(validator: Path, skill: str, excerpt: str, env: dict[str, str]) -> dict[str, Any] | None:
-    """Call #43's precision-first validator for one skill and parse its JSON verdict.
+def run_validator(
+    validator: Path, skill: str, candidate: str, excerpt: str, known: str, env: dict[str, str],
+) -> dict[str, Any] | None:
+    """Ask #43's validator about one candidate sentence, or None if it did not answer.
 
-    Contract (#43): {verdict, target_skill, gap, evidence_quote, risk_class, duplicate_of}.
-    Anything that is not parseable JSON with an `accept` verdict is dropped —
-    precision-first means the silent path is the default one. A verdict naming a
-    `duplicate_of` is exempt from needing its own gap text and quote: it is pointing at a
-    signal that already carries both.
+    Positional contract: `<target_skill> <gap> [excerpt] [known_signals]`.
+
+    The script is fail-closed: non-zero exit with nothing on stdout when `claude` or
+    `jq` is missing. That distinction matters — a caller that reads silence as "reject"
+    is fine, one that reads it as "accept" would accept everything the day auth expires.
     """
     try:
         completed = subprocess.run(
-            [str(validator), skill, "", excerpt],
-            text=True,
-            capture_output=True,
-            env=env,
-            timeout=120,
+            [str(validator), skill, candidate, excerpt, known],
+            text=True, capture_output=True, env=env, timeout=180,
         )
     except (OSError, subprocess.SubprocessError):
         return None
-    match = re.search(r"\{.*\}", completed.stdout, re.DOTALL)
-    if not match:
+    if completed.returncode != 0:
+        print(f"validate-gap: {completed.stderr.strip()[:200]}", file=sys.stderr)
         return None
     try:
-        verdict = json.loads(match.group(0))
+        verdict = json.loads(completed.stdout)
     except json.JSONDecodeError:
         return None
-    if not isinstance(verdict, dict) or verdict.get("verdict") != "accept":
-        return None
-    if not verdict.get("duplicate_of") and not (verdict.get("gap") and verdict.get("evidence_quote")):
-        return None
-    verdict.setdefault("target_skill", skill)
-    return verdict
+    return verdict if isinstance(verdict, dict) else None
 
 
 # --- capture ---------------------------------------------------------------------
@@ -253,31 +280,19 @@ def resolve_queue(cwd: Path, env: dict[str, str]) -> Path:
     return home / "improve/signal-queue.md"
 
 
-def witness(state_script: Path, queue: Path, signal_id: str) -> str | None:
-    """Count one more sighting of the signal the validator says this repeats."""
-    completed = subprocess.run(
-        [
-            sys.executable, str(state_script), "witness",
-            "--queue", str(queue),
-            "--memory-dir", str(queue.parent / "memory"),
-            "--signal-id", signal_id,
-        ],
-        text=True, capture_output=True,
-    )
-    if completed.returncode != 0:
-        print(completed.stderr.strip(), file=sys.stderr)
-        return None
-    return completed.stdout.strip()
-
-
 def capture(state_script: Path, queue: Path, verdict: dict[str, Any], timestamp: str) -> str | None:
-    """Hand the finding to the lifecycle state machine, which owns the lock and the dedup."""
+    """Hand the finding to the lifecycle state machine, which owns the lock and the dedup.
+
+    `type` is always S2. `risk_class` is #43's taxonomy of *why a candidate was judged
+    the way it was* (`valid_gap`, `misroute`, `one_shot_pref`, …); the queue's `type` is
+    S1/S2/S3 severity. They are different questions, so the verdict's answer to one is
+    stored as itself rather than bent into the other.
+
+    `--duplicate-of` routes a repeat the validator recognised by meaning into the same
+    branch as one matched by text, so the regression rule lives in exactly one place.
+    """
     queue.parent.mkdir(parents=True, exist_ok=True)
     queue.touch(exist_ok=True)
-    # #43 owns what `risk_class` means; only its S-tier spelling maps onto the queue's
-    # own type field, and anything else stays the default rather than inventing a tier.
-    risk_class = str(verdict.get("risk_class") or "")
-    signal_type = risk_class if risk_class in {"S1", "S2", "S3"} else "S2"
     completed = subprocess.run(
         [
             sys.executable, str(state_script), "capture",
@@ -285,10 +300,14 @@ def capture(state_script: Path, queue: Path, verdict: dict[str, Any], timestamp:
             "--memory-dir", str(queue.parent / "memory"),
             "--timestamp", timestamp,
             "--target-skill", str(verdict["target_skill"]),
-            "--type", signal_type,
+            "--type", "S2",
             "--source", "session classifier",
             "--gap", str(verdict["gap"]),
-            "--evidence-quote", str(verdict["evidence_quote"]),
+            "--evidence-quote", str(verdict.get("evidence_quote") or ""),
+            "--expected", str(verdict.get("expected") or ""),
+            "--actual", str(verdict.get("actual") or ""),
+            "--risk-class", str(verdict.get("risk_class") or ""),
+            "--duplicate-of", str(verdict.get("duplicate_of") or ""),
         ],
         text=True,
         capture_output=True,
@@ -308,13 +327,13 @@ def classify(payload: dict[str, Any], args: argparse.Namespace, env: dict[str, s
 
     reason = skip_reason(env, rows)
     if reason:
-        return {"skipped": reason, "skills": [], "captured": [], "deduped": []}
+        return {"skipped": reason, "skills": [], "calls": 0, "captured": [], "deduped": []}
 
     skills = skills_used(rows)
     if not skills:
         # The cheap exit that makes this affordable: no Skill ran, so there is nothing to
         # attribute a gap to, and the model is never called.
-        return {"skipped": "no skill invoked", "skills": [], "captured": [], "deduped": []}
+        return {"skipped": "no skill invoked", "skills": [], "calls": 0, "captured": [], "deduped": []}
 
     messages = user_messages(rows)
     excerpt = build_excerpt(skills, messages)
@@ -326,31 +345,46 @@ def classify(payload: dict[str, Any], args: argparse.Namespace, env: dict[str, s
 
     state_script = scripts / "signal_state.py"
     memory_dir = queue.parent / "memory"
+    # Most recent last: a correction late in a session is the one still worth acting on,
+    # and the budget is spent from that end.
+    queued = candidates(rows)[-args.max_signals:]
     captured: list[dict[str, Any]] = []
     deduped: list[dict[str, Any]] = []
-    for skill in skills:
-        # Only new signals are budgeted. A repeat adds nothing to the queue, so counting
-        # it against the cap would spend the budget on findings nobody has to read.
-        if len(captured) >= args.max_signals:
-            break
+    for skill, candidate in queued:
         prior = known_signals(scripts / "memory.sh", memory_dir, skill)
-        verdict = run_validator(validator, skill, with_known_signals(excerpt, prior), child_env)
+        verdict = run_validator(
+            validator, skill, candidate, excerpt, render_known_signals(prior), child_env,
+        )
         if verdict is None:
             continue
         duplicate_of = str(verdict.get("duplicate_of") or "")
-        if duplicate_of:
-            if witness(state_script, queue, duplicate_of):
-                deduped.append({"signal_id": duplicate_of, "target_skill": verdict["target_skill"]})
+        # A duplicate arrives as a *reject* carrying an id — the schema forbids an accept
+        # from pointing at an existing signal. So the id is read before the verdict is,
+        # otherwise every semantic duplicate is dropped on the floor instead of counted.
+        if not duplicate_of and verdict.get("verdict") != "accept":
             continue
         signal_id = capture(state_script, queue, verdict, args.timestamp)
-        if signal_id:
-            captured.append({"signal_id": signal_id, "target_skill": verdict["target_skill"]})
-    return {"skipped": None, "skills": skills, "captured": captured, "deduped": deduped}
+        if not signal_id:
+            continue
+        entry = {"signal_id": signal_id, "target_skill": verdict["target_skill"],
+                 "risk_class": verdict.get("risk_class")}
+        # capture echoes back the id it actually touched: the existing signal when the
+        # repeat was absorbed, a fresh one when the gap came back after being resolved.
+        if duplicate_of and signal_id == duplicate_of:
+            deduped.append(entry)
+        else:
+            captured.append(entry)
+    return {"skipped": None, "skills": skills, "calls": len(queued),
+            "captured": captured, "deduped": deduped}
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--max-signals", type=int, default=int(os.environ.get("IMPROVE_MAX_SIGNALS", DEFAULT_MAX_SIGNALS)))
+    parser.add_argument(
+        "--max-signals", type=int,
+        default=int(os.environ.get("IMPROVE_MAX_SIGNALS", DEFAULT_MAX_SIGNALS)),
+        help="validator calls per session, which also bounds signals captured (default 3)",
+    )
     parser.add_argument("--model", default=os.environ.get("IMPROVE_VALIDATE_MODEL", DEFAULT_MODEL))
     parser.add_argument("--timestamp", default="")
     args = parser.parse_args(argv)
