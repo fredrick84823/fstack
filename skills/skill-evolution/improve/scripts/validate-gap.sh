@@ -36,7 +36,7 @@
 # only wires them up; do not restate a rule here.
 #
 # ── Model ────────────────────────────────────────────────────────────────────
-#   $IMPROVE_VALIDATOR_MODEL, default claude-haiku-4-5-20251001.
+#   $IMPROVE_VALIDATOR_MODEL, default claude-sonnet-5.
 #
 # ── Failure is closed ────────────────────────────────────────────────────────
 # Exit 0 with one JSON object, or exit non-zero having printed nothing. The old
@@ -55,7 +55,7 @@ excerpt="${3:-}"
 known_signals="${4:-}"
 [ -n "$skill" ] && [ -n "$gap" ] || usage
 
-model="${IMPROVE_VALIDATOR_MODEL:-claude-haiku-4-5-20251001}"
+model="${IMPROVE_VALIDATOR_MODEL:-claude-sonnet-5}"
 
 command -v claude >/dev/null 2>&1 || die "claude CLI not found"
 command -v jq >/dev/null 2>&1 || die "jq not found"

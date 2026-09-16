@@ -312,7 +312,7 @@ a classifier reads the transcript          <- not the agent reporting on itself
       v
 skills/skill-evolution/improve/scripts/validate-gap.sh
   rules:  references/validate-gap-prompt.md   (precision-first: uncertain -> reject)
-  model:  $IMPROVE_VALIDATOR_MODEL            (default claude-haiku-4-5-20251001)
+  model:  $IMPROVE_VALIDATOR_MODEL            (default claude-sonnet-5)          
       |
       v
 {"verdict": "accept"|"reject", "target_skill", "gap", "duplicate_of",

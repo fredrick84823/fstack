@@ -227,7 +227,7 @@ def test_readme_no_longer_asks_for_a_global_claude_md_rule() -> None:
 
 def test_default_model_is_named_in_both_script_and_readme() -> None:
     # 預設模型改了只改一邊的話，README 會教人設一個跟實際預設不同的值。
-    default = "claude-haiku-4-5-20251001"
+    default = "claude-sonnet-5"
     assert f"IMPROVE_VALIDATOR_MODEL:-{default}" in VALIDATOR_SH.read_text(encoding="utf-8")
     assert default in README.read_text(encoding="utf-8")
 

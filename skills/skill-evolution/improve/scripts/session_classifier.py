@@ -40,7 +40,7 @@ from typing import Any, Iterable
 # ~$0.04 each, so N=3 is also the ~$0.12 per-session ceiling. Capping captures alone
 # would leave a ten-skill session free to spend $0.40 before hitting any limit.
 DEFAULT_MAX_SIGNALS = 3
-DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+DEFAULT_MODEL = "claude-sonnet-5"
 # A user turn Claude Code generated on the user's behalf is not the user talking.
 WRAPPED_USER_TEXT = re.compile(
     r"<(local-command-stdout|local-command-caveat|command-name|command-message|command-args"
@@ -341,7 +341,7 @@ def classify(payload: dict[str, Any], args: argparse.Namespace, env: dict[str, s
     scripts = Path(__file__).resolve().parent
     validator = Path(env.get("IMPROVE_VALIDATOR") or scripts / "validate-gap.sh")
     child_env = dict(env)
-    child_env.setdefault("IMPROVE_VALIDATE_MODEL", args.model)
+    child_env.setdefault("IMPROVE_VALIDATOR_MODEL", args.model)
 
     state_script = scripts / "signal_state.py"
     memory_dir = queue.parent / "memory"
@@ -385,7 +385,7 @@ def main(argv: list[str] | None = None) -> int:
         default=int(os.environ.get("IMPROVE_MAX_SIGNALS", DEFAULT_MAX_SIGNALS)),
         help="validator calls per session, which also bounds signals captured (default 3)",
     )
-    parser.add_argument("--model", default=os.environ.get("IMPROVE_VALIDATE_MODEL", DEFAULT_MODEL))
+    parser.add_argument("--model", default=os.environ.get("IMPROVE_VALIDATOR_MODEL", DEFAULT_MODEL))
     parser.add_argument("--timestamp", default="")
     args = parser.parse_args(argv)
     if not args.timestamp:
