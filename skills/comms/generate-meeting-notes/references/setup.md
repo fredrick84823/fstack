@@ -75,3 +75,38 @@ google_token.json  輸出。「誰」把權限給了那個 app
 
 因此 `404` / permission denied 通常是**不是那個資料夾的成員**，不是 scope 問題；
 只有 `403 ACCESS_TOKEN_SCOPE_INSUFFICIENT` 才是 scope 問題。見 `troubleshooting.md`。
+
+## 排程
+
+每小時一輪，讓 `reconcile_drive.py` 自己消化積壓。
+
+macOS 走 launchd —— cron 拿不到登入 session 的 keychain，而刷新 Google 憑證要它。
+`~/Library/LaunchAgents/com.tagtoo.gmn-reconcile.plist`：
+
+```xml
+<key>ProgramArguments</key>
+<array><string><UV_PATH></string><string>run</string><string>scripts/reconcile_drive.py</string></array>
+<key>WorkingDirectory</key><string><SKILL_DIR></string>
+<key>EnvironmentVariables</key>
+<dict>
+  <!-- launchd 給的 PATH 只有 /usr/bin:/bin:/usr/sbin:/sbin —— uv／claude／ffmpeg 一個都不在裡面 -->
+  <key>PATH</key><string><UV_BIN_DIR>:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  <key>HOME</key><string><HOME></string>
+</dict>
+<!-- StartInterval 是唯一的觸發器。`WatchPaths` 是 SKILL.md 已經否決的那個事件觸發形狀 -->
+<key>StartInterval</key><integer>3600</integer>
+<key>RunAtLoad</key><false/>
+<key>StandardOutPath</key><string><HOME>/Library/Logs/gmn-reconcile.log</string>
+<key>StandardErrorPath</key><string><HOME>/Library/Logs/gmn-reconcile.log</string>
+```
+
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tagtoo.gmn-reconcile.plist
+launchctl kickstart -p gui/$(id -u)/com.tagtoo.gmn-reconcile   # 首次執行本來就是強制 dry-run
+```
+
+其他平台走 cron，每小時 5 分：
+
+```
+5 * * * * cd <SKILL_DIR> && uv run scripts/reconcile_drive.py >> /tmp/gmn-reconcile.log 2>&1
+```
