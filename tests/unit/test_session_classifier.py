@@ -205,12 +205,19 @@ class SessionClassifierTest(unittest.TestCase):
 
     # --- 自動化 session 一律跳過 ---------------------------------------------
 
+    def test_child_session_marker_is_not_a_gate(self) -> None:
+        # 2026-09-16: a plain interactive session carried CLAUDE_CODE_CHILD_SESSION=1, so
+        # gating on it skipped every real session. Attended + entrypoint are the gates.
+        self.log.write_text("")
+        report = self.run_classifier(WITH_SKILLS, env_extra={"CLAUDE_CODE_CHILD_SESSION": "1"})
+        self.assertIsNone(report["skipped"])
+        self.assertGreater(len(self.validator_calls()), 0)
+
     def test_every_automation_marker_stops_the_run_before_the_model(self) -> None:
         for env_extra, expected in (
             ({"IMPROVE_CLASSIFIER_DISABLE": "1"}, "disabled by IMPROVE_CLASSIFIER_DISABLE"),
             ({"CLAUDE_CODE_SESSION_ATTENDED": "0"}, "unattended session"),
             ({"CLAUDE_CODE_ENTRYPOINT": "sdk-cli"}, "non-interactive entrypoint: sdk-cli"),
-            ({"CLAUDE_CODE_CHILD_SESSION": "1"}, "child session"),
         ):
             with self.subTest(env_extra=env_extra):
                 self.log.write_text("")

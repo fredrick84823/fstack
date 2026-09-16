@@ -9,4 +9,6 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-exec python3 "$script_dir/session_classifier.py" "$@"
+log="$script_dir/../memory/classifier.log"
+mkdir -p "$(dirname "$log")"
+{ printf '%s ' "$(date -Iseconds)"; python3 "$script_dir/session_classifier.py" "$@"; } >> "$log" 2>&1

@@ -169,9 +169,10 @@ class SignalStateTest(unittest.TestCase):
         project_queue = self.root / ".agents" / "skills" / "improve" / "signal-queue.md"
         project_queue.parent.mkdir(parents=True)
         project_queue.write_text("# Signal Queue\n")
+        (project_queue.parent.parent / "hook-demo").mkdir()
         subprocess.run(
             ["bash", str(CAPTURE_CORE)],
-            input="Result complete.\n<<GAP hook-demo: reusable hook gap>>\n",
+            input="Result complete.\n<<GAP hook-demo: reusable hook gap>>\n<<GAP skill-name: 一句話描述缺口>>\n",
             text=True,
             cwd=self.root,
             check=True,
@@ -180,6 +181,8 @@ class SignalStateTest(unittest.TestCase):
         raw_path = project_queue.parent / "memory" / "signals.jsonl"
         self.assertIn("## [", queue_text)
         self.assertIn("] hook-demo", queue_text)
+        # doc-echo guard: the quoted template is not an installed skill, so it is dropped
+        self.assertNotIn("skill-name", queue_text)
         self.assertIn("- **signal_id**: sig_", queue_text)
         self.assertIn("- **memory_sync**: synced", queue_text)
         raw = [json.loads(line) for line in raw_path.read_text().splitlines() if line.strip()]
