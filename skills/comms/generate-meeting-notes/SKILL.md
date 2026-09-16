@@ -395,45 +395,14 @@ cd "$SKILL_DIR" && uv run scripts/reconcile_drive.py --dry-run    # 只印差集
 `--audio-file`／`--delete-local-audio`，Drive 上的音檔一個位元都不動，本機暫存目錄
 跑完整個移除。
 
-排程（`crontab -e`，每小時 5 分）：
-
-```
-5 * * * * cd <SKILL_DIR> && uv run scripts/reconcile_drive.py >> /tmp/gmn-reconcile.log 2>&1
-```
-
-macOS 用 launchd 而不是 cron —— cron 拿不到登入 session 的 keychain，而 Google
-憑證刷新要它。`~/Library/LaunchAgents/com.tagtoo.gmn-reconcile.plist`：
-
-```xml
-<key>ProgramArguments</key>
-<array><string><UV_PATH></string><string>run</string><string>scripts/reconcile_drive.py</string></array>
-<key>WorkingDirectory</key><string><SKILL_DIR></string>
-<key>EnvironmentVariables</key>
-<dict>
-  <!-- launchd 給的 PATH 是 /usr/bin:/bin:/usr/sbin:/sbin —— uv／claude／ffmpeg 都不在裡面 -->
-  <key>PATH</key><string><UV_BIN_DIR>:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-  <key>HOME</key><string><HOME></string>
-</dict>
-<key>StartInterval</key><integer>3600</integer>
-<key>RunAtLoad</key><false/>
-<key>StandardOutPath</key><string><HOME>/Library/Logs/gmn-reconcile.log</string>
-<key>StandardErrorPath</key><string><HOME>/Library/Logs/gmn-reconcile.log</string>
-```
-
-```bash
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tagtoo.gmn-reconcile.plist
-launchctl kickstart -p gui/$(id -u)/com.tagtoo.gmn-reconcile   # 首次執行本來就是強制 dry-run
-```
-
-**不要用 `WatchPaths`。** reconcile 比對的是現況不是事件：音檔在沒掛載時上傳、機器
-當時關著、事件被合併掉 —— 這幾種情況事件驅動會**永久**漏掉那一場，而定時比對下一輪
-就自己補上。`RunAtLoad` 留 `false`：載入時機是登入，不是「該產記錄」的時機。
+要把它掛成每小時自動跑 → `references/setup.md` 的「排程」。macOS 走 launchd：cron 拿不
+到登入 session 的 keychain，而刷新 Google 憑證要它。
 
 ## 延伸參考
 
 | 需要時 | 讀 |
 |---|---|
-| 首次設定、`config.json` 結構、Google 認證檔案的角色 | `references/setup.md` |
+| 首次設定、`config.json` 結構、Google 認證檔案的角色、排程 | `references/setup.md` |
 | glossary 格式、共用 glossary 的合併與降級、回寫共用檔 | `references/glossary.md` |
 | 同日同類型多檔／多場次、`meeting_instance` 命名 | `references/multi-session.md` |
 | 403 / `This app is blocked` / scope 診斷 / NotebookLM 重跑 | `references/troubleshooting.md` |
