@@ -1,7 +1,7 @@
 ---
 name: ascii
 description: 畫對齊的終端圖 —— 先定 grid 再落字，最後用 CJK 寬度稽核判紅綠。
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 Monospace 圖歪掉，通常不是字元挑錯，是**先落了字才想欄位**。這裡把順序反過來：grid 先定死，字元後填，稽核判紅綠。
