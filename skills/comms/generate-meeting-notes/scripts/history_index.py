@@ -47,7 +47,16 @@ from pathlib import Path
 from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).parent))
-from local_archive import DATE_DIR, LOCAL_ARCHIVE_ROOT, NOTE_PREFIX, SIDECAR_SUFFIX
+from local_archive import (
+    DATE_DIR,
+    INSTANCE_ORDER,
+    LOCAL_ARCHIVE_ROOT,
+    NOTE_PREFIX,
+    SIDECAR_SUFFIX,
+    instance_order_key,
+    instance_rank,
+    note_instance,
+)
 
 INDEX_FILENAME = "history-index.md"
 DEFAULT_SESSIONS = 3
@@ -94,6 +103,15 @@ INDEX_HEADER = (
     "「前次未結案項目」並標明本次未提。接地優先序低於 `transcript.md`。"
 )
 EMPTY_NOTICE = "（本機歸檔沒有早於 {before_date} 的同系列場次。）"
+
+# 同一天有多份正式稿、而其中有些後綴定不出時序時印的那一行。**不是靜靜照字母序** ——
+# 字母序就是 #53 的病（`af` < `am`，下午那場排到上午那場前面），而它不會讓任何東西變紅。
+# 擺在模組層而不是函式裡的理由同 `INDEX_HEADER`：文案不該被 mutant 逐字問一遍。
+UNORDERABLE_NOTICE = (
+    "⚠️  同日這幾份正式稿的場次後綴定不出時序，暫時排在已知場次之後（依檔名）：{names}\n"
+    "   要照真實時序排，後綴請用：{known}"
+)
+KNOWN_INSTANCES = "／".join(i for i in INSTANCE_ORDER if i)
 
 
 class Session(NamedTuple):
@@ -268,10 +286,21 @@ def find_notes(
     只認 `會議記錄` 開頭的 `.md` —— 日期資料夾裡同時躺著 source artifacts
     （`transcript.md`／`extract.md`／`meeting-context.md`），拿它們當正式稿會讓索引
     指到逐字稿。
+
+    同一個日期資料夾**內**按場次的真實時序排（`instance_order_key`），不是檔名字母序：
+    `…_20260911_afternoon.md` < `…_20260911_am.md` 是字串比較的事實（`af` < `am`），
+    而它有兩個後果 —— docstring 承諾的「由舊到新」在同日多場時不成立，而且
+    `notes[-limit:]` 截斷時砍掉的是**較晚**那場，等於把最新的未結案狀態丟掉，
+    偏偏那正是下一場的成稿子 agent 要接的東西（#53）。
+
+    定不出序的後綴（任意自訂的 `meeting_instance`）**不靜靜照字母序**：排在同日已知
+    場次之後，並印一行說是哪幾份、該用哪些後綴。只在同一天真有兩份以上時才出聲 ——
+    當天只有一場時排序沒有意義，為它每輪印一次只會讓人學會忽略這一行。
     """
     if limit <= 0:
         return []
     notes: list[Path] = []
+    unorderable: list[str] = []
     series_dir = root / folder_name
     try:
         date_dirs = sorted(p for p in series_dir.iterdir() if p.is_dir())
@@ -280,9 +309,15 @@ def find_notes(
     for date_dir in date_dirs:
         if not DATE_DIR.fullmatch(date_dir.name) or date_dir.name >= before_date:
             continue
-        notes.extend(
-            sorted(p for p in date_dir.glob(f"{NOTE_PREFIX}*.md") if p.is_file())
-        )
+        same_day = [p for p in date_dir.glob(f"{NOTE_PREFIX}*.md") if p.is_file()]
+        same_day.sort(key=lambda p: (instance_order_key(note_instance(p.stem)), p.name))
+        if len(same_day) > 1:
+            unorderable += [
+                p.name for p in same_day if instance_rank(note_instance(p.stem)) is None
+            ]
+        notes.extend(same_day)
+    if unorderable:
+        print(UNORDERABLE_NOTICE.format(names="、".join(unorderable), known=KNOWN_INSTANCES))
     return notes[-limit:]
 
 

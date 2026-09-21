@@ -59,7 +59,7 @@ from extract_audio_sources import (
     inject_attendees,
     load_config,
 )
-from local_archive import note_title, write_local_archive
+from local_archive import date_dir_name, note_title, write_local_archive
 from parity import report_drift
 
 
@@ -307,7 +307,9 @@ def main():
         print(f"\n⚠️  本機歸檔失敗：{type(exc).__name__}: {exc}")
         print("   Doc 已建立，URL 見下方 RESULT_URL——請自行留存，補齊腳本補得回檔案但補不回 URL。")
 
-    drive_path = f"{folder_name}/{date_str}"
+    # 與 Doc 真正落腳的那個資料夾同一份計算（`create_gdoc_in_shared_drive`）——
+    # 這行是交棒契約，寫成 `{date}` 的話多場次那幾份會指到一個不存在的路徑。
+    drive_path = f"{folder_name}/{date_dir_name(date_str, args.title_suffix)}"
     print(f"\nRESULT_URL: {doc_url}")
     if note_path and sidecar_path:
         print(f"RESULT_LOCAL_NOTE: {note_path}")

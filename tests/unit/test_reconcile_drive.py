@@ -85,12 +85,24 @@ def _note() -> dict:
     return {"id": "note-1", "name": "會議記錄_Data內會_20260915", "mimeType": rd.DOC_MIME}
 
 
-def _folder(series: str, days_ago: int = 0, files: tuple[dict, ...] = ()) -> dict:
+def _folder(
+    series: str,
+    days_ago: int = 0,
+    files: tuple[dict, ...] = (),
+    instance: str = "",
+) -> dict:
+    """一筆 `scan_drive` 的輸出。`instance` 非空 → 資料夾名是 `YYYYMMDD_<場次>`。"""
+    name = _shift(days_ago)
     return {
         "series": series,
-        "date": _shift(days_ago),
+        "name": f"{name}_{instance}" if instance else name,
         "files": list(files),
     }
+
+
+def _named_folder(series: str, name: str, files: tuple[dict, ...] = ()) -> dict:
+    """名字自己指定的一筆 —— 認不得的資料夾名沒有「幾天前」可言。"""
+    return {"series": series, "name": name, "files": list(files)}
 
 
 def _pending_ids(round_) -> list[tuple[str, str]]:
@@ -282,9 +294,15 @@ def test_series_map_falls_back_to_series_name_when_folder_name_is_absent():
 # ------------------------------------------------------------------- DM 的文字內容
 
 
-def _session(series: str, reason: str, date_: str = TODAY):
+def _session(series: str, reason: str, date_: str = TODAY, instance: str = ""):
     return rd.Session(
-        series=series, date=date_, meeting_key=None, audio=(), reason=reason
+        series=series,
+        name=f"{date_}_{instance}" if instance else date_,
+        date=date_,
+        instance=instance,
+        meeting_key=None,
+        audio=(),
+        reason=reason,
     )
 
 
@@ -676,7 +694,9 @@ def test_generate_publishes_without_the_audio_flags(
 
     session = rd.Session(
         series=DATA_FOLDER,
+        name=TODAY,
         date=TODAY,
+        instance="",
         meeting_key="data",
         audio=(_audio(),),
         reason="",
@@ -699,7 +719,8 @@ def test_the_channel_notice_names_the_meeting_the_cause_and_that_nobody_needs_to
     """三件事缺一不可。少了「有人在處理」那句，channel 裡的人會開始猜自己該補做什麼。"""
     # 三句話各一行。拆開來對而不是整段 `in`：黏在一起的那幾種寫法（少一個換行、
     # 每行前後多黏一段）整段 `in` 一條都看不出來。
-    head, why, reassurance = rd.failure_notice("Data內會", TODAY, rd.FAILED_CAUSE).splitlines()
+    when = rd.when_label(_session(DATA_FOLDER, "", TODAY))
+    head, why, reassurance = rd.failure_notice("Data內會", when, rd.FAILED_CAUSE).splitlines()
 
     assert "Data內會" in head
     assert "2026/09/15" in head, "日期要給人看的格式，不是資料夾名那串"
@@ -712,7 +733,9 @@ def test_the_two_tracks_are_not_the_same_message():
     """驗收條件③ —— 同一個事件兩則訊息。開會的人不會去 debug，例外類別名只會讓他們
     回頭來問維運者，而那正是這張票要省掉的那一趟。"""
     dm = rd.dm_blocked(f"❌ {DATA_FOLDER}/{TODAY}　RuntimeError: 流程 B 失敗（退出碼 1）", 1)
-    channel = rd.failure_notice("Data內會", TODAY, rd.FAILED_CAUSE)
+    channel = rd.failure_notice(
+        "Data內會", rd.when_label(_session(DATA_FOLDER, "", TODAY)), rd.FAILED_CAUSE
+    )
 
     assert "RuntimeError" in dm
     assert "RuntimeError" not in channel
@@ -1322,3 +1345,327 @@ def test_an_innocent_series_root_is_quiet_end_to_end(
     capsys.readouterr()
 
     assert rig.posts == [] and rig.dms == []
+
+
+# ------------------------------------------------- 同日多場：YYYYMMDD_<場次>（#56）
+#
+# 這一節的形狀與上面幾節不同：要擋的不是「多算一場」，是**少算一場而且不出聲**。
+# `20260916_am` 以前整個被 `continue` 掉，於是「一天多場請各開一個資料夾」這個約定
+# 是空的 —— 第二個資料夾是隱形的，把檔案丟進去的人會以為丟進去了。
+
+
+def _scan(monkeypatch: pytest.MonkeyPatch, folders: dict[str, list[dict]]) -> list[dict]:
+    """跑一次 `scan_drive`，回它的 `listings`。`folders` 是 {日期資料夾名: 裡面的檔案}。
+
+    替身只換 `series_folders` 與 `list_all` —— 要驗的是掃描層自己**認不認得**那個名字，
+    而 Drive client 怎麼翻頁不是這一節的事。
+    """
+    ids = {f"folder-{i}": name for i, name in enumerate(folders)}
+    monkeypatch.setattr(
+        rd, "series_folders", lambda drive, meetings: [{"id": "series-data", "name": DATA_FOLDER}]
+    )
+
+    def fake_list_all(drive, query):
+        if "'series-data' in parents" in query:
+            return [_subfolder(name) | {"id": fid} for fid, name in ids.items()]
+        for fid, name in ids.items():
+            if f"'{fid}' in parents" in query:
+                return list(folders[name])
+        return []
+
+    monkeypatch.setattr(rd, "list_all", fake_list_all)
+    return rd.scan_drive(MagicMock(name="drive"), CONFIG["meetings"], TODAY).listings
+
+
+def test_the_scan_sees_a_session_suffixed_date_folder(monkeypatch: pytest.MonkeyPatch):
+    """驗收條件① —— `20260916_am` 以前在掃描層就 `continue` 掉了，一路沒有訊息。"""
+    listings = _scan(monkeypatch, {f"{TODAY}_am": [_audio()], f"{TODAY}_pm": [_audio()]})
+
+    assert sorted(l["name"] for l in listings) == [f"{TODAY}_am", f"{TODAY}_pm"]
+
+
+def test_the_scan_still_drops_date_folders_outside_the_window(monkeypatch: pytest.MonkeyPatch):
+    """認得出日期的照舊過窗。放寬的是**名字的形狀**，不是 7 天窗。"""
+    listings = _scan(
+        monkeypatch, {f"{_shift(30)}_am": [_audio()], f"{TODAY}_am": [_audio()]}
+    )
+
+    assert [l["name"] for l in listings] == [f"{TODAY}_am"]
+
+
+def test_the_scan_lists_the_files_of_a_folder_it_cannot_name(monkeypatch: pytest.MonkeyPatch):
+    """認不得的名字沒有日期可以過窗，所以它一定進得來 —— 而且檔案要列出來。
+
+    不列的話差集層分不出「有人放錯地方」與「這本來就不是收件夾」，只能一律提醒，
+    而一律提醒的下場是沒有人看那則提醒。
+    """
+    listings = _scan(monkeypatch, {"舊資料": [_audio()]})
+
+    assert [(l["name"], [f["id"] for f in l["files"]]) for l in listings] == [
+        ("舊資料", ["audio-1"])
+    ]
+
+
+def test_two_sessions_on_the_same_day_are_two_independent_pending_rows():
+    """驗收條件① —— 各開一個資料夾就各產一份，不是二選一、也不是合成一份。"""
+    folders = [
+        _folder(DATA_FOLDER, 0, (_audio(fid="pm-1"),), instance="pm"),
+        _folder(DATA_FOLDER, 0, (_audio(fid="am-1"),), instance="am"),
+    ]
+
+    round_ = rd.compute_pending(folders, KNOWN, TODAY, limit=2)
+
+    assert [(s.name, s.instance, s.audio[0]["id"]) for s in round_.pending] == [
+        (f"{TODAY}_am", "am", "am-1"),
+        (f"{TODAY}_pm", "pm", "pm-1"),
+    ], "同一天兩場：上午那場先做，不是按字母序也不是按 Drive 給的順序"
+    assert round_.skipped == []
+
+
+def test_the_backlog_orders_same_day_sessions_by_real_time_not_by_spelling():
+    """`afternoon` < `am` 是字串比較的事實（`af` < `am`）—— 照字母序排就是先做下午那場。
+
+    這條與 `history_index` 那邊用的是**同一支**判準（`instance_order_key`）。各寫一份的話
+    兩邊會靜靜地漂開，而漂開時兩邊都不會變紅。
+    """
+    folders = [
+        _folder(DATA_FOLDER, 0, (_audio(),), instance="afternoon"),
+        _folder(DATA_FOLDER, 0, (_audio(),), instance="am"),
+    ]
+
+    round_ = rd.compute_pending(folders, KNOWN, TODAY, limit=2)
+
+    assert [s.instance for s in round_.pending] == ["am", "afternoon"]
+
+
+def test_the_session_suffix_reaches_the_publish_command(tmp_path: Path, monkeypatch):
+    """驗收條件② —— 後綴要一路帶到正式稿檔名與 Doc 標題，靠的就是這個旗標。
+
+    斷言打在**送出去的指令**上：`create_gdoc_from_md.py` 用它算 Doc 名、本機檔名與
+    Drive 的日期資料夾。少了它，第二場的 Doc 會被建進 `20260916`，而音檔躺在
+    `20260916_am` —— 下一輪掃描在那個資料夾裡還是找不到記錄，於是每小時重產一次。
+    """
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, timeout, stdin=None):
+        cmd = [str(c) for c in cmd]
+        calls.append(cmd)
+        for hit in re.findall(rf"{re.escape(str(tmp_path))}\S*\.md", stdin or ""):
+            Path(hit).write_text("# 會議記錄\n", encoding="utf-8")
+        return subprocess.CompletedProcess(
+            cmd, 0,
+            stdout=f"RESULT_TRANSCRIPT: {workdir / 'transcript.md'}\nRESULT_URL: {DOC_URL}",
+            stderr="",
+        )
+
+    monkeypatch.setattr(rd, "download_audio", lambda drive, file, dest: Path(dest))
+    monkeypatch.setattr(rd, "run_step", fake_run)
+
+    session = rd.Session(
+        series=DATA_FOLDER, name=f"{TODAY}_am", date=TODAY, instance="am",
+        meeting_key="data", audio=(_audio(),), reason="",
+    )
+    rd.generate(MagicMock(name="drive"), session, copy.deepcopy(CONFIG), workdir)
+
+    publish = [c for c in calls if any("create_gdoc_from_md.py" in part for part in c)]
+    assert publish, f"沒有發佈那一步；送出去的是 {calls}"
+    assert "--title-suffix" in publish[-1]
+    assert publish[-1][publish[-1].index("--title-suffix") + 1] == "am"
+    assert publish[-1][publish[-1].index("--date") + 1] == TODAY, "日期那格仍是 8 位數"
+
+
+def test_a_single_session_day_still_publishes_without_a_title_suffix(
+    tmp_path: Path, monkeypatch
+):
+    """另一側 —— 沒有後綴時不能硬塞一個空字串進去，那會產出 `會議記錄_X_20260915_`。"""
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, timeout, stdin=None):
+        cmd = [str(c) for c in cmd]
+        calls.append(cmd)
+        for hit in re.findall(rf"{re.escape(str(tmp_path))}\S*\.md", stdin or ""):
+            Path(hit).write_text("# 會議記錄\n", encoding="utf-8")
+        return subprocess.CompletedProcess(
+            cmd, 0,
+            stdout=f"RESULT_TRANSCRIPT: {workdir / 'transcript.md'}\nRESULT_URL: {DOC_URL}",
+            stderr="",
+        )
+
+    monkeypatch.setattr(rd, "download_audio", lambda drive, file, dest: Path(dest))
+    monkeypatch.setattr(rd, "run_step", fake_run)
+
+    session = rd.Session(
+        series=DATA_FOLDER, name=TODAY, date=TODAY, instance="",
+        meeting_key="data", audio=(_audio(),), reason="",
+    )
+    rd.generate(MagicMock(name="drive"), session, copy.deepcopy(CONFIG), workdir)
+
+    publish = [c for c in calls if any("create_gdoc_from_md.py" in part for part in c)]
+    assert "--title-suffix" not in publish[-1]
+
+
+def test_two_audio_files_in_one_folder_are_still_refused():
+    """驗收條件③ —— 刻意的守衛，不因為本票放寬。放寬的是名字，不是「一個資料夾一個音檔」。"""
+    folder = _folder(DATA_FOLDER, 0, (_audio(fid="a1"), _audio("錄音2.m4a", "a2")), instance="am")
+
+    round_ = rd.compute_pending([folder], KNOWN, TODAY)
+
+    assert round_.pending == []
+    assert [s.reason for s in round_.skipped] == [rd.MULTI_AUDIO]
+
+
+def test_the_refusal_message_says_what_to_do_next():
+    """驗收條件④ —— 只講現象的訊息讓人知道系統沒動，卻不知道該把檔案搬去哪。
+
+    斷言打在**指示**上而不是整句文案：形狀那句就是那個下一步本身，而「一天多場」是它
+    適用的時機。兩個都在才算說完。
+    """
+    assert rd.DATE_DIR_SHAPES in rd.MULTI_AUDIO
+    assert rd.DATE_DIR_EXAMPLE in rd.MULTI_AUDIO
+    assert "一天多場" in rd.MULTI_AUDIO
+
+
+#: 每一則會叫人「把檔案放進日期資料夾」的訊息。形狀那句一律引 `DATE_DIR_SHAPES`，
+#: 不各自寫一次字面值 —— #57 的放錯層提醒原本只講 `YYYYMMDD`（當時帶後綴的資料夾確實
+#: 掃不到），#56 讓後綴生效之後那句話就過期了，而過期不會讓任何東西變紅。
+FOLDER_ADVICE = [
+    ("MULTI_AUDIO", lambda: rd.MULTI_AUDIO),
+    ("UNKNOWN_FOLDER", lambda: rd.UNKNOWN_FOLDER),
+    ("misplaced_notice", lambda: rd.misplaced_notice("Data內會", "錄音.m4a")),
+    ("dm_misplaced", lambda: rd.dm_misplaced([rd.Misplaced(DATA_FOLDER, "data", "f1", "錄音.m4a")])),
+]
+
+
+@pytest.mark.parametrize("label,render", FOLDER_ADVICE, ids=[n for n, _ in FOLDER_ADVICE])
+def test_every_message_about_folder_names_quotes_the_same_source(label, render):
+    """下次再擴充形狀時，漏改的只會是註解，不會是叫人怎麼做的那句話。"""
+    assert rd.DATE_DIR_SHAPES in render(), label
+
+
+def test_an_unrecognisable_folder_name_with_audio_is_reported_not_skipped():
+    """驗收條件⑤ —— 以前是 `continue`，沒有任何訊息。"""
+    round_ = rd.compute_pending(
+        [_named_folder(DATA_FOLDER, "20260916_", [_audio()]),
+         _named_folder(DATA_FOLDER, "9月16日下午", [_audio()])],
+        KNOWN, TODAY,
+    )
+
+    assert round_.pending == []
+    assert {s.name: s.reason for s in round_.skipped} == {
+        "20260916_": rd.UNKNOWN_FOLDER,
+        "9月16日下午": rd.UNKNOWN_FOLDER,
+    }
+    # 拆不出來時兩半都是空的。`instance` 塞一個假值的話，`_by_date` 會拿它去查
+    # `instance_order_key`，而那個順序沒有任何斷言看得見。
+    assert {(s.date, s.instance) for s in round_.skipped} == {("", "")}
+
+
+def test_an_unrecognisable_folder_without_audio_stays_silent():
+    """`舊資料`／`備份` 這種資料夾本來就不是收件夾 —— 為它每小時提醒一次等於訓練人忽略。
+
+    這條刪掉 → 「認不得就提醒」退化成一律提醒，而一律提醒的下場是連 `MULTI_AUDIO`
+    那幾則也一起被忽略。
+    """
+    round_ = rd.compute_pending(
+        [_named_folder(DATA_FOLDER, "備份", [{"id": "x", "name": "筆記.md", "mimeType": "text/markdown"}])],
+        KNOWN, TODAY,
+    )
+
+    assert round_.pending == [] and round_.skipped == []
+
+
+def test_an_unrecognisable_folder_that_already_has_a_note_is_left_alone():
+    """已經有記錄的就是有記錄了 —— 名字認不得不該讓一場已經完成的會議重新變成待辦。"""
+    round_ = rd.compute_pending(
+        [_named_folder(DATA_FOLDER, "20260916（重錄）", [_audio(), _note()])], KNOWN, TODAY
+    )
+
+    assert round_.pending == [] and round_.skipped == []
+
+
+def test_an_unrecognisable_folder_name_reaches_the_dm(rig, monkeypatch, capsys):
+    """驗收條件⑤ 的維運者那一軌 —— 要修名字的人是他。"""
+    rig.folders = [_named_folder(DATA_FOLDER, "9月16日下午", [_audio()])]
+    _main(monkeypatch, rig)                      # 首次執行：強制 dry-run
+    capsys.readouterr()
+    rig.dms.clear()
+
+    _main(monkeypatch, rig)
+
+    (dm_args, _), = rig.dms
+    assert "9月16日下午" in dm_args[0]
+    assert rd.UNKNOWN_FOLDER in dm_args[0]
+
+
+def test_an_unrecognisable_folder_name_reaches_the_meeting_channel(rig, monkeypatch, capsys):
+    """驗收條件⑤ 的會議成員那一軌 —— 走 #55 既有的那條路，不另開一條。
+
+    這一場**知道**自己在哪個系列底下（`UNKNOWN_SERIES` 不知道），所以三態算得出來。
+    """
+    rig.config["meetings"]["data"]["slack_channel"] = "C0DATA"
+    rig.folders = [_named_folder(DATA_FOLDER, "9月16日下午", [_audio()])]
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    _main(monkeypatch, rig)
+
+    (channel, text), = rig.posts
+    assert channel == "C0DATA"
+    assert "9月16日下午" in text, "認不得的名字要指認得出來，不能印成 `//`"
+    assert rd.UNKNOWN_FOLDER_CAUSE in text
+
+
+def test_a_muted_meeting_stays_silent_about_an_unrecognisable_folder(rig, monkeypatch, capsys):
+    """三態照舊 —— 刻意設成空字串的會議不會因為本票開始出聲。維運者照樣收得到。"""
+    rig.config["meetings"]["data"]["slack_channel"] = ""
+    rig.folders = [_named_folder(DATA_FOLDER, "9月16日下午", [_audio()])]
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+    rig.dms.clear()
+
+    _main(monkeypatch, rig)
+
+    assert rig.posts == []
+    assert rig.dms, "維運者那一軌不受三態影響"
+
+
+def test_the_same_day_two_sessions_are_deduped_separately(rig, monkeypatch, capsys):
+    """一天一次的去重身份是**資料夾**不是日期 —— 用日期的話下午那場那天永遠不會提醒。"""
+    rig.config["meetings"]["data"]["slack_channel"] = "C0DATA"
+    two = (_audio(fid="a1"), _audio("錄音2.m4a", "a2"))
+    rig.folders = [
+        _folder(DATA_FOLDER, 0, two, instance="am"),
+        _folder(DATA_FOLDER, 0, two, instance="pm"),
+    ]
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    _main(monkeypatch, rig)
+
+    heads = sorted(text.splitlines()[0] for _, text in rig.posts)
+
+    assert len(heads) == 2, f"兩場各一則，實際是 {heads}"
+    assert heads[0].endswith("2026/09/15 am")
+    assert heads[1].endswith("2026/09/15 pm")
+
+
+# ------------------------------------------------------------------- when_label
+
+
+def test_when_label_names_the_session_not_just_the_day():
+    """同日兩場的日期一模一樣 —— 只印日期的話 channel 裡的人不知道講的是哪一場。"""
+    assert rd.when_label(_session(DATA_FOLDER, "", TODAY)) == "2026/09/15"
+    assert rd.when_label(_session(DATA_FOLDER, "", TODAY, "am")) == "2026/09/15 am"
+
+
+def test_when_label_falls_back_to_the_folder_name_it_could_not_parse():
+    """`format_date_display("")` 會印成 `//` —— 把唯一的線索換成噪音。"""
+    session = _session(DATA_FOLDER, rd.UNKNOWN_FOLDER)._replace(
+        name="9月16日下午", date="", instance=""
+    )
+
+    assert rd.when_label(session) == "9月16日下午"

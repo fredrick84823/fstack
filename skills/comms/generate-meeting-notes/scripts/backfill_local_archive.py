@@ -25,7 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from extract_audio_sources import get_google_credentials, load_config
-from local_archive import DATE_DIR, LOCAL_ARCHIVE_ROOT, archive_paths, sidecar_content
+from local_archive import LOCAL_ARCHIVE_ROOT, archive_paths, parse_date_dir, sidecar_content
 
 MAX_PAGES = 20
 
@@ -71,9 +71,12 @@ def scan_meeting(drive, meeting: dict, root: Path) -> list[dict]:
         "and mimeType='application/vnd.google-apps.folder' and trashed=false",
     )
     for folder in sorted(date_folders, key=lambda f: f["name"]):
-        date = folder["name"]
-        if not DATE_DIR.fullmatch(date):
+        # `20260916_am` 這種多場次資料夾也要補 —— 本機的日期資料夾一律是 8 位數，
+        # 場次已經在 Doc 名裡（`會議記錄_X_20260916_am`），所以只取日期那一半。
+        parsed = parse_date_dir(folder["name"])
+        if not parsed:
             continue
+        date = parsed[0]
         docs = list_all(
             drive,
             f"'{folder['id']}' in parents "
