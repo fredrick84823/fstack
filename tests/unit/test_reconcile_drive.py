@@ -464,7 +464,13 @@ def rig(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setattr(rd, "get_google_credentials", lambda *a, **k: MagicMock())
     monkeypatch.setattr("googleapiclient.discovery.build", lambda *a, **k: rec.drive)
     monkeypatch.setattr(rd, "notebooklm_gap", lambda *a, **k: "")
-    monkeypatch.setattr(rd, "send_dm", lambda *a, **k: rec.dms.append((a, k)))
+    def fake_dm(*a, **k):
+        """`send_dm` 回的是「真的送出去了沒有」，替身也要回 —— 少了回傳值，
+        `send_once` 會判定沒送成功而不記進狀態檔，於是去重在測試裡看起來永遠是壞的。"""
+        rec.dms.append((a, k))
+        return rec.slack_up
+
+    monkeypatch.setattr(rd, "send_dm", fake_dm)
 
     def fake_channel(channel, text):
         """Slack 兩支都是替身。`slack_up=False` 演「送不出去」—— 那時候不能記成發過。"""
@@ -952,6 +958,10 @@ IO_LAYER = {
     "notify_channel",
     "notify_once",
     "notify_misplaced",
+    "notify_dm_once",
+    "send_once",
+    "read_state",
+    "write_state",
     "main",
 }
 
@@ -1247,19 +1257,24 @@ def test_a_misplaced_file_tells_both_tracks_and_generates_nothing(
 def test_the_same_misplaced_file_is_mentioned_once_a_day_then_again_tomorrow(
     rig, monkeypatch: pytest.MonkeyPatch, capsys
 ):
-    """每小時一輪，而沒有人移動它之前每輪都會再掃到 —— 不去重就是一天 24 則。"""
+    """每小時一輪，而沒有人移動它之前每輪都會再掃到 —— 不去重就是一天 24 則。
+
+    **DM 與 channel 同一套去重**（#64）：DM 原本每輪重發，而真實 Drive 上那是一面 102
+    行的牆一天出現 24 次 —— 同一個收件匣裡真正該看的那幾則會跟著一起被學會忽略。
+    """
     _misplace(rig, _audio("錄音.m4a", "a1"))
     for _ in range(3):
         _main(monkeypatch, rig)
         capsys.readouterr()
 
     assert len(rig.posts) == 1, "同一天重複提醒會讓人學會忽略這個 channel"
-    assert len(rig.dms) == 3, "維運者的 DM 照舊每輪都發（首次執行那輪也算）"
+    assert len(rig.dms) == 1, "維運者的 DM 也是一天一次，首次執行那輪算過了"
 
     _main(monkeypatch, rig, "--today", _shift(-1))
     capsys.readouterr()
 
     assert len(rig.posts) == 2, "隔天還躺在那裡就再提醒一次"
+    assert len(rig.dms) == 2, "隔天那則 DM 也要再發一次 —— 去重是一天一次，不是一次而已"
 
 
 def test_renaming_the_file_does_not_buy_a_second_reminder_the_same_day(
@@ -1345,6 +1360,242 @@ def test_an_innocent_series_root_is_quiet_end_to_end(
     capsys.readouterr()
 
     assert rig.posts == [] and rig.dms == []
+
+
+# --------------------------------------- 未登記的系列只報系列，不逐檔（issue #64）
+#
+# #57 上線第一輪在真實 Drive 上掃出 102 個根目錄音檔，**全部**來自沒有登記過的系列
+#（`series_folders` 從 parent 反推，同一層其他部門的資料夾也一起掃了進來）。
+# 分界不是「重不重要」，是**這個建議執行得了嗎**：已登記的系列移進日期資料夾下一輪
+# 就會產（可執行 → 逐檔講），未登記的移了也產不出來（不可執行 → 只報系列）。101 行
+# 102 行每小時刷一次，第二天就會被學會忽略 —— 而那會連帶弄死同一則 DM 裡真正該看的
+# 那三則（要產的、多音檔的、認不得資料夾的）。
+#
+# 所以這一節的斷言重心是**兩種說法各自成立**，以及未登記那則的身份是**系列**：
+# 同一個系列再多丟一個檔，行數不變。
+
+STRANGER = "週一_BD Meeting"          #: 設定檔裡沒有這個系列
+STRANGER2 = "週二_AM Meeting"
+
+
+def test_the_per_file_dm_leaves_out_unregistered_series():
+    """驗收條件① —— 逐檔那份只留可執行的。"""
+    items = rd.compute_misplaced(
+        [_root(DATA_FOLDER, _audio("有登記.m4a", "a1")),
+         _root(STRANGER, _audio("沒登記.m4a", "s1"))],
+        KNOWN,
+    )
+
+    lines = rd.dm_misplaced(items).splitlines()
+
+    assert len(lines) == 3, lines            # 抬頭 ＋ 一個檔 ＋ 下一步
+    assert "有登記.m4a" in lines[1]
+    assert "沒登記.m4a" not in rd.dm_misplaced(items), "移了也產不出來的不該叫人去移"
+    assert "1 個" in lines[0], "數的是列出來的那幾個，不是掃到的全部"
+
+
+def test_the_per_file_dm_is_empty_when_every_misplaced_file_is_unregistered():
+    """101 個未登記的檔案不該讓那則「請移進日期資料夾」的 DM 照樣發出去。"""
+    items = rd.compute_misplaced([_root(STRANGER, _audio())], KNOWN)
+
+    assert rd.dm_misplaced(items) == ""
+
+
+def test_the_unregistered_dm_puts_one_line_per_series():
+    """驗收條件② —— 一個系列一行，說出系列名與音檔數量，並點出它不在設定檔裡。"""
+    items = rd.compute_misplaced(
+        [_root(STRANGER, _audio("a.m4a", "s1"), _audio("b.m4a", "s2"), _audio("c.m4a", "s3")),
+         _root(STRANGER2, _audio("d.m4a", "s4"))],
+        KNOWN,
+    )
+
+    text = rd.dm_unregistered(items)
+    lines = text.splitlines()
+
+    assert len(lines) == 4, lines            # 抬頭 ＋ 兩個系列 ＋ 下一步
+    assert "2 個系列" in lines[0]
+    assert lines[1].startswith("• ") and STRANGER in lines[1] and "3 個音檔" in lines[1]
+    assert lines[2].startswith("• ") and STRANGER2 in lines[2] and "1 個音檔" in lines[2]
+    assert "a.m4a" not in text, "未登記的不逐檔 —— 101 個檔案就是 101 行"
+    assert "設定檔" in lines[3] and str(rd.CONFIG_PATH) in lines[3]
+
+
+def test_the_unregistered_dm_is_silent_when_every_series_is_registered():
+    assert rd.dm_unregistered([]) == ""
+    assert rd.dm_unregistered(rd.compute_misplaced([_root(DATA_FOLDER, _audio())], KNOWN)) == ""
+
+
+def test_one_more_file_in_an_unregistered_series_does_not_buy_another_line():
+    """驗收條件④ —— 這則的身份是**系列**不是檔案。
+
+    身份是檔案的話，同事再丟一個進去就多一則提醒，而那一則沒有任何新資訊：要做的事
+    從頭到尾都是同一件（把這個系列登記進設定檔）。數量還是要跟著變 —— 那是這則唯一
+    會動的東西。
+    """
+    one = rd.compute_misplaced([_root(STRANGER, _audio("a.m4a", "s1"))], KNOWN)
+    two = rd.compute_misplaced(
+        [_root(STRANGER, _audio("a.m4a", "s1"), _audio("b.m4a", "s2"))], KNOWN
+    )
+
+    assert len(rd.dm_unregistered(one).splitlines()) == len(rd.dm_unregistered(two).splitlines())
+    assert rd.dm_unregistered(one) != rd.dm_unregistered(two), "數量要跟著變"
+
+
+def test_an_unregistered_series_never_reaches_a_meeting_channel(
+    rig, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    """驗收條件③ —— 沒有 `meeting_key` 就不知道要發哪裡，收件者是維運者不是開會的人。
+
+    `rig.posts` 收的是**所有** channel 送出去的訊息，不分哪一場 —— 斷言「一則都沒有」
+    才擋得住「誤發到某個剛好設好的 channel」那條路。
+    """
+    rig.config["meetings"]["data"]["slack_channel"] = "C0DATA"
+    rig.roots = [_root(STRANGER, _audio("a.m4a", "s1"), _audio("b.m4a", "s2"))]
+    _main(monkeypatch, rig)              # 首次執行：強制 dry-run
+    capsys.readouterr()
+
+    code = _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    assert code == 0
+    assert rig.posts == []
+    assert rig.generated == [], "這條路徑只回報，不產任何記錄"
+    (dm_args, _) = rig.dms[-1]
+    assert STRANGER in dm_args[0] and "2 個音檔" in dm_args[0]
+    assert "a.m4a" not in dm_args[0]
+
+
+def test_a_registered_and_an_unregistered_series_each_get_their_own_wording(
+    rig, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    """驗收條件①② —— 同一輪裡兩種說法各自成立，互相不污染。"""
+    rig.config["meetings"]["data"]["slack_channel"] = "C0DATA"
+    rig.roots = [
+        _root(DATA_FOLDER, _audio("有登記.m4a", "a1")),
+        _root(STRANGER, _audio("沒登記.m4a", "s1")),
+    ]
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    assert [t for _, t in rig.posts] == [rd.misplaced_notice("Data內會", "有登記.m4a")]
+    dms = [a[0] for a, _ in rig.dms]
+    assert any("有登記.m4a" in t for t in dms), "已登記的照舊逐檔"
+    assert not any("沒登記.m4a" in t for t in dms), "未登記的不逐檔"
+    assert any(STRANGER in t and "1 個音檔" in t for t in dms), "但那個系列本身要被點名"
+
+
+# ------------------------------- 維運者的 DM 也一天一次，身份分兩種（#64）
+#
+# 去重原本只保護 channel：`notify_once` 管的是那一則，DM 走 `notify()` **每輪重發**。
+# 每小時一輪，於是真實 Drive 上那面 102 行的牆一天出現 24 次 —— 而同一個收件匣裡真正
+# 該看的三則（要產的、多音檔的、認不得資料夾的）就跟著一起被學會忽略。
+
+
+def test_the_dm_key_ignores_the_order_drive_happened_to_return():
+    """清單順序是 Drive 給的。順序一換就是另一個 key，等於去重當輪失效。
+
+    形狀一起釘死：這些 key 會**留在狀態檔裡跨輪比對**，改了形狀等於當天所有的 key 都
+    是新的 —— 那不是重構，是去重失效一天。
+    """
+    assert rd.dm_notice_key("cause", ["b", "a"]) == "cause/a,b"
+    assert rd.dm_notice_key(rd.MISPLACED_DM, ["a", "b"]) == rd.dm_notice_key(
+        rd.MISPLACED_DM, ["b", "a"]
+    )
+
+
+def test_the_dm_key_ignores_how_many_times_the_same_id_shows_up():
+    """未登記那則餵進來的是**每個檔案的系列名**，所以同一個系列會出現很多次。
+
+    數量進了 key 的話，同一個系列多丟一個音檔就等於一則新提醒 —— 而那則要說的事
+    （這個系列沒登記過）從頭到尾都是同一件。
+    """
+    assert rd.dm_notice_key(rd.UNREGISTERED_DM, [STRANGER, STRANGER]) == rd.dm_notice_key(
+        rd.UNREGISTERED_DM, [STRANGER]
+    )
+
+
+def test_the_dm_key_changes_when_the_set_itself_changes():
+    """集合變了就是一則有新資訊的提醒，該發。兩則 DM 之間也不能互相擋。"""
+    assert rd.dm_notice_key(rd.UNREGISTERED_DM, ["a"]) != rd.dm_notice_key(
+        rd.UNREGISTERED_DM, ["a", "b"]
+    )
+    assert rd.dm_notice_key(rd.MISPLACED_DM, ["a"]) != rd.dm_notice_key(
+        rd.UNREGISTERED_DM, ["a"]
+    )
+
+
+def test_another_file_in_an_unregistered_series_does_not_buy_another_dm(
+    rig, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    """驗收條件④ 的端到端那一半 —— 身份是**系列**，所以同事再丟一個進去也不多一則。"""
+    rig.roots = [_root(STRANGER, _audio("a.m4a", "s1"))]
+    _main(monkeypatch, rig)              # 首次執行：這一則 DM 已經發過了
+    capsys.readouterr()
+    assert len(rig.dms) == 1
+
+    rig.roots = [_root(STRANGER, _audio("a.m4a", "s1"), _audio("b.m4a", "s2"))]
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    assert len(rig.dms) == 1, "同一個系列多一個音檔，要做的事還是同一件"
+
+
+def test_another_misplaced_file_in_a_registered_series_does_buy_another_dm(
+    rig, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    """逐檔那則相反：身份是那幾個 Drive 檔案 id，多一個檔就是一則有新資訊的提醒。
+
+    這兩條一起看才是這張票的分界本身 —— 已登記的移進日期資料夾下一輪就會產（可執行，
+    所以值得為新的檔案再響一次），未登記的移了也產不出來。
+    """
+    _misplace(rig, _audio("a.m4a", "a1"))
+    _main(monkeypatch, rig)
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+    assert len(rig.dms) == 1, "同一個檔案不會在同一天講第二次"
+
+    rig.roots = [_root(DATA_FOLDER, _audio("a.m4a", "a1"), _audio("b.m4a", "a2"))]
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    assert len(rig.dms) == 2
+    assert "b.m4a" in rig.dms[-1][0][0]
+
+
+def test_a_dm_that_failed_to_send_is_retried_next_round(
+    rig, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    """送不出去不算發過 —— 同 channel 那條。先記起來的話，Slack 掛掉那天就再也不提醒。"""
+    rig.slack_up = False
+    _misplace(rig, _audio("錄音.m4a", "a1"))
+    for _ in range(3):
+        _main(monkeypatch, rig)
+        capsys.readouterr()
+
+    assert len(rig.dms) == 3
+
+
+def test_a_blocked_round_still_dms_every_time(
+    rig, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    """去重只包住「有東西躺在那裡沒動」那兩則。
+
+    `dm_blocked` 是「這一輪停了」—— 每一輪都是一次新的失敗，壓成一天一次會讓連續
+    24 小時掛掉看起來像只掛了一次。
+    """
+    rig.folders = [_folder(DATA_FOLDER, 0, (_audio(),))]
+    monkeypatch.setattr(rd, "notebooklm_gap", lambda *a, **k: "❌ 沒有登入")
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    assert _main(monkeypatch, rig) == 1
+    assert _main(monkeypatch, rig) == 1
+    capsys.readouterr()
+
+    assert len(rig.dms) == 2, "每一輪都要講一次"
 
 
 # ------------------------------------------------- 同日多場：YYYYMMDD_<場次>（#56）
