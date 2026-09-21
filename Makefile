@@ -60,6 +60,17 @@ MUT_LOG := .mutmut-run.log
 #（不是資料夾、而且是音檔）任何一道被變異掉，症狀都是每小時對整個會議 channel 喊一次
 # 假警報 —— 而假警報跟無聲一樣會讓人學會忽略這條通知。`notify_once` / `notify_misplaced`
 # 同 `notify_channel`，是 I/O 那一層。
+# `when_label` 與 `_by_date` 是 #56／#53 加的：前者決定訊息指認的是日期、日期＋場次還是
+# 資料夾名（指錯的症狀是 channel 裡兩場長得一模一樣），後者是同日多場的處理順序。
+# local_archive.py 的那五支是同日多場的**共用詞彙**（#56／#53）：資料夾名怎麼拆
+# （`parse_date_dir`）、檔名尾端的場次（`note_instance`）、場次的真實時序
+# （`instance_rank` / `instance_order_key`）、以及 Drive 日期資料夾怎麼命名
+# （`date_dir_name`）。掃描層、歷史索引、補齊腳本與發佈層四支都吃它們，各抄一份的話
+# 版面改了只會改到其中一份 —— 而 `instance_rank` 回 `None` 那條路徑（定不出序）錯掉的
+# 症狀是「索引靜靜地照字母序」，正是 #53 的病本身。其餘的（`clean_for_filename` /
+# `note_title` / `archive_paths` / `sidecar_content` / `write_local_archive` /
+# `_configured_root`）不掛：它們是 #6 的既有介面，這張票沒有為它們補測試，掛進去只會
+# 多一牆 🫥 no-tests。
 PURE := \
 	outline \
 	open_items \
@@ -116,7 +127,14 @@ PURE := \
 	prune_sent \
 	compute_misplaced \
 	dm_misplaced \
-	misplaced_notice
+	misplaced_notice \
+	when_label \
+	_by_date \
+	parse_date_dir \
+	note_instance \
+	instance_rank \
+	instance_order_key \
+	date_dir_name
 
 # key 的形狀是 `<路徑轉點>.x_<函式名>__mutmut_<n>` —— `x_` 前綴是 mutmut 加的，
 # 少了它 fnmatch 一個都配不到，而配不到時 mutmut 是 assert 不是靜靜跳過。

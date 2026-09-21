@@ -6,8 +6,10 @@ reconcile_drive.py - 每小時掃 Shared Drive：日期資料夾有音檔、沒�
 腳本當掉，錯過就永遠錯過。這支靠「現在長怎樣」：漏掉一輪下一輪自己補回來，沒有差集
 就不動。兩個都做是多一條程式路徑換低延遲，而會議記錄不需要秒級。
 
-    {Shared Drive}/{系列資料夾}/{YYYYMMDD}/
-                        │      │     └─ 日期來自資料夾名，不從檔名解析
+    {Shared Drive}/{系列資料夾}/{YYYYMMDD}[_{場次}]/
+                        │      │            │      └─ 一天多場：各開一個資料夾，
+                        │      │            │         後綴成為該場的 meeting_instance
+                        │      │            └─ 日期來自資料夾名，不從檔名解析
                         │      └─ 音檔掉在這一層 ──▶ 不產，只提醒（沒有日期可信）
                         └─ 反查設定檔的 folder_name → 這是哪種會議
 
@@ -20,8 +22,9 @@ reconcile_drive.py - 每小時掃 Shared Drive：日期資料夾有音檔、沒�
 | 首次執行（沒有狀態檔） | 強制 dry-run，只印差集 |
 | 每輪處理上限 | `MAX_PER_ROUND` 場。判準寫錯時不會一次燒 20 次 NotebookLM |
 | 系列資料夾在設定檔裡找不到 | 不產，只 DM。缺會議類型脈絡，硬產出來的是壞的 |
-| 同一個日期資料夾有多個音檔 | 不產，只 DM。挑一個產會讓另一半永遠沒有機會 |
-| 音檔躺在系列資料夾根目錄 | 不產，兩軌提醒「請移進 `YYYYMMDD` 資料夾」。沒有日期資料夾就沒有可信的日期 |
+| 同一個日期資料夾有多個音檔 | 不產。挑一個產會讓另一半永遠沒有機會。訊息帶著下一步：一天多場請各開一個 `YYYYMMDD_<場次>` |
+| 日期資料夾名兩種形狀都不是 | 不產，但**不靜靜跳過**（裡面有音檔時）。跳過等於那個資料夾是隱形的 |
+| 音檔躺在系列資料夾根目錄 | 不產，兩軌提醒「請移進日期資料夾」。沒有日期資料夾就沒有可信的日期 |
 | 任何一場沒產出（跳過或失敗） | **兩軌**：維運者 DM 拿技術細節，會議 channel 拿「有人在處理」的提醒 |
 | 同一場、同一個原因連續命中 | channel 那則一天只發一次（狀態檔記到 `notified`）。DM 照舊每輪 |
 | 該會議類型沒設 `slack_channel` | 記錄照產，通知走 DM fallback（`channel.py` 的三態） |
@@ -78,7 +81,13 @@ from extract_audio_sources import (
     load_config,
 )
 from channel import SEND, channel_id, channel_state
-from local_archive import DATE_DIR, NOTE_PREFIX
+from local_archive import (
+    DATE_DIR_EXAMPLE,
+    DATE_DIR_SHAPES,
+    NOTE_PREFIX,
+    instance_order_key,
+    parse_date_dir,
+)
 from send_slack_notification import format_date_display, send_channel, send_dm
 
 STATE_PATH = CONFIG_DIR / "reconcile-state.json"
@@ -93,10 +102,16 @@ DOC_MIME = "application/vnd.google-apps.document"
 # 與 SKILL.md 的「輸入類型與路由」同一份清單。
 AUDIO_SUFFIXES = (".m4a", ".mp3", ".wav", ".aac", ".flac", ".ogg", ".opus")
 
-# 掃到了但沒有產的三個理由。字串而非 enum：它們會被印進 stdout 與 DM，也會被測試
+# 掃到了但沒有產的四個理由。字串而非 enum：它們會被印進 stdout 與 DM，也會被測試
 # 逐字斷言（同 `channel.DM_HEADER`）。
 UNKNOWN_SERIES = "系列資料夾不在設定檔的任何會議類型"
-MULTI_AUDIO = "同一個日期資料夾有多個音檔"
+UNKNOWN_FOLDER = f"資料夾名不是 {DATE_DIR_SHAPES}，所以掃不到"
+# 「不產」的理由要**帶著下一步**。只講現象的話，看到 DM 的人知道系統沒動，卻不知道
+# 該把檔案搬去哪 —— 而「一天多場請各開一個資料夾」這個約定就是這樣一直是空的（#56）。
+MULTI_AUDIO = (
+    "同一個日期資料夾有多個音檔 —— 一天多場請各開一個資料夾"
+    f"（{DATE_DIR_SHAPES}，{DATE_DIR_EXAMPLE}）"
+)
 OVER_LIMIT = "超過本輪上限，下一輪會再看到"
 
 # 掃到了但**不在任何日期資料夾裡**的音檔。這不是「沒產」的第四個理由（它沒有場次、
@@ -111,15 +126,22 @@ DM_HEADER = "📮 每小時 reconcile 有東西需要你看一眼"
 # 這張票要省掉的那一趟。
 CHANNEL_HEADER = "📋 這場的會議記錄還沒產出來"
 MULTI_AUDIO_CAUSE = "這天的資料夾裡有不只一個錄音檔，系統不確定該用哪一個"
+UNKNOWN_FOLDER_CAUSE = "錄音放在一個系統認不得名字的資料夾裡，所以沒有被掃到"
 FAILED_CAUSE = "產製途中出了狀況"
+
+# 掃到了沒產、而且該讓會議成員知道的那幾個理由 → 給人看的那句。
+# `UNKNOWN_SERIES` 不在裡面：那些場次連 `meeting_key` 都沒有，不知道要發哪個 channel
+# （三態自然落在 `UNSET`），所以本來就只有維運者的 DM 會提到它們。`OVER_LIMIT` 也不在：
+# 下一輪就處理完了 —— 同 `dm_skipped`，每輪喊一次只會讓人學會忽略這則提醒。
+CHANNEL_CAUSES = {
+    MULTI_AUDIO: MULTI_AUDIO_CAUSE,
+    UNKNOWN_FOLDER: UNKNOWN_FOLDER_CAUSE,
+}
 
 # 放錯層那則的角色與上面兩則**相反**：那兩則是「有人在處理、你不用做什麼」，這一則
 # 是「只有你做得了、請去移動它」。所以另起一個抬頭，不共用 `CHANNEL_HEADER`。
 MISPLACED_HEADER = "📥 有一個錄音檔還沒進到日期資料夾"
 MISPLACED_CAUSE = "錄音檔放在系列資料夾最外層"
-
-# 排序鍵：**舊的先**。理由見 `compute_pending`；同一天有多場時用系列名定序，固定就好。
-_BY_DATE = attrgetter("date", "series")
 
 # 子行程的硬上限。NotebookLM 那段要上傳幾十段再等 AI 處理，所以給得寬；但一定要有，
 # 卡住的排程是「每小時卡一次而沒人知道」，不是「變紅」。
@@ -130,10 +152,20 @@ AUTH_TIMEOUT = 120
 
 
 class Session(NamedTuple):
-    """一個日期資料夾。`reason` 是空字串表示這場要產。"""
+    """一個日期資料夾。`reason` 是空字串表示這場要產。
+
+    `name` 是 Drive 上那個資料夾名本身（`20260916` 或 `20260916_am`），`date` 與
+    `instance` 是它拆出來的兩半；名字認不得時 `date` 與 `instance` 都是 `""`。
+
+    訊息一律指認 `name` 而不是 `date`：同日兩場的 `date` 一模一樣，只印日期的話讀 DM
+    的人分不出是哪一場 —— 而分不出是哪一場，跟這張票要修的「第二個資料夾是隱形的」
+    是同一種失明。
+    """
 
     series: str
+    name: str
     date: str
+    instance: str
     meeting_key: str | None
     audio: tuple[dict, ...]
     reason: str
@@ -225,29 +257,42 @@ def compute_pending(
 ) -> Round:
     """吃日期資料夾清單，吐這一輪的差集。**純函式** —— 不碰 Drive、不碰時鐘、不碰檔案。
 
-    `folders` 每筆是 `{"series": 系列資料夾名, "date": "YYYYMMDD",
+    `folders` 每筆是 `{"series": 系列資料夾名, "name": 日期資料夾名,
     "files": [{"id":…, "name":…, "mimeType":…}]}`；`known_series` 是系列資料夾名 →
     會議 key。
 
-    排序是 `(date, series)`，**舊的先**：積壓要從最舊的開始消化，不然一場久久沒人處理
-    的會議會永遠排在新的後面。上限之外的不是丟掉，是帶著 `OVER_LIMIT` 進 `skipped`
-    —— 丟掉的話沒有人知道這輪還欠幾場。
+    日期資料夾名有兩種合法形狀：`YYYYMMDD`，以及一天多場時各開一個的
+    `YYYYMMDD_<場次>`（`references/multi-session.md` 的 `meeting_instance`）。
+    兩種都不是的**不靜靜跳過** —— 帶著 `UNKNOWN_FOLDER` 進 `skipped`，讓它走通知那條
+    路。跳過的話那個資料夾是隱形的，而把檔案丟進去的人會以為已經丟進去了（#56）。
+
+    排序見 `_by_date`，**舊的先**：積壓要從最舊的開始消化，不然一場久久沒人處理的會議
+    會永遠排在新的後面。上限之外的不是丟掉，是帶著 `OVER_LIMIT` 進 `skipped` ——
+    丟掉的話沒有人知道這輪還欠幾場。
     """
     candidates: list[Session] = []
     skipped: list[Session] = []
 
     for folder in folders:
-        if not in_window(folder["date"], today):
+        parsed = parse_date_dir(folder["name"])
+        folder_date, instance = parsed or ("", "")
+        # 認不得的名字沒有日期，所以過不了窗 —— 窗的判斷只對認得出日期的那些做。
+        if parsed and not in_window(folder_date, today):
             continue
         files = folder["files"]
         if any(is_note(f) for f in files):
             continue
         audio = tuple(f for f in files if is_audio(f["name"]))
+        # 沒有音檔就沒有這場。認不得的資料夾也走這一關：`舊資料`、`備份` 這種本來就
+        # 不是要丟錄音的資料夾不該每小時提醒一次，而「裡面躺著錄音」正是「有人放錯地方」
+        # 唯一可靠的證據。
         if not audio:
             continue
 
         key = known_series.get(folder["series"])
-        if not key:
+        if not parsed:
+            reason = UNKNOWN_FOLDER
+        elif not key:
             reason = UNKNOWN_SERIES
         elif len(audio) > 1:
             reason = MULTI_AUDIO
@@ -255,17 +300,31 @@ def compute_pending(
             reason = ""
         session = Session(
             series=folder["series"],
-            date=folder["date"],
+            name=folder["name"],
+            date=folder_date,
+            instance=instance,
             meeting_key=key,
             audio=audio,
             reason=reason,
         )
         (skipped if reason else candidates).append(session)
 
-    candidates.sort(key=_BY_DATE)
+    candidates.sort(key=_by_date)
     skipped += [s._replace(reason=OVER_LIMIT) for s in candidates[limit:]]
-    skipped.sort(key=_BY_DATE)
+    skipped.sort(key=_by_date)
     return Round(candidates[:limit], skipped)
+
+
+def _by_date(session: Session) -> tuple:
+    """排序鍵：**舊的先**，同一天照場次的真實時序，再用系列名定死。
+
+    同日兩場照字母序排的話 `_afternoon` 會排到 `_am` 前面（`af` < `am`），而積壓是從
+    最前面開始消化的 —— 用的是 `instance_order_key` 本人，與 `history_index.find_notes`
+    同一支判準，不在這裡另寫一次（兩份會靜靜地漂開，而漂開時兩邊都不會變紅）。
+
+    認不得名字的那些 `date` 是 `""`，排在所有日期之前 —— 它們是最需要有人動手的那幾筆。
+    """
+    return (session.date, instance_order_key(session.instance), session.series)
 
 
 def compute_misplaced(roots: list[dict], known_series: dict[str, str]) -> list[Misplaced]:
@@ -414,7 +473,7 @@ def dm_skipped(skipped: list[Session]) -> str:
     if not needs_human:
         return ""
     lines = [f"{DM_HEADER}：{len(needs_human)} 場掃到了但沒有產"]
-    lines += [f"• {s.series}/{s.date}　{s.reason}" for s in needs_human]
+    lines += [f"• {s.series}/{s.name}　{s.reason}" for s in needs_human]
     lines.append(f"設定檔：{CONFIG_PATH}")
     return "\n".join(lines)
 
@@ -431,15 +490,34 @@ def dm_blocked(detail: str, count: int) -> str:
     return f"{head}\n{detail}"
 
 
-def failure_notice(series_name: str, date_str: str, cause: str) -> str:
+def when_label(session: Session) -> str:
+    """訊息裡指認「是哪一場」的那一段。
+
+    認得出日期就印 `YYYY/MM/DD`，同日多場再帶上場次 —— 兩場的日期一模一樣，只印日期
+    的話 channel 裡的人不知道講的是上午還是下午那場。
+
+    認不得的資料夾名就印**名字本身**：那正是要請人改的那個東西，而
+    `format_date_display("")` 會印成 `//`，等於把唯一的線索換成噪音。
+    """
+    if not session.date:
+        return session.name
+    display = format_date_display(session.date)
+    return f"{display} {session.instance}" if session.instance else display
+
+
+def failure_notice(series_name: str, when: str, cause: str) -> str:
     """會議 channel 那一則的字。`cause` 是給人看的那句，不是例外訊息。
 
     三句話：哪一場、為什麼、以及「已經有人在處理、你不用做什麼」。最後那句是這則訊息
     的**角色本身** —— 少了它，channel 裡看到的人會開始猜自己該不該補做點什麼，而修復
-    負責人始終是維運者。
+    負責人始終是維運者。所以 `cause` 只講現象不講下一步：下一步是維運者的事，寫進這
+    則會跟最後那句自相矛盾（要請人動手的那句在 `dm_skipped` 的 `reason` 裡）。
+
+    `when` 是已經給人看過的那串（`when_label`），不是 `YYYYMMDD` —— 同日多場與認不得
+    的資料夾名都要指認得出來，而那個判斷不屬於「怎麼排版這三行」。
     """
     return "\n".join([
-        f"{CHANNEL_HEADER}：{series_name} {format_date_display(date_str)}",
+        f"{CHANNEL_HEADER}：{series_name} {when}",
         f"原因：{cause}",
         "已經有人收到通知會去處理，這則只是讓大家知道記錄會晚一點到，不需要做任何事。",
     ])
@@ -452,14 +530,15 @@ def misplaced_notice(series_name: str, file_name: str) -> str:
     沒有人能代替丟檔案的人把它移進日期資料夾，維運者也不行（他不知道那是哪一天的
     會議）。所以這則講的是**下一步**：移到哪裡、移完會發生什麼。
 
-    只講 `YYYYMMDD`，不講 `YYYYMMDD_<場次>`：掃描認的是 `DATE_DIR` 的八位數字
-    `fullmatch`，帶後綴的資料夾一樣掃不到 —— 叫人建一個照樣無聲的資料夾，等於把這
-    張票要修的那個體感再演一次。同一天兩場的處理在 `references/multi-session.md`。
+    形狀那句引 `DATE_DIR_SHAPES` / `DATE_DIR_EXAMPLE`，**不在這裡寫一次字面值**：
+    這則訊息原本只講 `YYYYMMDD`，因為帶後綴的資料夾當時掃不到；#56 讓
+    `YYYYMMDD_<場次>` 生效之後那句話就不完整了，而它不會讓任何測試變紅。共用來源之後，
+    下次再擴充形狀時漏改的只會是註解，不會是叫人怎麼做的那句話。
     """
     return "\n".join([
         f"{MISPLACED_HEADER}：{file_name}",
         f"它放在「{series_name}」的最外層，沒有日期就不知道是哪一天的會議，所以不會產記錄。",
-        "請把它移進該場會議的 YYYYMMDD 資料夾（例：20260921），下一輪就會自己產。",
+        f"請把它移進該場會議的日期資料夾（{DATE_DIR_SHAPES}，{DATE_DIR_EXAMPLE}），下一輪就會自己產。",
     ])
 
 
@@ -473,20 +552,25 @@ def dm_misplaced(items: list[Misplaced]) -> str:
         return ""
     lines = [f"{DM_HEADER}：{len(items)} 個音檔躺在系列資料夾根目錄"]
     lines += [f"• {i.series}/{i.name}" for i in items]
-    lines.append("請它們的主人移進 YYYYMMDD 資料夾，在那之前這幾個不會有記錄。")
+    lines.append(
+        f"請它們的主人移進日期資料夾（{DATE_DIR_SHAPES}），在那之前這幾個不會有記錄。"
+    )
     return "\n".join(lines)
 
 
-def notice_key(series: str, date_str: str, cause: str) -> str:
+def notice_key(series: str, folder: str, cause: str) -> str:
     """去重的身份：**同一場、同一個原因**。
+
+    `folder` 是日期資料夾名而不是日期：同日兩場（`20260916_am`／`20260916_pm`）是兩場
+    不同的會議，用日期當身份的話第二場那天永遠不會被提醒。
 
     原因用的是給人看的那句（`MULTI_AUDIO_CAUSE` / `FAILED_CAUSE`），不是例外訊息 ——
     例外訊息每輪都可能差一個暫存路徑，拿它當 key 等於每一輪都是全新的一則。
 
-    中間那格是「這一則在講哪一個東西」，場次那條路徑放日期；放錯層那條沒有日期，
-    放的是 Drive 檔案 id（理由見 `notify_misplaced`）。
+    中間那格是「這一則在講哪一個東西」，場次那條路徑放**日期資料夾名**；放錯層那條
+    連資料夾都沒有，放的是 Drive 檔案 id（理由見 `notify_misplaced`）。
     """
-    return f"{series}/{date_str}/{cause}"
+    return f"{series}/{folder}/{cause}"
 
 
 def notice_due(sent: dict[str, str], key: str, today: str) -> bool:
@@ -548,11 +632,20 @@ def scan_drive(drive, meetings: dict, today: str) -> Scan:
     一個不是）是每個系列每小時多一次 round-trip，換來的只是把 `if` 從這裡搬到 Drive。
 
     窗的判斷用的是 `in_window` 本人，不是在這裡另寫一次 —— 兩份會靜靜地漂開，而漂開
-    的症狀是「掃描層說不在窗內、差集層說在」，兩邊都不會變紅。
+    的症狀是「掃描層說不在窗內、差集層說在」，兩邊都不會變紅。名字的拆法同理，用
+    `parse_date_dir` 本人。
 
     根目錄那份**不套窗**：Drive 的 `files().list()` 給不出「這個檔案是哪一天的會議」，
     而修改時間不是會議日期（同事可能上週錄、今天才丟）。一個系列的最外層本來就該是
     空的，所以全部回報，由 `compute_misplaced` 濾出音檔。
+
+    **名字認不得的資料夾照樣列檔案。** 窗過不了的不列（省一次 API），但認不得的不能省
+    —— 差集層要靠「裡面有沒有音檔」分辨「有人放錯地方」與「這本來就不是收件夾」，
+    不列就等於把那個判斷換成「一律提醒」。
+
+    ponytail: 天花板是每個認不得的資料夾每輪多一次 `files().list()`。它們是誤打的名字，
+    不該有幾十個；真的堆起來了，要升級的是請人改名或搬走，不是在這裡加一份忽略清單
+    —— 忽略清單會把「掃不到」重新變成隱形的。
     """
     listings: list[dict] = []
     roots: list[dict] = []
@@ -562,13 +655,12 @@ def scan_drive(drive, meetings: dict, today: str) -> Scan:
         for folder in children:
             if folder.get("mimeType") != FOLDER_MIME:
                 continue
-            if not DATE_DIR.fullmatch(folder["name"]):
-                continue
-            if not in_window(folder["name"], today):
+            parsed = parse_date_dir(folder["name"])
+            if parsed and not in_window(parsed[0], today):
                 continue
             listings.append({
                 "series": series["name"],
-                "date": folder["name"],
+                "name": folder["name"],
                 "files": list_all(drive, f"'{folder['id']}' in parents and trashed=false"),
             })
     return Scan(listings, roots)
@@ -664,13 +756,20 @@ def generate(drive, session: Session, config: dict, workdir: Path) -> str:
         )
 
     # 不帶 --audio-file／--delete-local-audio：Drive 上那份是原件，本機這份是暫存。
-    publish = run_step([
+    publish_cmd = [
         "uv", "run", "scripts/create_gdoc_from_md.py",
         "--meeting", session.meeting_key,
         "--date", session.date,
         "--content-file", str(notes),
         "--source-dir", str(sources),
-    ], PUBLISH_TIMEOUT)
+    ]
+    # 場次後綴一路帶到 Doc 名、本機檔名與 **Drive 的日期資料夾**（`date_dir_name`）。
+    # 不帶的話兩場撞成同一個 Doc 名，而且 Doc 會被建進 `20260916`，音檔卻躺在
+    # `20260916_am` —— 下一輪 `is_note` 在那個資料夾裡還是找不到記錄，於是每小時重產
+    # 一次並覆寫前一次的成果。那正是「多算一場」那一側的代價。
+    if session.instance:
+        publish_cmd += ["--title-suffix", session.instance]
+    publish = run_step(publish_cmd, PUBLISH_TIMEOUT)
     url = parse_handoff(publish.stdout).get("RESULT_URL")
     if publish.returncode != 0 or not url:
         raise RuntimeError(
@@ -684,9 +783,9 @@ def generate(drive, session: Session, config: dict, workdir: Path) -> str:
 def report(round_: Round, misplaced: list[Misplaced] = ()) -> None:
     print(f"\n📋 差集：{len(round_.pending)} 場要產、{len(round_.skipped)} 場沒產")
     for session in round_.pending:
-        print(f"   產　 {session.series}/{session.date}　{session.audio[0]['name']}")
+        print(f"   產　 {session.series}/{session.name}　{session.audio[0]['name']}")
     for session in round_.skipped:
-        print(f"   不產 {session.series}/{session.date}　{session.reason}")
+        print(f"   不產 {session.series}/{session.name}　{session.reason}")
     for item in misplaced:
         print(f"   不產 {item.series}/{item.name}　{MISPLACED}")
 
@@ -758,13 +857,18 @@ def notify_channel(
 ) -> None:
     """掃到了沒產的那一則：告知那場會的人，不是求救。維運者的 DM 另外送，內容不同。
 
-    去重的身份是**同一場、同一個原因**（`notice_key`），日期來自日期資料夾。
+    去重的身份是**同一場、同一個原因**（`notice_key`），而「哪一場」是**日期資料夾名**
+    不是日期：同日兩場（`20260916_am`／`20260916_pm`）用日期當身份的話，第二場那天
+    永遠不會被提醒。認不得名字的資料夾也走這裡 —— 它知道自己在哪個系列底下，所以
+    三態算得出來（見 `CHANNEL_CAUSES`）。
     """
     meeting = meetings.get(session.meeting_key or "", {})
     notify_once(
         meeting,
-        notice_key(session.series, session.date, cause),
-        failure_notice(meeting.get("series_name", session.series), session.date, cause),
+        notice_key(session.series, session.name, cause),
+        failure_notice(
+            meeting.get("series_name", session.series), when_label(session), cause
+        ),
         state_path,
         today,
         send=send,
@@ -853,16 +957,14 @@ def main() -> int:
     notify(dm_skipped(round_.skipped))
     notify(dm_misplaced(misplaced))
 
-    # 掃到了沒產的那些，會議成員也該知道。`MULTI_AUDIO` 是唯一走到這裡的理由：
-    # `UNKNOWN_SERIES` 沒有 `meeting_key`（不知道是哪種會議就不知道要發哪個 channel，
-    # 三態自然落在 `UNSET`），`OVER_LIMIT` 下一輪就處理完了 —— 同 `dm_skipped`，
-    # 每輪喊一次只會讓人學會忽略。dry-run 與首次執行不對外發聲。
+    # 掃到了沒產的那些，會議成員也該知道。哪幾個理由走到這裡見 `CHANNEL_CAUSES`
+    # —— 新的理由要不要對外發聲是那張表的事，不是在這裡多一條 `or`。
+    # dry-run 與首次執行不對外發聲。
     quiet = args.dry_run or first_run
     for session in round_.skipped:
-        if session.reason == MULTI_AUDIO:
-            notify_channel(
-                session, MULTI_AUDIO_CAUSE, meetings, state_path, today, send=not quiet,
-            )
+        cause = CHANNEL_CAUSES.get(session.reason)
+        if cause:
+            notify_channel(session, cause, meetings, state_path, today, send=not quiet)
 
     # 掉在系列資料夾最外層的音檔。**不產任何記錄** —— 沒有日期資料夾就沒有可信的日期。
     # 一個檔案一則（身份是 Drive 檔案 id，見 `notify_misplaced`），因為要移動的是那個
@@ -897,15 +999,15 @@ def main() -> int:
     failures = 0
     for session in round_.pending:
         workdir = Path(tempfile.mkdtemp(prefix=f"gmn-reconcile-{session.date}-"))
-        print(f"\n▶️  {session.series}/{session.date}（{session.meeting_key}）→ {workdir}")
+        print(f"\n▶️  {session.series}/{session.name}（{session.meeting_key}）→ {workdir}")
         try:
             url = generate(drive, session, config, workdir)
-            print(f"✅ {session.series}/{session.date}　{url}")
+            print(f"✅ {session.series}/{session.name}　{url}")
         except Exception as exc:
             failures += 1
             # 兩軌：維運者拿到例外型別與訊息，會議成員拿到「這場還沒好、有人在處理」。
             notify(dm_blocked(
-                f"❌ {session.series}/{session.date}　{type(exc).__name__}: {exc}", 1
+                f"❌ {session.series}/{session.name}　{type(exc).__name__}: {exc}", 1
             ))
             notify_channel(session, FAILED_CAUSE, meetings, state_path, today)
         finally:

@@ -12,24 +12,34 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
 
-SCRIPTS = Path(__file__).resolve().parents[2] / "skills/comms/generate-meeting-notes/scripts"
-sys.path.insert(0, str(SCRIPTS))
+from tests.unit.conftest import load_script
 
-from local_archive import (  # noqa: E402
-    DEFAULT_ARCHIVE_DIRNAME,
-    SIDECAR_SUFFIX,
-    _configured_root,
-    archive_paths,
-    clean_for_filename,
-    note_title,
-    sidecar_content,
-    write_local_archive,
-)
+# **一定要走 `load_script`**，不能 `sys.path.insert` ＋ `import local_archive`：
+# mutmut 的 mutant key 是從檔案路徑算的（`skills.comms.….local_archive.x_<函式>`），
+# 而 trampoline 記的是模組的 `__name__`。裸名 import 記成 `local_archive.x_<函式>`，
+# 兩邊對不上 —— 症狀是這支模組的每顆 mutant 都變成 🫥 no-tests，而測試全綠。
+_la = load_script("local_archive")
+
+DATE_DIR_EXAMPLE = _la.DATE_DIR_EXAMPLE
+DATE_DIR_SHAPES = _la.DATE_DIR_SHAPES
+DEFAULT_ARCHIVE_DIRNAME = _la.DEFAULT_ARCHIVE_DIRNAME
+INSTANCE_ORDER = _la.INSTANCE_ORDER
+SIDECAR_SUFFIX = _la.SIDECAR_SUFFIX
+_configured_root = _la._configured_root
+archive_paths = _la.archive_paths
+clean_for_filename = _la.clean_for_filename
+date_dir_name = _la.date_dir_name
+instance_order_key = _la.instance_order_key
+instance_rank = _la.instance_rank
+note_instance = _la.note_instance
+note_title = _la.note_title
+parse_date_dir = _la.parse_date_dir
+sidecar_content = _la.sidecar_content
+write_local_archive = _la.write_local_archive
 
 NOTE = "# 會議記錄\n\n中文內容，結尾沒有多餘換行"
 
@@ -177,3 +187,129 @@ def test_clean_for_filename(raw, expected):
     「順手把非 ASCII 也清掉」—— 繁中識別碼是合法檔名。
     """
     assert clean_for_filename(raw) == expected
+
+
+# ------------------------------------------- 同日多場的共用詞彙（#56 / #53）
+#
+# 四支腳本吃這幾個函式：掃描層（`reconcile_drive`）、歷史索引（`history_index`）、
+# 補齊（`backfill_local_archive`）與發佈層（`create_gdoc_in_shared_drive`）。
+# 各抄一份的話版面改了只會改到其中一份，而症狀是「那一場永遠掃不到」或「索引順序反了」。
+
+
+DATE_DIRS = [
+    ("20260916", ("20260916", "")),
+    ("20260916_am", ("20260916", "am")),
+    ("20260916_project-x", ("20260916", "project-x")),
+    ("20260916_part1_combined", ("20260916", "part1_combined")),
+]
+NOT_DATE_DIRS = ["20260916_", "2026091", "202609161", "9月16日下午", "備份", "", "_am"]
+
+
+@pytest.mark.parametrize("name,expected", DATE_DIRS, ids=[n for n, _ in DATE_DIRS])
+def test_parse_date_dir_splits_the_date_from_the_session(name, expected):
+    assert parse_date_dir(name) == expected
+
+
+@pytest.mark.parametrize("name", NOT_DATE_DIRS, ids=[repr(n) for n in NOT_DATE_DIRS])
+def test_parse_date_dir_returns_none_for_a_name_it_cannot_read(name):
+    """回 `None` 而不是 `("", "")` —— 掃描層要據此發提醒，兩者不能壓成同一個值。
+
+    `20260916_` 那格是邊界：後綴是空的，形狀上不合法（`_` 後面什麼都沒有），
+    `(.+)` 認不得它。認成 `("20260916", "")` 的話會產出 `會議記錄_X_20260916_`。
+    """
+    assert parse_date_dir(name) is None
+
+
+NOTE_STEMS = [
+    ("會議記錄_PM會議_20260911_am", "am"),
+    ("會議記錄_PM會議_20260911_afternoon", "afternoon"),
+    ("會議記錄_PM會議_20260911", ""),
+    ("會議記錄_PM會議_20260911_part1_combined", "part1_combined"),
+    # 系列名自己含 8 位數字：右錨定才不會抽到 `預算會_20260911` 這種半個系列名。
+    ("會議記錄_20260101預算會_20260911_pm", "pm"),
+    ("會議記錄_沒有日期的檔名", ""),
+]
+
+
+@pytest.mark.parametrize("stem,expected", NOTE_STEMS, ids=[s for s, _ in NOTE_STEMS])
+def test_note_instance_reads_the_suffix_off_the_tail_of_the_filename(stem, expected):
+    assert note_instance(stem) == expected
+
+
+def test_instance_rank_orders_the_known_suffixes_by_time_of_day():
+    """`am` 在 `afternoon` 之前 —— 字母序剛好是反的（`af` < `am`），而那正是 #53。"""
+    assert instance_rank("am") < instance_rank("afternoon")
+    assert instance_rank("") < instance_rank("am")
+    assert instance_rank("morning") < instance_rank("noon") < instance_rank("pm")
+
+
+def test_instance_rank_is_case_insensitive():
+    """`references/multi-session.md` 規定小寫，但大小寫不同不該變成「定不出序」。"""
+    assert instance_rank("AM") == instance_rank("am")
+
+
+@pytest.mark.parametrize("instance", ["project-x", "part1-combined", "第二場"], ids=repr)
+def test_instance_rank_admits_it_cannot_order_an_arbitrary_suffix(instance):
+    """回 `None` 而不是一個很大的數字：呼叫端要分得出「排最後」與「不知道排哪」。
+
+    分不出來的話，退化行為就只剩「靜靜地排在後面」，而那是看不見的 —— 這張票要的
+    是說得出口的退化。
+    """
+    assert instance_rank(instance) is None
+
+
+def test_instance_order_key_puts_the_unorderable_after_every_known_session():
+    """截斷（`notes[-limit:]`）留下的是排最後的那幾份 —— 排前面的話會被砍掉。"""
+    last_known = max(instance_order_key(i) for i in INSTANCE_ORDER)
+
+    assert instance_order_key("project-x") > last_known
+
+
+def test_instance_order_key_keeps_the_known_ones_in_time_order():
+    assert instance_order_key("am") < instance_order_key("pm")
+
+
+DIR_NAMES = [
+    (("20260916", None), "20260916"),
+    (("20260916", ""), "20260916"),
+    (("20260916", "am"), "20260916_am"),
+    # Doc 名與資料夾名共用 `clean_for_filename`，兩邊才不會漂開。
+    (("20260916", "a/b"), "20260916_a-b"),
+]
+
+
+@pytest.mark.parametrize("args,expected", DIR_NAMES, ids=[e for _, e in DIR_NAMES] + [])
+def test_date_dir_name_matches_the_suffix_that_goes_into_the_doc_title(args, expected):
+    assert date_dir_name(*args) == expected
+
+
+def test_date_dir_name_and_note_title_agree_on_the_session():
+    """資料夾叫 `20260916_am`、Doc 叫 `會議記錄_X_20260916_am` —— 掃描層靠前者認出後者。
+
+    兩邊各自清洗的話，`a/b` 這種後綴會讓 Doc 落在一個掃描層找不到的資料夾裡。
+    """
+    folder = date_dir_name("20260916", "a/b")
+    title = note_title("PM會議", "20260916", "a/b")
+
+    assert title.endswith(folder.split("_", 1)[1])
+
+
+def test_every_shape_the_messages_promise_is_a_shape_the_parser_accepts():
+    """文案與判準共用一份來源 —— 各寫一次的話，判準擴充了而文案沒跟上，人會照著一份
+    過期的說明去建資料夾，而那個資料夾照樣掃不到。
+
+    這條量的是**方向**：訊息裡舉的每一個例子都要真的 parse 得過。反過來（判準認得的
+    形狀都要出現在文案裡）量不動 —— 形狀是正規表示式，不是一份可以枚舉的清單。
+    """
+    examples = DATE_DIR_EXAMPLE.split("：", 1)[1].split("、")
+
+    assert examples, DATE_DIR_EXAMPLE
+    for example in examples:
+        assert parse_date_dir(example) is not None, f"文案舉的例子掃不到：{example}"
+    assert any(parse_date_dir(e)[1] for e in examples), "至少要有一個帶場次的例子"
+
+
+def test_the_shape_sentence_names_both_forms():
+    """只講 `YYYYMMDD` 的那一版正是 #57 的訊息在 #56 落地當天變得不完整的樣子。"""
+    assert "YYYYMMDD" in DATE_DIR_SHAPES
+    assert "YYYYMMDD_<場次>" in DATE_DIR_SHAPES

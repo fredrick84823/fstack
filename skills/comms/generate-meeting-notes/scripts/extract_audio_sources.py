@@ -811,16 +811,20 @@ def create_gdoc_in_shared_drive(
     docs = build("docs", "v1", credentials=creds)
     drive = build("drive", "v3", credentials=creds)
 
-    from local_archive import note_title
+    from local_archive import date_dir_name, note_title
 
     series_name = meeting["series_name"]
     series_folder_id = meeting["folder_id"]
     doc_title = note_title(series_name, date, title_suffix)
+    # 一天多場 → 各一個 `YYYYMMDD_<場次>` 資料夾，不是共用一個日期資料夾。
+    # 共用的話 reconcile 的掃描層在那個資料夾裡看到兩個音檔就停手（刻意的守衛），
+    # 而第二場的 Doc 也會跟第一場的音檔混在一起。
+    subfolder_name = date_dir_name(date, title_suffix)
 
     # 在 Shared Drive 建立（或重用）日期子資料夾
     existing = drive.files().list(
         q=(
-            f"'{series_folder_id}' in parents and name='{date}' "
+            f"'{series_folder_id}' in parents and name='{subfolder_name}' "
             "and mimeType='application/vnd.google-apps.folder' and trashed=false"
         ),
         supportsAllDrives=True,
@@ -829,12 +833,12 @@ def create_gdoc_in_shared_drive(
     ).execute().get("files", [])
     if existing:
         subfolder_id = existing[0]["id"]
-        print(f"\n📁 重用已存在的子資料夾：{date}")
+        print(f"\n📁 重用已存在的子資料夾：{subfolder_name}")
     else:
-        print(f"\n📁 建立子資料夾：{date}...")
+        print(f"\n📁 建立子資料夾：{subfolder_name}...")
         subfolder = drive.files().create(
             body={
-                "name": date,
+                "name": subfolder_name,
                 "mimeType": "application/vnd.google-apps.folder",
                 "parents": [series_folder_id],
             },

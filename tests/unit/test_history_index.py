@@ -797,6 +797,130 @@ def test_find_notes_counts_notes_not_dates(tmp_path: Path):
     assert got[0].parent.name == "20260902", "由舊到新：9/02 那場排在 9/11 兩場之前"
 
 
+# ------------------------------------------------- 同日多場次的排序（#53）
+#
+# 這幾條擋的都是同一種形狀：**靜靜地少東西**。索引是「未結案項目」的來源，同日兩場
+# 排反了的話 `notes[-limit:]` 砍掉的是較晚那場 —— 而那正是下一場的成稿子 agent 要接
+# 的最新狀態。順序錯不會讓任何流程報錯。
+
+
+#: 真實歸檔裡就有的那一組（PM 會議 9/11 兩場）。`af` < `am`，所以純檔名字串排序會把
+#: 下午那場排到上午那場前面 —— 語料選它不是為了湊，是因為它是這張票的發現來源。
+SAME_DAY = ("_am", "_afternoon")
+
+
+def test_find_notes_orders_the_same_day_by_real_time_not_by_spelling(tmp_path: Path):
+    """驗收條件1 —— `會議記錄_…_afternoon.md` < `…_am.md` 是字串比較的事實（`af` < `am`）。
+
+    這條刪掉 → 索引 docstring 承諾的「由舊到新」在同日多場時不成立，而 agent 讀到的
+    上下文順序是倒的。
+    """
+    for suffix in SAME_DAY:
+        _put(tmp_path, "20260911", name=_note_name("PM會議", "20260911", suffix))
+
+    got = hi.find_notes(tmp_path, FOLDER, "20260918")
+
+    assert [p.name for p in got] == [
+        _note_name("PM會議", "20260911", "_am"),
+        _note_name("PM會議", "20260911", "_afternoon"),
+    ]
+
+
+def test_find_notes_truncation_drops_the_earlier_session_of_a_day(tmp_path: Path):
+    """驗收條件2 —— 名額不夠時砍掉的要是**較舊**那場。
+
+    這條比上一條嚴重：順序錯只是讀起來怪，砍錯邊是把最新的未結案狀態整場丟掉，而
+    下一場的成稿子 agent 從此看不到它。失敗模式是靜靜地少東西。
+    """
+    for suffix in SAME_DAY:
+        _put(tmp_path, "20260911", name=_note_name("PM會議", "20260911", suffix))
+
+    got = hi.find_notes(tmp_path, FOLDER, "20260918", limit=1)
+
+    assert [p.name for p in got] == [_note_name("PM會議", "20260911", "_afternoon")]
+
+
+def test_find_notes_puts_the_unsuffixed_note_before_the_suffixed_ones(tmp_path: Path):
+    """沒有後綴是「當天只有一場」的形狀 —— 後來補了第二場時它排在前面，不是最後。"""
+    _put(tmp_path, "20260911", name=_note_name("PM會議", "20260911"))
+    _put(tmp_path, "20260911", name=_note_name("PM會議", "20260911", "_pm"))
+
+    got = hi.find_notes(tmp_path, FOLDER, "20260918")
+
+    assert [p.name for p in got] == [
+        _note_name("PM會議", "20260911"),
+        _note_name("PM會議", "20260911", "_pm"),
+    ]
+
+
+def test_find_notes_sorts_an_unorderable_suffix_after_the_known_ones(tmp_path: Path):
+    """驗收條件3 的排法 —— 定不出序的排**後面**，截斷時留下來的是它。
+
+    留它而不是留已知的上午場：索引存在的理由是把最新的未結案狀態交給下一場，而
+    「不知道是第幾場」比「已知的上午場」更可能是最新那一份。
+    """
+    _put(tmp_path, "20260911", name=_note_name("PM會議", "20260911", "_am"))
+    _put(tmp_path, "20260911", name=_note_name("PM會議", "20260911", "_project-x"))
+
+    got = hi.find_notes(tmp_path, FOLDER, "20260918")
+
+    assert [p.name for p in got] == [
+        _note_name("PM會議", "20260911", "_am"),
+        _note_name("PM會議", "20260911", "_project-x"),
+    ]
+    assert hi.find_notes(tmp_path, FOLDER, "20260918", limit=1) == [got[-1]]
+
+
+def test_find_notes_says_out_loud_which_suffixes_it_could_not_order(
+    tmp_path: Path, capsys
+):
+    """驗收條件3 的「明確」那一半 —— 退化行為要說得出口，不是靜靜地照字母序。
+
+    這條刪掉 → 退化回「排在後面」這個**看不見**的約定，而同一天兩場的相對順序從此
+    只能靠讀碼才知道是不是對的。
+    """
+    for suffix in ("_am", "_project-x"):
+        _put(tmp_path, "20260911", name=_note_name("PM會議", "20260911", suffix))
+
+    hi.find_notes(tmp_path, FOLDER, "20260918")
+    out = capsys.readouterr().out
+
+    assert _note_name("PM會議", "20260911", "_project-x") in out
+    assert _note_name("PM會議", "20260911", "_am") not in out, "認得出序的不該被點名"
+    assert "am" in out and "pm" in out, "要說得出該改成什麼，不然點名了也沒用"
+
+
+def test_find_notes_names_every_day_it_could_not_order(tmp_path: Path, capsys):
+    """兩天各有一份定不出序的 —— 那一行要兩個都列，而且是**一行一份清單**。
+
+    這條刪掉 → `unorderable +=` 退化成 `=` 時，只有最後一天會被點名，前面幾天靜靜
+    消失。同一句話也釘住分隔符：黏成一串的話讀的人分不出那是一份還是兩份。
+    """
+    for date in ("20260904", "20260911"):
+        _put(tmp_path, date, name=_note_name("PM會議", date, "_am"))
+        _put(tmp_path, date, name=_note_name("PM會議", date, "_project-x"))
+
+    hi.find_notes(tmp_path, FOLDER, "20260918", limit=10)
+    out = capsys.readouterr().out
+
+    both = [_note_name("PM會議", d, "_project-x") for d in ("20260904", "20260911")]
+    assert "、".join(both) in out
+
+
+def test_find_notes_stays_quiet_when_the_day_has_only_one_note(tmp_path: Path, capsys):
+    """當天只有一場時排序沒有意義 —— 為它每輪印一行只會讓人學會忽略這一行。
+
+    這條刪掉 → 歸檔裡每一份帶自訂後綴的正式稿每輪都被點名一次，而真正需要看的那幾行
+    就淹在裡面。
+    """
+    _put(tmp_path, "20260911", name=_note_name("PM會議", "20260911", "_project-x"))
+
+    got = hi.find_notes(tmp_path, FOLDER, "20260918")
+
+    assert len(got) == 1
+    assert capsys.readouterr().out == ""
+
+
 def test_find_notes_skips_date_folders_with_no_note(tmp_path: Path):
     """只有 source artifacts、沒有正式稿的日期資料夾（發佈失敗的那種）直接跳過。"""
     _put(tmp_path, "20260824")
