@@ -56,6 +56,10 @@ MUT_LOG := .mutmut-run.log
 # 去重那兩支（`notice_key` / `notice_due`）最該被 mutant 問一次 —— `!=` 變成 `==` 的症狀
 # 是「該提醒的那天不提醒、不該提醒的每輪都提醒」，兩個方向都不會讓任何東西變紅。
 # `notify_channel` 不掛：它讀寫狀態檔、發 Slack，是 I/O 那一層（判準已經切出來了）。
+# `compute_misplaced` 到 `misplaced_notice` 是 #57 加的「放錯層的音檔」：那兩道濾網
+#（不是資料夾、而且是音檔）任何一道被變異掉，症狀都是每小時對整個會議 channel 喊一次
+# 假警報 —— 而假警報跟無聲一樣會讓人學會忽略這條通知。`notify_once` / `notify_misplaced`
+# 同 `notify_channel`，是 I/O 那一層。
 PURE := \
 	outline \
 	open_items \
@@ -109,7 +113,10 @@ PURE := \
 	failure_notice \
 	notice_key \
 	notice_due \
-	prune_sent
+	prune_sent \
+	compute_misplaced \
+	dm_misplaced \
+	misplaced_notice
 
 # key 的形狀是 `<路徑轉點>.x_<函式名>__mutmut_<n>` —— `x_` 前綴是 mutmut 加的，
 # 少了它 fnmatch 一個都配不到，而配不到時 mutmut 是 assert 不是靜靜跳過。

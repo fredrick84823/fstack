@@ -368,7 +368,8 @@ cd "$SKILL_DIR" && uv run scripts/reconcile_drive.py --dry-run    # 只印差集
 
 ```
 {Shared Drive}/{系列資料夾}/{YYYYMMDD}/
-                    │            └─ 日期來自資料夾名，不需要檔名含 8 位連續數字
+                    │      │     └─ 日期來自資料夾名，不需要檔名含 8 位連續數字
+                    │      └─ 音檔掉在這一層 ──▶ 不產，提醒「請移進 YYYYMMDD 資料夾」
                     └─ 反查 config 的 folder_name → 這是哪種會議
 
 該日期資料夾有音檔 && 沒有會議記錄 Doc  ──▶ 產（流程 B → 流程 C → 發佈）
@@ -386,6 +387,7 @@ cd "$SKILL_DIR" && uv run scripts/reconcile_drive.py --dry-run    # 只印差集
 | 每輪處理上限 | 2 場。判準寫錯時不會一次燒 20 次 NotebookLM。**沒有旗標可以調** |
 | 系列資料夾在 config 裡完全找不到 | 不產，只 DM。缺會議類型脈絡，硬產出來的是壞的；也不知道要通知哪個 channel |
 | 同一個日期資料夾有多個音檔 | 不產。見 `references/multi-session.md` 手動處理 |
+| 音檔躺在系列資料夾根目錄（沒進日期資料夾） | 不產 —— 沒有日期資料夾就沒有可信的日期。**兩軌提醒**：維運者 DM 列出檔案，該會議的 channel 拿一則「請把它移進 `YYYYMMDD` 資料夾」。一個檔案一天一則（身份是 Drive 檔案 id，改名不算新檔案）。非音檔（正式稿、source artifacts、雜檔）不觸發 |
 | 任何一場沒產出（跳過或失敗） | **兩軌通知**：維運者 DM 拿例外型別與訊息，該會議的 channel 拿一則「哪一場、為什麼（人話）、已經有人在處理、不用做什麼」的提醒 |
 | 同一場、同一個原因每輪都命中 | channel 那則**一天只發一次**（記在狀態檔的 `notified`）；維運者的 DM 照舊每輪都發 |
 | 該會議類型沒設 channel | 記錄照產，通知走 DM fallback（`channel.py` 的三態）。**刻意設成空字串的會議連失敗提醒也不出聲** |
