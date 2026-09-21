@@ -433,16 +433,26 @@ def rig(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
         generated=[],
         workdirs=[],
         dms=[],
+        posts=[],
+        slack_up=True,
         runs=[],
+        config=copy.deepcopy(CONFIG),
         state=tmp_path / "reconcile-state.json",
     )
 
     monkeypatch.setattr(rd, "credential_gap", lambda *a, **k: "")
-    monkeypatch.setattr(rd, "load_config", lambda *a, **k: copy.deepcopy(CONFIG))
+    monkeypatch.setattr(rd, "load_config", lambda *a, **k: copy.deepcopy(rec.config))
     monkeypatch.setattr(rd, "get_google_credentials", lambda *a, **k: MagicMock())
     monkeypatch.setattr("googleapiclient.discovery.build", lambda *a, **k: rec.drive)
     monkeypatch.setattr(rd, "notebooklm_gap", lambda *a, **k: "")
     monkeypatch.setattr(rd, "send_dm", lambda *a, **k: rec.dms.append((a, k)))
+
+    def fake_channel(channel, text):
+        """Slack 兩支都是替身。`slack_up=False` 演「送不出去」—— 那時候不能記成發過。"""
+        rec.posts.append((channel, text))
+        return rec.slack_up
+
+    monkeypatch.setattr(rd, "send_channel", fake_channel)
 
     def fake_run(cmd, timeout, stdin=None):
         rec.runs.append([str(c) for c in cmd])
@@ -681,6 +691,214 @@ def test_generate_publishes_without_the_audio_flags(
     assert "--delete-local-audio" not in flat
 
 
+# ------------------------------------------------- 雙軌通知：維運者 DM ／ 會議 channel
+
+
+def test_the_channel_notice_names_the_meeting_the_cause_and_that_nobody_needs_to_act():
+    """三件事缺一不可。少了「有人在處理」那句，channel 裡的人會開始猜自己該補做什麼。"""
+    # 三句話各一行。拆開來對而不是整段 `in`：黏在一起的那幾種寫法（少一個換行、
+    # 每行前後多黏一段）整段 `in` 一條都看不出來。
+    head, why, reassurance = rd.failure_notice("Data內會", TODAY, rd.FAILED_CAUSE).splitlines()
+
+    assert "Data內會" in head
+    assert "2026/09/15" in head, "日期要給人看的格式，不是資料夾名那串"
+    assert why == f"原因：{rd.FAILED_CAUSE}"
+    assert reassurance.startswith("已經有人收到通知")
+    assert "不需要做任何事" in reassurance
+
+
+def test_the_two_tracks_are_not_the_same_message():
+    """驗收條件③ —— 同一個事件兩則訊息。開會的人不會去 debug，例外類別名只會讓他們
+    回頭來問維運者，而那正是這張票要省掉的那一趟。"""
+    dm = rd.dm_blocked(f"❌ {DATA_FOLDER}/{TODAY}　RuntimeError: 流程 B 失敗（退出碼 1）", 1)
+    channel = rd.failure_notice("Data內會", TODAY, rd.FAILED_CAUSE)
+
+    assert "RuntimeError" in dm
+    assert "RuntimeError" not in channel
+    assert channel != dm
+
+
+def test_notice_key_separates_the_meeting_the_day_and_the_cause():
+    """「同一場、同一個原因」是去重的身份。三個維度任何一個不同就是另一則。"""
+    base = rd.notice_key(DATA_FOLDER, TODAY, rd.FAILED_CAUSE)
+
+    assert base == rd.notice_key(DATA_FOLDER, TODAY, rd.FAILED_CAUSE)
+    assert base != rd.notice_key(PM_FOLDER, TODAY, rd.FAILED_CAUSE)
+    assert base != rd.notice_key(DATA_FOLDER, _shift(1), rd.FAILED_CAUSE)
+    assert base != rd.notice_key(DATA_FOLDER, TODAY, rd.MULTI_AUDIO_CAUSE)
+
+
+def test_notice_due_is_false_for_today_and_true_for_a_new_day():
+    """`!=` 寫成 `==` 的症狀是「該提醒的那天不提醒、不該提醒的每輪都提醒」。"""
+    sent = {"k": TODAY}
+
+    assert rd.notice_due(sent, "k", TODAY) is False
+    assert rd.notice_due(sent, "k", _shift(-1)) is True
+    assert rd.notice_due(sent, "沒發過的", TODAY) is True
+    assert rd.notice_due({}, "k", TODAY) is True
+
+
+def test_prune_sent_keeps_today_and_drops_the_older_rows():
+    """狀態檔是長命的，昨天的記錄對「一天一次」已經沒有作用。"""
+    assert rd.prune_sent({"a": TODAY, "b": _shift(1), "c": _shift(30)}, TODAY) == {"a": TODAY}
+
+
+def _boom(rig, monkeypatch: pytest.MonkeyPatch, message: str = "流程 B 失敗（退出碼 1）"):
+    """讓這輪的產製炸掉，並把一場有音檔的資料夾擺好。"""
+    monkeypatch.setattr(rd, "generate", lambda *a, **k: (_ for _ in ()).throw(RuntimeError(message)))
+    rig.folders = [_folder(DATA_FOLDER, 0, (_audio(),))]
+
+
+def test_a_failure_dms_the_operator_and_tells_the_meeting_channel(
+    rig, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    """驗收條件①②③ —— 一個事件、兩則訊息、兩個收件者。"""
+    rig.config["meetings"]["data"]["slack_channel"] = "C0DATA"
+    _boom(rig, monkeypatch)
+    _main(monkeypatch, rig)          # 首次執行：強制 dry-run
+    capsys.readouterr()
+
+    code = _main(monkeypatch, rig)
+    out = capsys.readouterr().out
+
+    assert code != 0
+    (channel, text), = rig.posts
+    assert channel == "C0DATA"
+    assert "RuntimeError" not in text
+    assert "已經有人收到通知" in text
+    assert text in out, "channel 那則也要留在 stdout 上"
+
+    (dm_args, _), = rig.dms
+    assert "RuntimeError" in dm_args[0], "維運者那則沒有技術細節就等於沒有除錯線索"
+
+
+def test_a_muted_meeting_stays_silent_even_when_it_fails(
+    rig, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    """三態照舊 —— 刻意設成空字串的會議不會因為這張票開始出聲。維運者照樣收得到。"""
+    rig.config["meetings"]["data"]["slack_channel"] = ""
+    _boom(rig, monkeypatch)
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    assert rig.posts == []
+    assert rig.dms, "安靜的是 channel，不是維運者"
+
+
+def test_a_meeting_with_no_channel_set_only_dms(rig, monkeypatch: pytest.MonkeyPatch, capsys):
+    """三態的第三態：還沒設定 → 沒有收件者可發，只有 DM。"""
+    assert "slack_channel" not in rig.config["meetings"]["data"]
+    _boom(rig, monkeypatch)
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    assert rig.posts == []
+    assert rig.dms
+
+
+def test_the_same_failure_tells_the_channel_once_a_day_then_again_tomorrow(
+    rig, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    """驗收條件⑤ —— 每小時一輪，同一場同一個原因會連續七天每輪都命中。
+
+    最後一輪的 `--today` 疊在 `_main` 那個之後，argparse 取後面那個。
+    """
+    rig.config["meetings"]["data"]["slack_channel"] = "C0DATA"
+    _boom(rig, monkeypatch)
+    for _ in range(3):
+        _main(monkeypatch, rig)
+        capsys.readouterr()
+
+    assert len(rig.posts) == 1, "同一天重複提醒會讓人學會忽略這個 channel"
+    assert len(rig.dms) == 2, "維運者的 DM 照舊每輪都發"
+
+    _main(monkeypatch, rig, "--today", _shift(-1))
+    capsys.readouterr()
+
+    assert len(rig.posts) == 2, "換一天之後就不是同一則提醒了"
+
+
+def test_a_channel_send_that_failed_is_retried_next_round(
+    rig, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    """送不出去不算發過。先記起來的話，Slack 掛掉那一天就再也不會提醒。"""
+    rig.config["meetings"]["data"]["slack_channel"] = "C0DATA"
+    rig.slack_up = False
+    _boom(rig, monkeypatch)
+    for _ in range(3):
+        _main(monkeypatch, rig)
+        out = capsys.readouterr().out
+
+    assert len(rig.posts) == 2, "第一輪是 dry-run，後兩輪各試一次"
+    assert "已經有人收到通知" in out, "Slack 送不出去時提醒不能跟著消失"
+
+
+def test_multi_audio_tells_the_channel_too(rig, monkeypatch: pytest.MonkeyPatch, capsys):
+    """驗收條件① 的「掃到但跳過」那一半 —— 沒產出來就是沒產出來，不分是哪一種。"""
+    rig.config["meetings"]["data"]["slack_channel"] = "C0DATA"
+    rig.folders = [
+        _folder(DATA_FOLDER, 0, (_audio(), _audio("錄音2.m4a", "audio-2")))
+    ]
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    (channel, text), = rig.posts
+    assert channel == "C0DATA"
+    assert rd.MULTI_AUDIO_CAUSE in text
+    assert rd.MULTI_AUDIO not in text, "channel 那則講人話，不是搬內部的理由字串"
+
+
+def test_an_unknown_series_never_reaches_a_channel(rig, monkeypatch: pytest.MonkeyPatch, capsys):
+    """不知道是哪一種會議就不知道要發哪個 channel —— 只有維運者收得到。"""
+    rig.folders = [_folder("誰的資料夾", 0, (_audio(),))]
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    assert rig.posts == []
+    assert rig.dms
+
+
+def test_the_over_limit_rows_never_reach_a_channel(rig, monkeypatch: pytest.MonkeyPatch, capsys):
+    """下一輪就會處理完。每輪對整個會議 channel 喊一次等於教大家忽略它。"""
+    rig.config["meetings"]["data"]["slack_channel"] = "C0DATA"
+    rig.folders = [_folder(DATA_FOLDER, n, (_audio(),)) for n in (0, 1, 2, 3)]
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    assert rig.posts == []
+
+
+def test_a_dry_run_never_posts_to_a_channel(rig, monkeypatch: pytest.MonkeyPatch, capsys):
+    """手動看一次差集不該對著整個會議 channel 喊「沒產出來」—— 那是假警報。"""
+    rig.config["meetings"]["data"]["slack_channel"] = "C0DATA"
+    rig.folders = [
+        _folder(DATA_FOLDER, 0, (_audio(), _audio("錄音2.m4a", "audio-2")))
+    ]
+    _main(monkeypatch, rig)          # 首次執行也是強制 dry-run
+    capsys.readouterr()
+    assert rig.posts == []
+
+    _main(monkeypatch, rig, "--dry-run")
+    capsys.readouterr()
+
+    assert rig.posts == []
+
+
 # ---------------------------------------------------------------- mutation 佈線
 
 
@@ -707,6 +925,7 @@ IO_LAYER = {
     "generate",
     "report",
     "notify",
+    "notify_channel",
     "main",
 }
 

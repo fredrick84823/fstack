@@ -124,6 +124,23 @@ def send_dm(text: str) -> bool:
     return _post(token, user, text, "提醒 DM")
 
 
+def send_channel(channel: str, text: str) -> bool:
+    """把提醒發到某個會議的 channel，回傳是否真的送出去了。
+
+    **與 `send_dm` 是兩個收件者，不是同一則的轉發**：這支送的是給開會的人看的提醒，
+    DM 那支送的是給維運者除錯用的技術細節。三態的判斷不在這裡 —— 呼叫端決定發不發
+    （`channel.channel_state`），這裡只負責送。
+
+    同 `send_dm`：沒 token 就印一行回 False，不 `sys.exit`。提醒本身已經印在 stdout 上。
+    """
+    token = load_config().get("slack_bot_token", "").strip()
+    if not token or not channel:
+        print("⚠️  沒有 slack_bot_token 或 channel，提醒只留在上面這段輸出裡")
+        return False
+
+    return _post(token, channel, text, "會議 channel 提醒")
+
+
 def main():
     parser = argparse.ArgumentParser(description="發送會議記錄完成通知到 Slack")
     parser.add_argument("--channel", required=True, help="Slack Channel ID（例：C0XXXXXXXXX）")

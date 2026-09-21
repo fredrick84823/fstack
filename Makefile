@@ -52,6 +52,10 @@ MUT_LOG := .mutmut-run.log
 # 與錯誤訊息的**字面值**，以及 `encoding="utf-8"` → `None`／`"UTF-8"`、
 # `"credentials.json"` → `"CREDENTIALS.JSON"`（這台的檔案系統大小寫不敏感）。那些不寫
 # 測試 —— 要殺就得逐字釘死文案，而那正是棒④ 會刪掉的裝飾性測試（同 `build_index`）。
+# `failure_notice` 到 `prune_sent` 是 #55 加的雙軌通知：一則給維運者、一則給會議成員。
+# 去重那兩支（`notice_key` / `notice_due`）最該被 mutant 問一次 —— `!=` 變成 `==` 的症狀
+# 是「該提醒的那天不提醒、不該提醒的每輪都提醒」，兩個方向都不會讓任何東西變紅。
+# `notify_channel` 不掛：它讀寫狀態檔、發 Slack，是 I/O 那一層（判準已經切出來了）。
 PURE := \
 	outline \
 	open_items \
@@ -101,7 +105,11 @@ PURE := \
 	prompt_file \
 	synthesis_prompt \
 	dm_skipped \
-	dm_blocked
+	dm_blocked \
+	failure_notice \
+	notice_key \
+	notice_due \
+	prune_sent
 
 # key 的形狀是 `<路徑轉點>.x_<函式名>__mutmut_<n>` —— `x_` 前綴是 mutmut 加的，
 # 少了它 fnmatch 一個都配不到，而配不到時 mutmut 是 assert 不是靜靜跳過。
