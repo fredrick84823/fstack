@@ -429,6 +429,7 @@ def rig(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     rec = SimpleNamespace(
         drive=MagicMock(name="drive"),
         folders=[],
+        roots=[],
         scanned=[],
         generated=[],
         workdirs=[],
@@ -462,7 +463,7 @@ def rig(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
 
     def fake_scan(drive, meetings, today):
         rec.scanned.append(drive)
-        return copy.deepcopy(rec.folders)
+        return rd.Scan(copy.deepcopy(rec.folders), copy.deepcopy(rec.roots))
 
     monkeypatch.setattr(rd, "scan_drive", fake_scan)
 
@@ -926,6 +927,8 @@ IO_LAYER = {
     "report",
     "notify",
     "notify_channel",
+    "notify_once",
+    "notify_misplaced",
     "main",
 }
 
@@ -1077,3 +1080,245 @@ def test_download_audio_only_asks_drive_for_the_bytes(
         n for n in touched
         if any(w in n for w in ("delete", "trash", "create", "update", "copy"))
     ]
+
+
+# ------------------------------------------------- 放錯層的音檔（issue #57）
+#
+# 「我丟了，然後什麼都沒發生」是這支腳本最容易踩到的失敗：檔案掉在系列資料夾最外層
+# 時，它不在 pending、不在 skipped，連維運者的 DM 都不會出現。所以這一節的斷言重心
+# 是**有沒有出聲**，以及**有沒有因此產出東西** —— 沒有日期資料夾就沒有可信的日期。
+
+
+def _root(series: str, *files: dict) -> dict:
+    """一個系列資料夾的直接子項。日期資料夾本人也在這份清單裡。"""
+    return {"series": series, "files": list(files)}
+
+
+def _subfolder(name: str) -> dict:
+    return {"id": f"folder-{name}", "name": name, "mimeType": rd.FOLDER_MIME}
+
+
+def test_an_audio_file_in_the_series_root_is_reported():
+    """驗收條件① —— 它現在在一份清單裡了。"""
+    roots = [_root(DATA_FOLDER, _subfolder(TODAY), _audio("錄音.m4a", "a1"))]
+
+    (item,) = rd.compute_misplaced(roots, KNOWN)
+
+    assert (item.series, item.meeting_key, item.file_id, item.name) == (
+        DATA_FOLDER, "data", "a1", "錄音.m4a",
+    )
+
+
+#: 系列資料夾最外層本來就會有這些東西。對它們出聲就是每小時假警報一次。
+INNOCENT = [
+    {"id": "d1", "name": "會議記錄_Data內會_20260915", "mimeType": rd.DOC_MIME},
+    {"id": "t1", "name": "transcript.md", "mimeType": "text/markdown"},
+    {"id": "x1", "name": "報帳.xlsx", "mimeType": "application/vnd.ms-excel"},
+    {"id": "n1", "name": "錄音.m4a.txt", "mimeType": "text/plain"},
+]
+
+
+@pytest.mark.parametrize("file", INNOCENT, ids=[_qid(f["name"]) for f in INNOCENT])
+def test_a_non_audio_file_in_the_series_root_stays_silent(file):
+    """驗收條件④ —— 正式稿、source artifacts、其他雜檔躺在那裡是正常的。"""
+    assert rd.compute_misplaced([_root(DATA_FOLDER, file)], KNOWN) == []
+
+
+def test_a_date_folder_is_not_a_misplaced_file():
+    """日期資料夾與最外層的檔案來自同一次 `files().list()`，濾網要擋得住資料夾。
+
+    副檔名那道濾網擋不了一個叫 `錄音.m4a` 的**資料夾** —— 而那正是 mimeType 那道在的
+    理由。少了它，每個系列的每個日期資料夾都會變成一則提醒。
+    """
+    roots = [_root(DATA_FOLDER, _subfolder(TODAY), _subfolder("錄音.m4a"))]
+
+    assert rd.compute_misplaced(roots, KNOWN) == []
+
+
+def test_a_misplaced_file_under_an_unknown_series_has_no_meeting_key():
+    """設定檔裡找不到的系列 → 沒有 `meeting_key` → 三態落在 `UNSET`，只有維運者收得到。"""
+    (item,) = rd.compute_misplaced([_root("誰的資料夾", _audio())], KNOWN)
+
+    assert item.meeting_key is None
+
+
+def test_misplaced_is_sorted_by_series_then_name():
+    """清單順序是 Drive 給的。每輪換一次順序會讓人以為內容變了。
+
+    三個名字刻意跟**系列順序**和 **Drive 檔案 id 的順序**都不一致：只按檔名排、或
+    照 `Misplaced` 欄位的自然順序排（`series, meeting_key, file_id, name` —— id 排在
+    name 前面）都會給出另一種答案，而那兩種在「名字剛好同序」的資料上看不出來。
+    """
+    roots = [
+        _root(PM_FOLDER, _audio("a.m4a", "p1")),
+        _root(DATA_FOLDER, _audio("z.wav", "d1"), _audio("b.mp3", "d2")),
+    ]
+
+    assert [(i.series, i.name) for i in rd.compute_misplaced(roots, KNOWN)] == [
+        (DATA_FOLDER, "b.mp3"),
+        (DATA_FOLDER, "z.wav"),
+        (PM_FOLDER, "a.m4a"),
+    ]
+
+
+def test_the_misplaced_notice_says_what_to_do_next_instead_of_sit_tight():
+    """驗收條件② —— 這則的角色與失敗那則**相反**：只有丟檔案的人移得動它。"""
+    head, why, nextstep = rd.misplaced_notice("Data內會", "錄音.m4a").splitlines()
+
+    assert "錄音.m4a" in head
+    assert "Data內會" in why
+    assert head.startswith(rd.MISPLACED_HEADER)
+    assert nextstep.startswith("請把它移進") and "YYYYMMDD" in nextstep
+    assert "不需要做任何事" not in nextstep, "這則要的正是對方做一件事"
+    assert "_場次" not in nextstep, "帶後綴的資料夾一樣掃不到，叫人建一個等於再演一次無聲"
+
+
+def test_dm_misplaced_is_empty_when_nothing_is_misplaced():
+    assert rd.dm_misplaced([]) == ""
+
+
+def test_dm_misplaced_puts_one_file_per_line():
+    """一個檔案一行 —— 黏成一行的話看不出到底有幾個、分別是哪幾個。"""
+    items = rd.compute_misplaced(
+        [_root(DATA_FOLDER, _audio("a.m4a", "a"), _audio("b.m4a", "b"))], KNOWN
+    )
+    lines = rd.dm_misplaced(items).splitlines()
+
+    assert len(lines) == 4, lines          # 抬頭 ＋ 兩個檔 ＋ 下一步
+    assert lines[0].startswith(rd.DM_HEADER)
+    assert lines[1].startswith("• ") and "a.m4a" in lines[1], lines[1]
+    assert lines[2].startswith("• ") and "b.m4a" in lines[2], lines[2]
+    assert lines[3].startswith("請"), "最後一行是下一步，不是又一個檔案"
+
+
+def _misplace(rig, *files: dict, series: str = DATA_FOLDER):
+    rig.config["meetings"]["data"]["slack_channel"] = "C0DATA"
+    rig.roots = [_root(series, *(files or (_audio(),)))]
+
+
+def test_a_misplaced_file_tells_both_tracks_and_generates_nothing(
+    rig, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    """驗收條件①②③ —— 兩軌都出聲，而且**一份記錄都沒產**。
+
+    「退出碼 0」不算證明沒產：硬從檔名推日期的那個版本照樣退 0。所以斷言是
+    `rd.generate` 一次都沒被呼叫。
+    """
+    _misplace(rig, _audio("錄音.m4a", "a1"))
+    _main(monkeypatch, rig)          # 首次執行：強制 dry-run
+    capsys.readouterr()
+
+    code = _main(monkeypatch, rig)
+    out = capsys.readouterr().out
+
+    assert code == 0
+    assert rig.generated == [], "沒有日期資料夾就沒有可信的日期，不該產任何記錄"
+    (channel, text), = rig.posts
+    assert channel == "C0DATA"
+    assert "錄音.m4a" in text and "YYYYMMDD" in text
+    assert text in out, "channel 那則也要留在 stdout 上"
+    (dm_args, _) = rig.dms[-1]
+    assert "錄音.m4a" in dm_args[0] and DATA_FOLDER in dm_args[0]
+
+
+def test_the_same_misplaced_file_is_mentioned_once_a_day_then_again_tomorrow(
+    rig, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    """每小時一輪，而沒有人移動它之前每輪都會再掃到 —— 不去重就是一天 24 則。"""
+    _misplace(rig, _audio("錄音.m4a", "a1"))
+    for _ in range(3):
+        _main(monkeypatch, rig)
+        capsys.readouterr()
+
+    assert len(rig.posts) == 1, "同一天重複提醒會讓人學會忽略這個 channel"
+    assert len(rig.dms) == 3, "維運者的 DM 照舊每輪都發（首次執行那輪也算）"
+
+    _main(monkeypatch, rig, "--today", _shift(-1))
+    capsys.readouterr()
+
+    assert len(rig.posts) == 2, "隔天還躺在那裡就再提醒一次"
+
+
+def test_renaming_the_file_does_not_buy_a_second_reminder_the_same_day(
+    rig, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    """去重的身份是 Drive 檔案 id，不是檔名。
+
+    看到提醒之後把檔名改成帶日期的是很自然的反應 —— 拿檔名當身份的話，那個有在處理
+    的人會因此多收到一則。
+    """
+    _misplace(rig, _audio("錄音.m4a", "a1"))
+    _main(monkeypatch, rig)
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+    assert len(rig.posts) == 1
+
+    rig.roots = [_root(DATA_FOLDER, _audio("20260915_錄音.m4a", "a1"))]
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    assert len(rig.posts) == 1, "同一個檔案改了名字還是同一個檔案"
+
+
+def test_two_misplaced_files_each_get_their_own_reminder(
+    rig, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    """一則只講一個檔案，所以身份不能是系列本身 —— 不然另一個要等到隔天才被提到。"""
+    _misplace(rig, _audio("上午.m4a", "a1"), _audio("下午.m4a", "a2"))
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    assert [t for _, t in rig.posts] == [
+        rd.misplaced_notice("Data內會", "上午.m4a"),
+        rd.misplaced_notice("Data內會", "下午.m4a"),
+    ]
+
+
+def test_a_muted_meeting_stays_silent_about_a_misplaced_file(
+    rig, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    """三態照舊 —— 刻意設成空字串的會議不會因為這張票開始出聲。維運者照樣收得到。"""
+    _misplace(rig)
+    rig.config["meetings"]["data"]["slack_channel"] = ""
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    assert rig.posts == []
+    assert rig.dms, "安靜的是 channel，不是維運者"
+
+
+def test_a_dry_run_never_posts_about_a_misplaced_file(
+    rig, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    """首次執行與 `--dry-run` 都只印不發，同 `MULTI_AUDIO` 那條。"""
+    _misplace(rig)
+    _main(monkeypatch, rig)          # 首次執行也是強制 dry-run
+    capsys.readouterr()
+    assert rig.posts == []
+
+    _main(monkeypatch, rig, "--dry-run")
+    out = capsys.readouterr().out
+
+    assert rig.posts == []
+    assert "錄音.m4a" in out, "dry-run 還是要在 stdout 上看得到它"
+
+
+def test_an_innocent_series_root_is_quiet_end_to_end(
+    rig, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    """最外層只有正式稿與日期資料夾時，這條路徑一個字都不該發出去。"""
+    rig.config["meetings"]["data"]["slack_channel"] = "C0DATA"
+    rig.roots = [_root(DATA_FOLDER, _subfolder(TODAY), *INNOCENT)]
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    _main(monkeypatch, rig)
+    capsys.readouterr()
+
+    assert rig.posts == [] and rig.dms == []
