@@ -20,6 +20,8 @@ reconcile_drive.py - 每小時掃 Shared Drive：日期資料夾有音檔、沒�
 | 每輪處理上限 | `MAX_PER_ROUND` 場。判準寫錯時不會一次燒 20 次 NotebookLM |
 | 系列資料夾在設定檔裡找不到 | 不產，只 DM。缺會議類型脈絡，硬產出來的是壞的 |
 | 同一個日期資料夾有多個音檔 | 不產，只 DM。挑一個產會讓另一半永遠沒有機會 |
+| 任何一場沒產出（跳過或失敗） | **兩軌**：維運者 DM 拿技術細節，會議 channel 拿「有人在處理」的提醒 |
+| 同一場、同一個原因連續命中 | channel 那則一天只發一次（狀態檔記到 `notified`）。DM 照舊每輪 |
 | 該會議類型沒設 `slack_channel` | 記錄照產，通知走 DM fallback（`channel.py` 的三態） |
 | Google 憑證會開瀏覽器 | 一開始就擋（`credential_gap`），不要卡在沒有人的提示上 |
 | NotebookLM 認證失效 | **切音訊前**就驗，失敗就 DM 並停，退出碼非 `0` |
@@ -73,8 +75,9 @@ from extract_audio_sources import (
     get_google_credentials,
     load_config,
 )
+from channel import SEND, channel_id, channel_state
 from local_archive import DATE_DIR, NOTE_PREFIX
-from send_slack_notification import send_dm
+from send_slack_notification import format_date_display, send_channel, send_dm
 
 STATE_PATH = CONFIG_DIR / "reconcile-state.json"
 SKILL_MD = SKILL_DIR / "SKILL.md"
@@ -95,6 +98,14 @@ MULTI_AUDIO = "同一個日期資料夾有多個音檔"
 OVER_LIMIT = "超過本輪上限，下一輪會再看到"
 
 DM_HEADER = "📮 每小時 reconcile 有東西需要你看一眼"
+
+# 同一個事件，兩則不同的訊息、兩個收件者：維運者的 DM 帶例外型別與訊息（修復的人要
+# 的），會議 channel 那則只講「哪一場、為什麼、已經有人在處理」。**不是轉發** ——
+# 收到 channel 那則的人不會去 debug，例外類別名只會讓他們回頭來問維運者，而那正是
+# 這張票要省掉的那一趟。
+CHANNEL_HEADER = "📋 這場的會議記錄還沒產出來"
+MULTI_AUDIO_CAUSE = "這天的資料夾裡有不只一個錄音檔，系統不確定該用哪一個"
+FAILED_CAUSE = "產製途中出了狀況"
 
 # 排序鍵：**舊的先**。理由見 `compute_pending`；同一天有多場時用系列名定序，固定就好。
 _BY_DATE = attrgetter("date", "series")
@@ -357,6 +368,43 @@ def dm_blocked(detail: str, count: int) -> str:
     return f"{head}\n{detail}"
 
 
+def failure_notice(series_name: str, date_str: str, cause: str) -> str:
+    """會議 channel 那一則的字。`cause` 是給人看的那句，不是例外訊息。
+
+    三句話：哪一場、為什麼、以及「已經有人在處理、你不用做什麼」。最後那句是這則訊息
+    的**角色本身** —— 少了它，channel 裡看到的人會開始猜自己該不該補做點什麼，而修復
+    負責人始終是維運者。
+    """
+    return "\n".join([
+        f"{CHANNEL_HEADER}：{series_name} {format_date_display(date_str)}",
+        f"原因：{cause}",
+        "已經有人收到通知會去處理，這則只是讓大家知道記錄會晚一點到，不需要做任何事。",
+    ])
+
+
+def notice_key(series: str, date_str: str, cause: str) -> str:
+    """去重的身份：**同一場、同一個原因**。
+
+    原因用的是給人看的那句（`MULTI_AUDIO_CAUSE` / `FAILED_CAUSE`），不是例外訊息 ——
+    例外訊息每輪都可能差一個暫存路徑，拿它當 key 等於每一輪都是全新的一則。
+    """
+    return f"{series}/{date_str}/{cause}"
+
+
+def notice_due(sent: dict[str, str], key: str, today: str) -> bool:
+    """這則今天還沒發過。
+
+    每小時一輪，而同一場的同一個原因會在 7 天的掃描窗裡每輪都命中 —— 不去重就是 168
+    則，而第二則之後沒有任何新資訊。一天一次是「還沒好」這件事的合理頻率。
+    """
+    return sent.get(key) != today
+
+
+def prune_sent(sent: dict[str, str], today: str) -> dict[str, str]:
+    """只留今天的記錄。昨天以前的對「一天一次」已經沒有作用，留著只會讓狀態檔一路長。"""
+    return {key: day for key, day in sent.items() if day == today}
+
+
 # ─── Drive ────────────────────────────────────────────────────────────────────
 
 def series_folders(drive, meetings: dict) -> list[dict]:
@@ -541,6 +589,54 @@ def notify(text: str) -> None:
         send_dm(text)
 
 
+def notify_channel(
+    session: Session,
+    cause: str,
+    meetings: dict,
+    state_path: Path,
+    today: str,
+    *,
+    send: bool = True,
+) -> None:
+    """會議 channel 的那一則：告知那場會的人，不是求救。維運者的 DM 另外送，內容不同。
+
+    **三態照舊**（`channel.py`）：只有 `SEND` 才發，沒設定與刻意安靜都不出聲 —— 這張票
+    加的是一個新的收件者，不是一條繞過三態的新路徑。`UNKNOWN_SERIES` 那些場次連
+    `meeting_key` 都沒有，落在 `UNSET`，所以本來就只有維運者的 DM 會提到它們。
+
+    **送出去了才記進狀態檔**：Slack 當下送不出去（沒 token、API 掛了）不算發過，下一輪
+    會再試 —— 先記的話那一天就再也不會提醒，而提醒消失正是這條路徑要防的事。
+
+    `send=False`（dry-run 與首次執行）只印不發：那兩輪本來就不產記錄，對著整個會議
+    channel 喊一次「沒產出來」是假警報。
+    """
+    meeting = meetings.get(session.meeting_key or "", {})
+    if channel_state(meeting) != SEND:
+        return
+
+    key = notice_key(session.series, session.date, cause)
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        state = {}
+    if not isinstance(state, dict):
+        state = {}
+    sent = state.get("notified", {})
+    if not notice_due(sent, key, today):
+        return
+
+    text = failure_notice(meeting.get("series_name", session.series), session.date, cause)
+    print(f"\n{text}")
+    if not (send and send_channel(channel_id(meeting), text)):
+        return
+
+    state["notified"] = {**prune_sent(sent, today), key: today}
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(
+        json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="每小時 reconcile Shared Drive：有音檔沒記錄就產")
     parser.add_argument("--dry-run", action="store_true", help="只印差集，不產任何記錄")
@@ -588,6 +684,17 @@ def main() -> int:
     report(round_)
     notify(dm_skipped(round_.skipped))
 
+    # 掃到了沒產的那些，會議成員也該知道。`MULTI_AUDIO` 是唯一走到這裡的理由：
+    # `UNKNOWN_SERIES` 沒有 `meeting_key`（不知道是哪種會議就不知道要發哪個 channel，
+    # 三態自然落在 `UNSET`），`OVER_LIMIT` 下一輪就處理完了 —— 同 `dm_skipped`，
+    # 每輪喊一次只會讓人學會忽略。dry-run 與首次執行不對外發聲。
+    for session in round_.skipped:
+        if session.reason == MULTI_AUDIO:
+            notify_channel(
+                session, MULTI_AUDIO_CAUSE, meetings, state_path, today,
+                send=not (args.dry_run or first_run),
+            )
+
     # `--dry-run` 先判，而且**不寫狀態檔**：寫了的話手動看一次差集就把「首次強制
     # dry-run」那道閘門用掉了，而 SKILL.md 承諾的「確認差集無誤之後下一輪才真的產」
     # 靠的就是那道閘門還在。
@@ -621,9 +728,11 @@ def main() -> int:
             print(f"✅ {session.series}/{session.date}　{url}")
         except Exception as exc:
             failures += 1
+            # 兩軌：維運者拿到例外型別與訊息，會議成員拿到「這場還沒好、有人在處理」。
             notify(dm_blocked(
                 f"❌ {session.series}/{session.date}　{type(exc).__name__}: {exc}", 1
             ))
+            notify_channel(session, FAILED_CAUSE, meetings, state_path, today)
         finally:
             # 本機暫存整個目錄移除。Drive 上的音檔是原件，一個位元都沒動過。
             shutil.rmtree(workdir, ignore_errors=True)

@@ -384,9 +384,11 @@ cd "$SKILL_DIR" && uv run scripts/reconcile_drive.py --dry-run    # 只印差集
 |---|---|
 | 首次執行（沒有狀態檔 `~/.config/generate-meeting-notes/reconcile-state.json`） | 強制 dry-run，只印差集；`--dry-run` 不會用掉這道閘門 |
 | 每輪處理上限 | 2 場。判準寫錯時不會一次燒 20 次 NotebookLM。**沒有旗標可以調** |
-| 系列資料夾在 config 裡完全找不到 | 不產，只 DM。缺會議類型脈絡，硬產出來的是壞的 |
-| 同一個日期資料夾有多個音檔 | 不產，只 DM。見 `references/multi-session.md` 手動處理 |
-| 該會議類型沒設 channel | 記錄照產，通知走 DM fallback（`channel.py` 的三態） |
+| 系列資料夾在 config 裡完全找不到 | 不產，只 DM。缺會議類型脈絡，硬產出來的是壞的；也不知道要通知哪個 channel |
+| 同一個日期資料夾有多個音檔 | 不產。見 `references/multi-session.md` 手動處理 |
+| 任何一場沒產出（跳過或失敗） | **兩軌通知**：維運者 DM 拿例外型別與訊息，該會議的 channel 拿一則「哪一場、為什麼（人話）、已經有人在處理、不用做什麼」的提醒 |
+| 同一場、同一個原因每輪都命中 | channel 那則**一天只發一次**（記在狀態檔的 `notified`）；維運者的 DM 照舊每輪都發 |
+| 該會議類型沒設 channel | 記錄照產，通知走 DM fallback（`channel.py` 的三態）。**刻意設成空字串的會議連失敗提醒也不出聲** |
 | Google 憑證會開瀏覽器 / NotebookLM 認證失效 | **切音訊前**就擋，DM 並停，退出碼非 `0` |
 | Drive 翻頁超過上限 | 報錯收工。無上限的翻頁是「跑不完」不是「變紅」 |
 
