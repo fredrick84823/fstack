@@ -81,7 +81,8 @@ google_token.json  輸出。「誰」把權限給了那個 app
 每小時一輪，讓 `reconcile_drive.py` 自己消化積壓。
 
 macOS 走 launchd —— cron 拿不到登入 session 的 keychain，而刷新 Google 憑證要它。
-`~/Library/LaunchAgents/com.tagtoo.gmn-reconcile.plist`：
+`~/Library/LaunchAgents/com.generate-meeting-notes.reconcile.plist`（label 只要在這台
+機器上唯一就好，**不要放公司或專案的內部識別字** —— 這份文件是會散佈出去的）：
 
 ```xml
 <key>ProgramArguments</key>
@@ -101,8 +102,8 @@ macOS 走 launchd —— cron 拿不到登入 session 的 keychain，而刷新 G
 ```
 
 ```bash
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tagtoo.gmn-reconcile.plist
-launchctl kickstart -p gui/$(id -u)/com.tagtoo.gmn-reconcile   # 首次執行本來就是強制 dry-run
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.generate-meeting-notes.reconcile.plist
+launchctl kickstart -p gui/$(id -u)/com.generate-meeting-notes.reconcile   # 首次執行本來就是強制 dry-run
 ```
 
 其他平台走 cron，每小時 5 分：
