@@ -37,6 +37,9 @@ echo "$message" | grep -oE '<<GAP [^>]+>>' | while IFS= read -r marker; do
 
   [ "$skill" = "$content" ] && skill="unknown"
   [ -z "$gap" ] && continue
+  # Doc-echo guard: <<GAP skill-name: 一句話>> quoted as an example in prose is not a signal.
+  # The skill has to exist next to the improve skill that owns this queue.
+  [ -d "$(dirname "$(dirname "$queue")")/$skill" ] || continue
 
   if [ -x "$state_script" ]; then
     "$state_script" capture \

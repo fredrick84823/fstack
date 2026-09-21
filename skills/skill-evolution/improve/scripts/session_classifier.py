@@ -70,8 +70,8 @@ def skip_reason(env: dict[str, str], rows: list[dict[str, Any]]) -> str | None:
     entrypoint = env.get("CLAUDE_CODE_ENTRYPOINT", "")
     if entrypoint and entrypoint != "cli":
         return f"non-interactive entrypoint: {entrypoint}"
-    if env.get("CLAUDE_CODE_CHILD_SESSION") == "1":
-        return "child session"
+    # CLAUDE_CODE_CHILD_SESSION is deliberately not a gate: it read "1" in a plain
+    # interactive session on 2026-09-16, which silently skipped every real session.
     # The transcript is asked the same question independently: the hook inherits whatever
     # environment the session was launched with, but the rows record what it actually was.
     recorded = {str(row.get("entrypoint")) for row in conversation(rows) if row.get("entrypoint")}
