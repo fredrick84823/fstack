@@ -37,7 +37,7 @@ SEND = "send"
 
 # DM 提醒的第一行。發佈流程的輸出是交棒契約的一部分，這個字串會被斷言
 # （同 `parity.DRIFT_HEADER`）。
-DM_HEADER = "📮 這場會議還沒設定 Slack channel，所以沒有通知任何人"
+DM_HEADER = "📮 *這場會議還沒設定 Slack channel，所以沒有通知任何人*"
 
 
 def channel_state(meeting: dict) -> str:
@@ -93,15 +93,20 @@ def dm_reminder(
     人以為那是一個可以去打開的路徑。
     """
     lines = [
-        f"{DM_HEADER}：{series_name}（{meeting_key}）",
+        DM_HEADER,
+        f"{series_name}（{meeting_key}）",
+        "",
         f"📄 {doc_url}",
     ]
     if note_path:
-        lines.append(f"🗄️  {note_path}")
+        lines.append(f"🗄️ {note_path}")
     lines += [
+        "",
         "請去問該部門的 Channel ID，拿到之後跑：",
-        f"   python3 {Path(__file__).resolve()} --meeting {meeting_key} --channel C0XXXXXXXXX",
-        '   （刻意不發通知就填空字串：--channel ""）',
+        "```",
+        f"python3 {Path(__file__).resolve()} --meeting {meeting_key} --channel C0XXXXXXXXX",
+        "```",
+        '刻意不發通知就填空字串：`--channel ""`',
     ]
     return "\n".join(lines)
 

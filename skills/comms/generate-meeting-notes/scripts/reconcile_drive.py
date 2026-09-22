@@ -110,7 +110,7 @@ UNKNOWN_FOLDER = f"資料夾名不是 {DATE_DIR_SHAPES}，所以掃不到"
 # 「不產」的理由要**帶著下一步**。只講現象的話，看到 DM 的人知道系統沒動，卻不知道
 # 該把檔案搬去哪 —— 而「一天多場請各開一個資料夾」這個約定就是這樣一直是空的（#56）。
 MULTI_AUDIO = (
-    "同一個日期資料夾有多個音檔 —— 一天多場請各開一個資料夾"
+    "同一個日期資料夾有多個音檔，一天多場請各開一個資料夾"
     f"（{DATE_DIR_SHAPES}，{DATE_DIR_EXAMPLE}）"
 )
 OVER_LIMIT = "超過本輪上限，下一輪會再看到"
@@ -119,13 +119,15 @@ OVER_LIMIT = "超過本輪上限，下一輪會再看到"
 # 沒有日期，進不了 `Session`），是另一條清單 —— 見 `compute_misplaced`。
 MISPLACED = "音檔躺在系列資料夾根目錄，沒有日期資料夾"
 
-DM_HEADER = "📮 每小時 reconcile 有東西需要你看一眼"
+# 抬頭自成一行、粗體，下一行才是「這次是哪一件事」。粗體只包抬頭本身，因為那是
+# 每一則 DM 都一樣的那一格 —— 會變的那句留原體，兩行就有了層次。
+DM_HEADER = "📮 *每小時 reconcile 有東西需要你看一眼*"
 
 # 同一個事件，兩則不同的訊息、兩個收件者：維運者的 DM 帶例外型別與訊息（修復的人要
 # 的），會議 channel 那則只講「哪一場、為什麼、已經有人在處理」。**不是轉發** ——
 # 收到 channel 那則的人不會去 debug，例外類別名只會讓他們回頭來問維運者，而那正是
 # 這張票要省掉的那一趟。
-CHANNEL_HEADER = "📋 這場的會議記錄還沒產出來"
+CHANNEL_HEADER = "📋 *這場的會議記錄還沒產出來*"
 MULTI_AUDIO_CAUSE = "這天的資料夾裡有不只一個錄音檔，系統不確定該用哪一個"
 UNKNOWN_FOLDER_CAUSE = "錄音放在一個系統認不得名字的資料夾裡，所以沒有被掃到"
 FAILED_CAUSE = "產製途中出了狀況"
@@ -141,7 +143,7 @@ CHANNEL_CAUSES = {
 
 # 放錯層那則的角色與上面兩則**相反**：那兩則是「有人在處理、你不用做什麼」，這一則
 # 是「只有你做得了、請去移動它」。所以另起一個抬頭，不共用 `CHANNEL_HEADER`。
-MISPLACED_HEADER = "📥 有一個錄音檔還沒進到日期資料夾"
+MISPLACED_HEADER = "📥 *有一個錄音檔還沒進到日期資料夾*"
 MISPLACED_CAUSE = "錄音檔放在系列資料夾最外層"
 
 # 維運者那兩則 DM 的去重身份（`dm_notice_key` 的第一格）。跟 channel 那幾則共用同一個
@@ -478,9 +480,9 @@ def dm_skipped(skipped: list[Session]) -> str:
     needs_human = [s for s in skipped if s.reason != OVER_LIMIT]
     if not needs_human:
         return ""
-    lines = [f"{DM_HEADER}：{len(needs_human)} 場掃到了但沒有產"]
-    lines += [f"• {s.series}/{s.name}　{s.reason}" for s in needs_human]
-    lines.append(f"設定檔：{CONFIG_PATH}")
+    lines = [DM_HEADER, f"{len(needs_human)} 場掃到了但沒有產", ""]
+    lines += [f"• `{s.series}/{s.name}`　{s.reason}" for s in needs_human]
+    lines += ["", f"設定檔：`{CONFIG_PATH}`"]
     return "\n".join(lines)
 
 
@@ -490,10 +492,12 @@ def dm_blocked(detail: str, count: int) -> str:
     `count` 是這輪本來要產幾場；`0` 表示還沒數到那一步（憑證、掃 Drive）。零的時候
     不印那句話 —— 「0 場一場都沒產」讀起來像沒事，而這通 DM 的存在就是因為有事。
     """
-    head = f"{DM_HEADER}：有一段沒跑完"
+    summary = "有一段沒跑完"
     if count:
-        head += f"，{count} 場一場都沒產"
-    return f"{head}\n{detail}"
+        summary += f"，{count} 場一場都沒產"
+    # `detail` 帶的是例外型別與訊息，包進 code block：等寬字型讓 traceback 自己成一塊，
+    # 也把「這段是機器講的」跟上面兩行人話分開。
+    return "\n".join([DM_HEADER, summary, "", "```", detail, "```"])
 
 
 def when_label(session: Session) -> str:
@@ -520,11 +524,17 @@ def failure_notice(series_name: str, when: str, cause: str) -> str:
     則會跟最後那句自相矛盾（要請人動手的那句在 `dm_skipped` 的 `reason` 裡）。
 
     `when` 是已經給人看過的那串（`when_label`），不是 `YYYYMMDD` —— 同日多場與認不得
-    的資料夾名都要指認得出來，而那個判斷不屬於「怎麼排版這三行」。
+    的資料夾名都要指認得出來，而那個判斷不屬於「怎麼排版這幾行」。
+
+    抬頭、內容、結語三段之間各留一行空白：每則訊息都一樣的那格（抬頭）與只有這一則
+    才有的那格（哪一場、為什麼）分開，掃過去才知道自己要不要讀下去。
     """
     return "\n".join([
-        f"{CHANNEL_HEADER}：{series_name} {when}",
+        CHANNEL_HEADER,
+        "",
+        f"*{series_name}*　{when}",
         f"原因：{cause}",
+        "",
         "已經有人收到通知會去處理，這則只是讓大家知道記錄會晚一點到，不需要做任何事。",
     ])
 
@@ -542,8 +552,11 @@ def misplaced_notice(series_name: str, file_name: str) -> str:
     下次再擴充形狀時漏改的只會是註解，不會是叫人怎麼做的那句話。
     """
     return "\n".join([
-        f"{MISPLACED_HEADER}：{file_name}",
-        f"它放在「{series_name}」的最外層，沒有日期就不知道是哪一天的會議，所以不會產記錄。",
+        MISPLACED_HEADER,
+        "",
+        f"`{file_name}` 放在「{series_name}」的最外層，沒有日期就不知道是哪一天的會議，"
+        "所以不會產記錄。",
+        "",
         f"請把它移進該場會議的日期資料夾（{DATE_DIR_SHAPES}，{DATE_DIR_EXAMPLE}），下一輪就會自己產。",
     ])
 
@@ -563,11 +576,12 @@ def dm_misplaced(items: list[Misplaced]) -> str:
     known = [i for i in items if i.meeting_key]
     if not known:
         return ""
-    lines = [f"{DM_HEADER}：{len(known)} 個音檔躺在系列資料夾根目錄"]
-    lines += [f"• {i.series}/{i.name}" for i in known]
-    lines.append(
-        f"請它們的主人移進日期資料夾（{DATE_DIR_SHAPES}），在那之前這幾個不會有記錄。"
-    )
+    lines = [DM_HEADER, f"{len(known)} 個音檔躺在系列資料夾根目錄", ""]
+    lines += [f"• `{i.series}/{i.name}`" for i in known]
+    lines += [
+        "",
+        f"請它們的主人移進日期資料夾（{DATE_DIR_SHAPES}），在那之前這幾個不會有記錄。",
+    ]
     return "\n".join(lines)
 
 
@@ -589,11 +603,12 @@ def dm_unregistered(items: list[Misplaced]) -> str:
     counts = Counter(i.series for i in items if not i.meeting_key)
     if not counts:
         return ""
-    lines = [f"{DM_HEADER}：{len(counts)} 個系列資料夾不在設定檔裡"]
-    lines += [f"• {series}　根目錄有 {n} 個音檔" for series, n in counts.items()]
-    lines.append(
-        f"這幾個系列沒有登記過，搬進日期資料夾也產不出來。要產就先加進設定檔：{CONFIG_PATH}"
-    )
+    lines = [DM_HEADER, f"{len(counts)} 個系列資料夾不在設定檔裡", ""]
+    lines += [f"• `{series}`　根目錄有 {n} 個音檔" for series, n in counts.items()]
+    lines += [
+        "",
+        f"這幾個系列沒有登記過，搬進日期資料夾也產不出來。要產就先加進設定檔：`{CONFIG_PATH}`",
+    ]
     return "\n".join(lines)
 
 

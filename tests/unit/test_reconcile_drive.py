@@ -723,13 +723,18 @@ def test_generate_publishes_without_the_audio_flags(
 
 def test_the_channel_notice_names_the_meeting_the_cause_and_that_nobody_needs_to_act():
     """三件事缺一不可。少了「有人在處理」那句，channel 裡的人會開始猜自己該補做什麼。"""
-    # 三句話各一行。拆開來對而不是整段 `in`：黏在一起的那幾種寫法（少一個換行、
-    # 每行前後多黏一段）整段 `in` 一條都看不出來。
+    # 三段各自一行，中間隔空行。拆開來對而不是整段 `in`：黏在一起的那幾種寫法（少一個
+    # 換行、每行前後多黏一段）整段 `in` 一條都看不出來。空行也一起釘 —— 它就是這則
+    # 訊息「一眼看得出在講什麼」的那個東西。
     when = rd.when_label(_session(DATA_FOLDER, "", TODAY))
-    head, why, reassurance = rd.failure_notice("Data內會", when, rd.FAILED_CAUSE).splitlines()
+    head, gap1, ident, why, gap2, reassurance = (
+        rd.failure_notice("Data內會", when, rd.FAILED_CAUSE).splitlines()
+    )
 
-    assert "Data內會" in head
-    assert "2026/09/15" in head, "日期要給人看的格式，不是資料夾名那串"
+    assert head == rd.CHANNEL_HEADER
+    assert (gap1, gap2) == ("", ""), "抬頭、內容、結語之間各留一行"
+    assert "Data內會" in ident
+    assert "2026/09/15" in ident, "日期要給人看的格式，不是資料夾名那串"
     assert why == f"原因：{rd.FAILED_CAUSE}"
     assert reassurance.startswith("已經有人收到通知")
     assert "不需要做任何事" in reassurance
@@ -1014,12 +1019,15 @@ def test_the_dm_puts_one_skipped_session_per_line():
     ]
     lines = rd.dm_skipped(sessions).splitlines()
 
-    assert len(lines) == 4, lines          # 抬頭 ＋ 兩場 ＋ 設定檔路徑
-    assert lines[0].startswith(rd.DM_HEADER)
+    # 抬頭 ＋ 摘要 ＋ 空行 ＋ 兩場 ＋ 空行 ＋ 設定檔路徑
+    assert len(lines) == 7, lines
+    assert lines[0] == rd.DM_HEADER
+    assert lines[1] == "2 場掃到了但沒有產"
+    assert (lines[2], lines[5]) == ("", ""), "清單前後各留一行，不然又擠成一坨"
     # 行首必須真的是行首：只斷言「這一行含 AAA未知」的話，把整段黏成一行再靠換行符
     # 湊出行數的寫法照樣過，而那正是這條要擋的形狀。
-    assert lines[1].startswith("• ") and "AAA未知" in lines[1], lines[1]
-    assert lines[2].startswith("• ") and "ZZZ未知" in lines[2], lines[2]
+    assert lines[3].startswith("• ") and "AAA未知" in lines[3], lines[3]
+    assert lines[4].startswith("• ") and "ZZZ未知" in lines[4], lines[4]
 
 
 def test_the_round_takes_the_oldest_sessions_not_the_first_by_series_name():
@@ -1196,11 +1204,12 @@ def test_misplaced_is_sorted_by_series_then_name():
 
 def test_the_misplaced_notice_says_what_to_do_next_instead_of_sit_tight():
     """驗收條件② —— 這則的角色與失敗那則**相反**：只有丟檔案的人移得動它。"""
-    head, why, nextstep = rd.misplaced_notice("Data內會", "錄音.m4a").splitlines()
+    head, gap1, why, gap2, nextstep = rd.misplaced_notice("Data內會", "錄音.m4a").splitlines()
 
-    assert "錄音.m4a" in head
+    assert head == rd.MISPLACED_HEADER
+    assert (gap1, gap2) == ("", ""), "抬頭、現象、下一步之間各留一行"
+    assert "錄音.m4a" in why
     assert "Data內會" in why
-    assert head.startswith(rd.MISPLACED_HEADER)
     assert nextstep.startswith("請把它移進") and "YYYYMMDD" in nextstep
     assert "不需要做任何事" not in nextstep, "這則要的正是對方做一件事"
     assert "_場次" not in nextstep, "帶後綴的資料夾一樣掃不到，叫人建一個等於再演一次無聲"
@@ -1217,11 +1226,14 @@ def test_dm_misplaced_puts_one_file_per_line():
     )
     lines = rd.dm_misplaced(items).splitlines()
 
-    assert len(lines) == 4, lines          # 抬頭 ＋ 兩個檔 ＋ 下一步
-    assert lines[0].startswith(rd.DM_HEADER)
-    assert lines[1].startswith("• ") and "a.m4a" in lines[1], lines[1]
-    assert lines[2].startswith("• ") and "b.m4a" in lines[2], lines[2]
-    assert lines[3].startswith("請"), "最後一行是下一步，不是又一個檔案"
+    # 抬頭 ＋ 摘要 ＋ 空行 ＋ 兩個檔 ＋ 空行 ＋ 下一步
+    assert len(lines) == 7, lines
+    assert lines[0] == rd.DM_HEADER
+    assert lines[1] == "2 個音檔躺在系列資料夾根目錄"
+    assert (lines[2], lines[5]) == ("", ""), "清單前後各留一行"
+    assert lines[3].startswith("• ") and "a.m4a" in lines[3], lines[3]
+    assert lines[4].startswith("• ") and "b.m4a" in lines[4], lines[4]
+    assert lines[6].startswith("請"), "最後一行是下一步，不是又一個檔案"
 
 
 def _misplace(rig, *files: dict, series: str = DATA_FOLDER):
@@ -1388,10 +1400,11 @@ def test_the_per_file_dm_leaves_out_unregistered_series():
 
     lines = rd.dm_misplaced(items).splitlines()
 
-    assert len(lines) == 3, lines            # 抬頭 ＋ 一個檔 ＋ 下一步
-    assert "有登記.m4a" in lines[1]
+    # 抬頭 ＋ 摘要 ＋ 空行 ＋ 一個檔 ＋ 空行 ＋ 下一步
+    assert len(lines) == 6, lines
+    assert "有登記.m4a" in lines[3]
     assert "沒登記.m4a" not in rd.dm_misplaced(items), "移了也產不出來的不該叫人去移"
-    assert "1 個" in lines[0], "數的是列出來的那幾個，不是掃到的全部"
+    assert "1 個" in lines[1], "數的是列出來的那幾個，不是掃到的全部"
 
 
 def test_the_per_file_dm_is_empty_when_every_misplaced_file_is_unregistered():
@@ -1412,12 +1425,13 @@ def test_the_unregistered_dm_puts_one_line_per_series():
     text = rd.dm_unregistered(items)
     lines = text.splitlines()
 
-    assert len(lines) == 4, lines            # 抬頭 ＋ 兩個系列 ＋ 下一步
-    assert "2 個系列" in lines[0]
-    assert lines[1].startswith("• ") and STRANGER in lines[1] and "3 個音檔" in lines[1]
-    assert lines[2].startswith("• ") and STRANGER2 in lines[2] and "1 個音檔" in lines[2]
+    # 抬頭 ＋ 摘要 ＋ 空行 ＋ 兩個系列 ＋ 空行 ＋ 下一步
+    assert len(lines) == 7, lines
+    assert "2 個系列" in lines[1]
+    assert lines[3].startswith("• ") and STRANGER in lines[3] and "3 個音檔" in lines[3]
+    assert lines[4].startswith("• ") and STRANGER2 in lines[4] and "1 個音檔" in lines[4]
     assert "a.m4a" not in text, "未登記的不逐檔 —— 101 個檔案就是 101 行"
-    assert "設定檔" in lines[3] and str(rd.CONFIG_PATH) in lines[3]
+    assert "設定檔" in lines[6] and str(rd.CONFIG_PATH) in lines[6]
 
 
 def test_the_unregistered_dm_is_silent_when_every_series_is_registered():
@@ -1897,11 +1911,13 @@ def test_the_same_day_two_sessions_are_deduped_separately(rig, monkeypatch, caps
 
     _main(monkeypatch, rig)
 
-    heads = sorted(text.splitlines()[0] for _, text in rig.posts)
+    # 指認哪一場的是抬頭底下那行（`failure_notice` 的第三行），不是抬頭本身 ——
+    # 抬頭每一則都一樣。
+    idents = sorted(text.splitlines()[2] for _, text in rig.posts)
 
-    assert len(heads) == 2, f"兩場各一則，實際是 {heads}"
-    assert heads[0].endswith("2026/09/15 am")
-    assert heads[1].endswith("2026/09/15 pm")
+    assert len(idents) == 2, f"兩場各一則，實際是 {idents}"
+    assert idents[0].endswith("2026/09/15 am")
+    assert idents[1].endswith("2026/09/15 pm")
 
 
 # ------------------------------------------------------------------- when_label

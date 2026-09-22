@@ -276,7 +276,10 @@ def test_dm_reminder_carries_everything_needed_to_act_on_it():
     assert "--channel" in text, "少了要跑的那行指令，收到的人還是得自己查用法"
     # 行分隔符也是內容的一部分：`in` 全部通過但每行黏在一起的 DM，Doc URL 就不再是
     # 一條點得開的連結。這條釘的是結構不是文案 —— 文案的字面值故意不釘（棒④）。
-    assert text.splitlines()[1].startswith("📄 "), "Doc URL 要自己一行"
+    lines = text.splitlines()
+    assert lines[0] == channel.DM_HEADER, "抬頭自己一行"
+    assert lines[2] == "", "抬頭那段與連結之間留一行"
+    assert lines[3].startswith("📄 "), "Doc URL 要自己一行"
 
 
 def test_dm_reminder_mentions_the_local_path_only_when_there_is_one():
