@@ -29,6 +29,7 @@ from .conftest import _qid, child_env
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "bin" / "sync-from-installed.sh"
+PARITY = REPO / "bin" / "parity_skills.py"
 DEST_REL = Path("skills/comms/generate-meeting-notes")
 
 # guard 涵蓋的副檔名，介面明訂就這四種。
@@ -115,13 +116,15 @@ def run(script: Path, *args: str, home: Path) -> subprocess.CompletedProcess[str
 
 @pytest.fixture
 def sandbox(tmp_path: Path) -> Path:
-    """一份丟棄式的假 repo，`bin/` 裡是腳本的複本。回傳假 repo 根目錄。
+    """一份丟棄式的假 repo，`bin/` 裡是腳本與方向判斷的複本。回傳假 repo 根目錄。
 
     目的地由腳本自身位置推得，所以複製腳本是唯一能在不寫進真實工作樹的前提下
-    跑同步路徑的方法。
+    跑同步路徑的方法。方向判斷（`bin/parity_skills.py`）一起複製 —— 它也是從
+    `$REPO/bin/` 找的，少了它閘門只會回「找不到方向判斷」。
     """
     (tmp_path / "bin").mkdir()
     shutil.copy2(SCRIPT, tmp_path / "bin" / SCRIPT.name)
+    shutil.copy2(PARITY, tmp_path / "bin" / PARITY.name)
     return tmp_path
 
 
@@ -415,18 +418,11 @@ def test_default_src_is_home_agents_skill_dir(sandbox: Path, home: Path):
 
 OLDER = 1_000_000_000
 NEWER = 2_000_000_000
-PARITY = REPO / DEST_REL / "scripts" / "parity.py"
 
 
 def make_mirror(root: Path, **files: str) -> tuple[Path, Path]:
-    """一組內容與 mtime 都一致的 (SRC, 目的地) —— 方向判斷在這上面必須是「一致」。
-
-    `scripts/parity.py` 一起鋪進去：方向判斷自己就住在被同步的那個目錄裡，
-    假 repo 少了它，閘門只會回「找不到方向判斷」。
-    """
+    """一組內容與 mtime 都一致的 (SRC, 目的地) —— 方向判斷在這上面必須是「一致」。"""
     src = make_src(root, **files)
-    (src / "scripts").mkdir(exist_ok=True)
-    shutil.copy2(PARITY, src / "scripts" / PARITY.name)
     dest = root / DEST_REL
     shutil.copytree(src, dest)
     return src, dest
@@ -539,14 +535,13 @@ def test_a_refused_sync_does_not_overwrite_the_repo_edit(sandbox: Path, home: Pa
 def test_a_missing_direction_judge_refuses_to_sync(sandbox: Path, home: Path):
     """方向判斷本身不見了 → exit 1，不可以當成「沒有方向問題」放行。
 
-    這道閘門唯一的判斷依據住在被同步的那個目錄裡，而 `rsync --delete` 會把它一起蓋掉：
-    fail open 的話，第一次跑（或 repo 端剛好刪掉／改名 `parity.py`）就等於沒有閘門，
+    fail open 的話，repo 端剛好刪掉／改名 `bin/parity_skills.py` 就等於沒有閘門，
     而症狀是**安靜的** —— 退出碼 0、看起來同步成功。
-    反面是 `test_a_mirrored_tree_still_syncs`：同一組 fixture，`parity.py` 在的時候
-    照常回 0，所以一個永遠回 1 的實作在這兩條之間過不去。
+    反面是 `test_a_mirrored_tree_still_syncs`：同一組 fixture，判斷在的時候照常回 0，
+    所以一個永遠回 1 的實作在這兩條之間過不去。
     """
-    src, dest = make_mirror(sandbox, **{"t.md": "same\n"})
-    (dest / "scripts" / PARITY.name).unlink()
+    src, _ = make_mirror(sandbox, **{"t.md": "same\n"})
+    (sandbox / "bin" / PARITY.name).unlink()
 
     assert run(sandbox / "bin" / SCRIPT.name, str(src), home=home).returncode == 1
 
@@ -558,9 +553,158 @@ def test_a_missing_direction_judge_does_not_touch_the_destination(sandbox: Path,
     repo 端的改動已經被蓋掉了；退出碼看起來是擋住了，資料已經損失。
     """
     src, dest = make_mirror(sandbox, **{"t.md": "same\n"})
-    (dest / "scripts" / PARITY.name).unlink()
+    (sandbox / "bin" / PARITY.name).unlink()
     before = snapshot(dest)
 
     run(sandbox / "bin" / SCRIPT.name, str(src), home=home)
 
     assert snapshot(dest) == before
+
+
+# --------------------------------------------------------------------------
+# `--skill` / `--no-sanitize` —— 同一支腳本要能服務多支 skill
+# --------------------------------------------------------------------------
+#
+# 這支腳本原本把 `skills/comms/generate-meeting-notes` 寫死在三個地方之一，於是 60 幾支
+# skill 裡只有 1 支被保護：improve 在安裝版被直接改了五天沒人發現，slack-pm 的客戶名
+# 躺在 public repo 幾個月（去識別化從來沒掃過它）。涵蓋清單現在是資料
+# （`bin/parity_skills.py` 的 `SKILLS`），這支只吃參數。
+
+OTHER_REL = Path("skills/skill-evolution/plain-skill")
+
+
+def test_skill_flag_sends_the_sync_into_that_skills_directory(sandbox: Path, home: Path):
+    """`--skill REL` 之後目的地是 `$REPO/REL`，不是 generate-meeting-notes。
+
+    刪掉這條 → 旗標被吃掉但目的地還是寫死那一支，症狀是**安靜的**：使用者以為在同步
+    improve，實際上把 improve 的內容 `rsync --delete` 進了 gmn 的目錄。
+    """
+    src = make_src(sandbox, **{"sub/notes.md": "content\n"})
+
+    result = run(sandbox / "bin" / SCRIPT.name, "--skill", str(OTHER_REL), str(src), home=home)
+
+    assert result.returncode == 0
+    assert (sandbox / OTHER_REL / "sub" / "notes.md").read_text(encoding="utf-8") == "content\n"
+    assert not (sandbox / DEST_REL).exists()
+
+
+def test_skill_flag_defaults_src_to_the_flat_installed_path(sandbox: Path, home: Path):
+    """不給 SRC 時預設 `$HOME/.agents/skills/<skill 目錄名>` —— 安裝版沒有分類目錄那層。
+
+    刪掉這條 → 預設路徑跟著 repo 的分類目錄一起長（`…/skills/skill-evolution/…`），
+    日常唯一的用法（不給參數）在每一支非 gmn 的 skill 上都找不到安裝版。
+    """
+    installed = home / ".agents" / "skills" / OTHER_REL.name
+    installed.mkdir(parents=True)
+    (installed / "SKILL.md").write_text("from default src\n", encoding="utf-8")
+
+    result = run(sandbox / "bin" / SCRIPT.name, "--skill", str(OTHER_REL), home=home)
+
+    assert result.returncode == 0
+    assert (sandbox / OTHER_REL / "SKILL.md").read_text(encoding="utf-8") == "from default src\n"
+
+
+def test_check_scans_the_skill_named_by_the_flag(sandbox: Path, home: Path):
+    """`--skill REL --check` 不給 DIR 時掃 `$REPO/REL`。
+
+    這是 slack-pm 那起事故的修法：guard 要掃得到 gmn 以外的 skill。
+    刪掉這條 → `--check` 永遠掃 gmn，其他 skill 的內部指涉永遠掃不到。
+    """
+    probe = sandbox / OTHER_REL / "probe.md"
+    probe.parent.mkdir(parents=True)
+    probe.write_text("我們在 AcmeCorp 的流程\n", encoding="utf-8")
+
+    result = run(sandbox / "bin" / SCRIPT.name, "--skill", str(OTHER_REL), "--check", home=home)
+
+    assert result.returncode == 2
+    assert f"{probe}:1:" in result.stdout
+
+
+@pytest.mark.parametrize("bad", ["/etc", "../../elsewhere", "skills/../../x", "skills/only-one"])
+def test_a_skill_path_outside_skills_is_refused(sandbox: Path, home: Path, bad: str):
+    """`--skill` 只收 `skills/<分類>/<skill>` 形式的 repo 相對路徑。
+
+    這支帶 `rsync --delete`：一個絕對路徑或 `..` 會把 `--delete` 指到工作樹外面。
+    刪掉這條 → 打錯一個參數就是在別的目錄上跑鏡像刪除。
+    """
+    src = make_src(sandbox, **{"t.md": "x\n"})
+
+    result = run(sandbox / "bin" / SCRIPT.name, "--skill", bad, str(src), home=home)
+
+    assert result.returncode == 1
+    assert bad in result.stderr
+
+
+def test_no_sanitize_leaves_the_content_verbatim(sandbox: Path, home: Path):
+    """`--no-sanitize` 不跑替換表 —— repo 版就是安裝版的原樣。
+
+    improve 那類 skill 的 repo 版沒有佔位符，跑 sed 只會讓兩邊長得不一樣，
+    而兩邊不一樣正是 parity 要叫的事。
+    刪掉這條 → 旗標被吃掉但 sed 照跑，那類 skill 的 parity 永遠紅，而且修不掉。
+    """
+    src = make_src(sandbox, **{"t.md": "project example-gcp-project\n"})
+
+    result = run(
+        sandbox / "bin" / SCRIPT.name, "--skill", str(OTHER_REL), "--no-sanitize", str(src),
+        home=home,
+    )
+
+    assert result.returncode == 0
+    assert (sandbox / OTHER_REL / "t.md").read_text(encoding="utf-8") == (
+        "project example-gcp-project\n"
+    )
+
+
+def test_no_sanitize_still_runs_the_guard(sandbox: Path, home: Path):
+    """`--no-sanitize` 不等於不掃內部指涉 —— guard 照跑，命中照樣回 2。
+
+    去識別化沒需求不等於內部指涉沒需求：slack-pm 的客戶名就是從這個縫隙漏出去的。
+    刪掉這條 → 旗標順手把 guard 也關掉，新涵蓋進來的每一支 skill 都是無防護的。
+    """
+    src = make_src(sandbox, **{"dirty.md": "我們在 AcmeCorp\n"})
+
+    result = run(
+        sandbox / "bin" / SCRIPT.name, "--skill", str(OTHER_REL), "--no-sanitize", str(src),
+        home=home,
+    )
+
+    assert result.returncode == 2
+    assert "dirty.md:1:" in result.stdout
+
+
+def test_no_sanitize_does_not_require_the_substitution_table(sandbox: Path, tmp_path_factory):
+    """`--no-sanitize` 的 skill 不需要 `sanitize.sed` 存在。
+
+    刪掉這條 → 那個 need_conf 留在旗標外面，沒有替換表的機器上連「不需要替換」的
+    skill 都同步不了，而錯誤訊息說的是一個它根本不會用到的檔案。
+    """
+    no_sed = write_conf(tmp_path_factory.mktemp("home"), sanitize=None)
+    src = make_src(sandbox, **{"t.md": "content\n"})
+
+    result = run(
+        sandbox / "bin" / SCRIPT.name, "--skill", str(OTHER_REL), "--no-sanitize", str(src),
+        home=no_sed,
+    )
+
+    assert result.returncode == 0
+    assert (sandbox / OTHER_REL / "t.md").read_text(encoding="utf-8") == "content\n"
+
+
+def test_a_skill_outside_the_coverage_list_is_refused_not_synced(sandbox: Path, home: Path):
+    """目的地已經有這支 skill、但它不在 parity 的涵蓋清單裡 → 拒絕，而且不動檔案。
+
+    放行的話就是「同步得進來、但從此沒有任何東西在比對它」—— 正是 improve 漂移五天
+    沒人發現的那個形狀。訊息要直接指出下一步在哪一行。
+    （目的地**還沒有**這支 skill 時閘門本來就跳過，所以第一次拉進來不受影響。）
+    """
+    src, dest = make_mirror(sandbox, **{"t.md": "same\n"})
+    other = sandbox / OTHER_REL
+    shutil.copytree(dest, other)
+    before = snapshot(other)
+
+    result = run(sandbox / "bin" / SCRIPT.name, "--skill", str(OTHER_REL), str(src), home=home)
+
+    assert result.returncode != 0
+    assert "涵蓋清單" in result.stderr
+    assert "SKILLS" in result.stderr
+    assert snapshot(other) == before
