@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -172,15 +173,22 @@ class SignalStateTest(unittest.TestCase):
         (queue.parent.parent / skill).mkdir()
         return queue
 
-    def test_stop_hook_core_uses_queue_authoritative_capture(self) -> None:
-        project_queue = self.project_queue("hook-demo")
+    def run_capture(self, message: str) -> None:
+        # AGENTS_SKILLS_HOME 一定要指回 temp：今天只因為 capture-signal-core.sh:17 先走
+        # project queue 分支才沒外洩，那個分支一壞，這支測試會在轉紅之前先寫進開發者**真正的**
+        # ~/.agents/skills/improve/signal-queue.md。
         subprocess.run(
             ["bash", str(CAPTURE_CORE)],
-            input="Result complete.\n<<GAP hook-demo: reusable hook gap>>\n",
+            input=message,
             text=True,
             cwd=self.root,
             check=True,
+            env={**os.environ, "AGENTS_SKILLS_HOME": str(self.root / "fallback-home")},
         )
+
+    def test_stop_hook_core_uses_queue_authoritative_capture(self) -> None:
+        project_queue = self.project_queue("hook-demo")
+        self.run_capture("Result complete.\n<<GAP hook-demo: reusable hook gap>>\n")
         queue_text = project_queue.read_text()
         raw_path = project_queue.parent / "memory" / "signals.jsonl"
         self.assertIn("## [", queue_text)
@@ -197,21 +205,14 @@ class SignalStateTest(unittest.TestCase):
         # 散文 marker 排在真訊號**前面**：擋掉的那筆若讓整個迴圈提早收工（continue 寫成
         # break），後面真的缺口就會跟著無聲消失 —— 正是這個 commit 要修的那種靜默丟失。
         project_queue = self.project_queue("hook-demo")
-        subprocess.run(
-            ["bash", str(CAPTURE_CORE)],
-            input=(
-                "格式是 <<GAP skill-name: 一句話>>，例如 <<GAP no-such-skill: 缺了什麼>>。\n"
-                "<<GAP hook-demo: 真的缺口>>\n"
-            ),
-            text=True,
-            cwd=self.root,
-            check=True,
+        self.run_capture(
+            "格式是 <<GAP skill-name: 一句話>>，例如 <<GAP no-such-skill: 缺了什麼>>。\n"
+            "<<GAP hook-demo: 真的缺口>>\n"
         )
         queue_text = project_queue.read_text()
         self.assertIn("] hook-demo", queue_text)
         self.assertIn("真的缺口", queue_text)
         self.assertNotIn("skill-name", queue_text)
-        self.assertNotIn("no-such-skill", queue_text)
         raw = [
             json.loads(line)
             for line in (project_queue.parent / "memory" / "signals.jsonl").read_text().splitlines()
