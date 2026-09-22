@@ -340,6 +340,22 @@ def test_dm_blocked_says_how_many_were_dropped():
     assert "2" in rd.dm_blocked("Drive API 掛了", 2)
 
 
+def test_dm_blocked_keeps_the_exception_in_its_own_block():
+    """抬頭、摘要、例外三段分開，例外那段包在 code block 裡。
+
+    整段對而不是逐項 `in`：黏成一行、少一個換行、圍欄掉一邊，這幾種都會讓 traceback
+    跟上面兩行人話混在一起，而 `in` 一條都看不出來。
+    """
+    assert rd.dm_blocked("RuntimeError: 流程 B 失敗", 2).splitlines() == [
+        rd.DM_HEADER,
+        "有一段沒跑完，2 場一場都沒產",
+        "",
+        "```",
+        "RuntimeError: 流程 B 失敗",
+        "```",
+    ]
+
+
 # ------------------------------------------------------------------- parse_handoff
 
 
@@ -1428,6 +1444,7 @@ def test_the_unregistered_dm_puts_one_line_per_series():
     # 抬頭 ＋ 摘要 ＋ 空行 ＋ 兩個系列 ＋ 空行 ＋ 下一步
     assert len(lines) == 7, lines
     assert "2 個系列" in lines[1]
+    assert (lines[2], lines[5]) == ("", ""), "清單前後各留一行"
     assert lines[3].startswith("• ") and STRANGER in lines[3] and "3 個音檔" in lines[3]
     assert lines[4].startswith("• ") and STRANGER2 in lines[4] and "1 個音檔" in lines[4]
     assert "a.m4a" not in text, "未登記的不逐檔 —— 101 個檔案就是 101 行"

@@ -280,6 +280,9 @@ def test_dm_reminder_carries_everything_needed_to_act_on_it():
     assert lines[0] == channel.DM_HEADER, "抬頭自己一行"
     assert lines[2] == "", "抬頭那段與連結之間留一行"
     assert lines[3].startswith("📄 "), "Doc URL 要自己一行"
+    # 要貼上去跑的那行包在 code block 裡：圍欄掉一邊，複製到的就不只是那行指令。
+    fences = [i for i, line in enumerate(lines) if line == "```"]
+    assert len(fences) == 2 and fences[1] - fences[0] == 2, lines
 
 
 def test_dm_reminder_mentions_the_local_path_only_when_there_is_one():

@@ -554,8 +554,7 @@ def misplaced_notice(series_name: str, file_name: str) -> str:
     return "\n".join([
         MISPLACED_HEADER,
         "",
-        f"`{file_name}` 放在「{series_name}」的最外層，沒有日期就不知道是哪一天的會議，"
-        "所以不會產記錄。",
+        f"`{file_name}` 放在「{series_name}」的最外層，沒有日期就不知道是哪一天的會議，所以不會產記錄。",
         "",
         f"請把它移進該場會議的日期資料夾（{DATE_DIR_SHAPES}，{DATE_DIR_EXAMPLE}），下一輪就會自己產。",
     ])
