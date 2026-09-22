@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -50,14 +51,13 @@ class SignalStateTest(unittest.TestCase):
         )
         return result.stdout.strip()
 
-    def read_jsonl(self, name: str) -> list[dict]:
-        path = self.memory / name
+    def read_jsonl(self, path: Path) -> list[dict]:
         return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
     def test_capture_shares_id_and_keeps_raw_status_as_capture_snapshot(self) -> None:
         signal_id = self.capture()
         queue_text = self.queue.read_text()
-        raw = self.read_jsonl("signals.jsonl")
+        raw = self.read_jsonl(self.memory / "signals.jsonl")
         graph = json.loads((self.memory / "skill-graph.json").read_text())
 
         self.assertIn(f"- **signal_id**: {signal_id}", queue_text)
@@ -87,8 +87,8 @@ class SignalStateTest(unittest.TestCase):
         )
 
         queue_text = self.queue.read_text()
-        raw = self.read_jsonl("signals.jsonl")
-        transitions = self.read_jsonl("transitions.jsonl")
+        raw = self.read_jsonl(self.memory / "signals.jsonl")
+        transitions = self.read_jsonl(self.memory / "transitions.jsonl")
         graph = json.loads((self.memory / "skill-graph.json").read_text())
         self.assertIn("- **status**: resolved", queue_text)
         self.assertIn("- **memory_sync**: synced", queue_text)
@@ -165,26 +165,54 @@ class SignalStateTest(unittest.TestCase):
         self.assertIn(f"- **signal_id**: {signal_id}", self.queue.read_text())
         self.assertIn("- **memory_sync**: synced", self.queue.read_text())
 
-    def test_stop_hook_core_uses_queue_authoritative_capture(self) -> None:
-        project_queue = self.root / ".agents" / "skills" / "improve" / "signal-queue.md"
-        project_queue.parent.mkdir(parents=True)
-        project_queue.write_text("# Signal Queue\n")
+    def project_queue(self, skill: str) -> Path:
+        queue = self.root / ".agents" / "skills" / "improve" / "signal-queue.md"
+        queue.parent.mkdir(parents=True)
+        queue.write_text("# Signal Queue\n")
+        (queue.parent.parent / skill).mkdir()
+        return queue
+
+    def run_capture(self, message: str) -> None:
+        # AGENTS_SKILLS_HOME 一定要指回 temp：今天只因為 capture-signal-core.sh:17 先走
+        # project queue 分支才沒外洩，那個分支一壞，這支測試會在轉紅之前先寫進開發者**真正的**
+        # ~/.agents/skills/improve/signal-queue.md。
         subprocess.run(
             ["bash", str(CAPTURE_CORE)],
-            input="Result complete.\n<<GAP hook-demo: reusable hook gap>>\n",
+            input=message,
             text=True,
             cwd=self.root,
             check=True,
+            env={**os.environ, "AGENTS_SKILLS_HOME": str(self.root / "fallback-home")},
         )
+
+    def test_stop_hook_core_uses_queue_authoritative_capture(self) -> None:
+        project_queue = self.project_queue("hook-demo")
+        self.run_capture("Result complete.\n<<GAP hook-demo: reusable hook gap>>\n")
         queue_text = project_queue.read_text()
-        raw_path = project_queue.parent / "memory" / "signals.jsonl"
         self.assertIn("## [", queue_text)
         self.assertIn("] hook-demo", queue_text)
         self.assertIn("- **signal_id**: sig_", queue_text)
         self.assertIn("- **memory_sync**: synced", queue_text)
-        raw = [json.loads(line) for line in raw_path.read_text().splitlines() if line.strip()]
+        raw = self.read_jsonl(project_queue.parent / "memory" / "signals.jsonl")
         self.assertEqual(raw[0]["target_skill"], "hook-demo")
         self.assertEqual(raw[0]["status_semantics"], "captured_at_ingest")
+
+    def test_a_gap_naming_a_skill_that_does_not_exist_is_dropped(self) -> None:
+        # doc-echo guard：2026-09-16 Stop hook 把文件裡「示範 marker 長什麼樣」的散文
+        # 當成真訊號吃下去，六筆垃圾進 queue 只能手動退掉。skill 目錄不存在就不是訊號。
+        # 散文 marker 排在真訊號**前面**：擋掉的那筆若讓整個迴圈提早收工（continue 寫成
+        # break），後面真的缺口就會跟著無聲消失 —— 正是這個 commit 要修的那種靜默丟失。
+        project_queue = self.project_queue("hook-demo")
+        self.run_capture(
+            "格式是 <<GAP skill-name: 一句話>>，例如 <<GAP no-such-skill: 缺了什麼>>。\n"
+            "<<GAP hook-demo: 真的缺口>>\n"
+        )
+        queue_text = project_queue.read_text()
+        self.assertIn("] hook-demo", queue_text)
+        self.assertIn("真的缺口", queue_text)
+        self.assertNotIn("skill-name", queue_text)
+        raw = self.read_jsonl(project_queue.parent / "memory" / "signals.jsonl")
+        self.assertEqual([record["target_skill"] for record in raw], ["hook-demo"])
 
 
 if __name__ == "__main__":

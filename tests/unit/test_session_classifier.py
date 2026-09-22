@@ -210,13 +210,20 @@ class SessionClassifierTest(unittest.TestCase):
             ({"IMPROVE_CLASSIFIER_DISABLE": "1"}, "disabled by IMPROVE_CLASSIFIER_DISABLE"),
             ({"CLAUDE_CODE_SESSION_ATTENDED": "0"}, "unattended session"),
             ({"CLAUDE_CODE_ENTRYPOINT": "sdk-cli"}, "non-interactive entrypoint: sdk-cli"),
-            ({"CLAUDE_CODE_CHILD_SESSION": "1"}, "child session"),
         ):
             with self.subTest(env_extra=env_extra):
                 self.log.write_text("")
                 report = self.run_classifier(WITH_SKILLS, env_extra=env_extra)
                 self.assertEqual(report["skipped"], expected)
                 self.assertEqual(self.validator_calls(), [])
+
+    def test_child_session_env_alone_does_not_skip_a_session_a_human_was_sitting_in(self) -> None:
+        # CLAUDE_CODE_CHILD_SESSION 曾經是 gate，2026-09-16 它在有人在場的互動 session
+        # 裡讀到 "1"，於是每一個真 session 都被靜默跳過，好幾天沒人發現。
+        # 是不是自動化，改由 transcript 自己記的 entrypoint 回答。
+        report = self.run_classifier(WITH_SKILLS, env_extra={"CLAUDE_CODE_CHILD_SESSION": "1"})
+        self.assertIsNone(report["skipped"])
+        self.assertNotEqual(self.validator_calls(), [])
 
     def test_a_claude_p_transcript_is_skipped_even_when_the_environment_says_cli(self) -> None:
         # hook 繼承的環境變數可能是外層 session 的；transcript 自己記著它實際是什麼。
