@@ -1,5 +1,10 @@
-"""方向判斷 —— `parity.sync_direction`（純函式）、`direction_against_installed`（碰檔案）
+"""方向判斷 —— `sync_direction`（純函式）、`direction_against_installed`（碰檔案）
 與 `--direction` CLI，外加 repo-first 這件事在 SKILL.md 與 Makefile 上的落點。
+
+**純函式那一節跑兩份實作**：方向判斷現在有兩個家 —— skill 裡那份（`parity.py`，這條
+分支上不能改，理由見 `bin/parity_skills.py` 的 module docstring）與 repo 層那份
+（涵蓋多支 skill 的那份）。只測其中一份的話，另一份的 `>=` 漂成 `>` 不會有任何東西
+變紅，而那個邊界正是「猜錯就刪掉已合併改動」的那一個。
 
 **為什麼方向要是純函式**：它是本票唯一會「拒絕同步」的判斷，猜錯的代價不對稱 ——
 猜成 `安裝版較新` 而實際上 repo 較新，`rsync --delete` 會把已經合併進 repo 的改動刪掉；
@@ -27,9 +32,10 @@ from .conftest import child_env, load_script, skill_md_section
 from .test_sync_diff import pair, write_tree  # noqa: F401  `pair` 是 fixture，靠名字解析
 from .test_sync_from_installed import DEST_REL
 
-parity = load_script("parity")
-
 REPO = Path(__file__).resolve().parents[2]
+
+parity = load_script("parity")
+parity_skills = load_script("parity_skills", REPO / "bin")
 PARITY_PY = Path(parity.__file__)
 MAKEFILE = REPO / "Makefile"
 
@@ -39,46 +45,52 @@ NEWER = 2_000_000_000
 
 
 # --------------------------------------------------------------------------
-# 純函式 —— 六條規則各一條 case
+# 純函式 —— 六條規則各一條 case，兩份實作各跑一次
 # --------------------------------------------------------------------------
 
 
-def test_the_three_directions_are_distinct_strings():
+@pytest.fixture(params=["parity", "parity_skills"])
+def judge(request: pytest.FixtureRequest):
+    """方向判斷的兩份實作。兩份合一之後這個 fixture 就可以收掉。"""
+    return {"parity": parity, "parity_skills": parity_skills}[request.param]
+
+
+def test_the_three_directions_are_distinct_strings(judge):
     """三個方向常數必須互不相同。
 
     刪掉這條 → 兩個常數指到同一個字串時，下面每條斷言都還是綠的，而呼叫端
     再也分不出該擋還是該跑。
     """
-    assert len({parity.INSTALLED_NEWER, parity.REPO_NEWER, parity.IN_SYNC}) == 3
+    assert len({judge.INSTALLED_NEWER, judge.REPO_NEWER, judge.IN_SYNC}) == 3
 
 
-def test_no_differences_at_all_is_in_sync():
+def test_no_differences_at_all_is_in_sync(judge):
     """兩邊都沒有差異 → `一致`。
 
     刪掉這條 → 判斷可以永遠回 `repo 較新`，正向同步從此每次都被自己的閘門擋下來。
     """
-    assert parity.sync_direction({}, {}) == parity.IN_SYNC
+    assert judge.sync_direction({}, {}) == judge.IN_SYNC
 
 
-def test_a_path_only_in_the_repo_means_repo_newer():
+def test_a_path_only_in_the_repo_means_repo_newer(judge):
     """repo 端新增的檔案 → `repo 較新`。
 
     這是本票的主症狀：少了它，`rsync --delete` 會把 repo 端新增的檔案刪掉。
     刪掉這條 → 新增檔案被判成一致，同步照跑，改動無聲消失。
     """
-    assert parity.sync_direction({}, {"NEW.md": 1.0}) == parity.REPO_NEWER
+    assert judge.sync_direction({}, {"NEW.md": 1.0}) == judge.REPO_NEWER
 
 
-def test_a_path_only_in_the_installed_copy_means_installed_newer():
+def test_a_path_only_in_the_installed_copy_means_installed_newer(judge):
     """安裝版有、repo 沒有 → `安裝版較新`。
 
     刪掉這條 → 判斷只認得 repo 那一側，安裝版新增的檔案永遠同步不過來
     （或更糟：被判成 `repo 較新` 而擋下唯一能拿到它的方向）。
     """
-    assert parity.sync_direction({"NEW.md": 1.0}, {}) == parity.INSTALLED_NEWER
+    assert judge.sync_direction({"NEW.md": 1.0}, {}) == judge.INSTALLED_NEWER
 
 
-def test_a_shared_path_with_the_newer_mtime_in_the_repo_is_repo_newer():
+def test_a_shared_path_with_the_newer_mtime_in_the_repo_is_repo_newer(judge):
     """同一個路徑兩邊內容不同，repo 那份比較新 → `repo 較新`。
 
     這是**驗收條件 2（repo 端既有既存檔案被改過 → 拒絕同步）在純函式層唯一的正向
@@ -87,10 +99,10 @@ def test_a_shared_path_with_the_newer_mtime_in_the_repo_is_repo_newer():
     是「AC2 被守在哪」要找得到 —— 只剩一條平手邊界的話，讀測試的人得自己推導
     「平手回 repo ⇒ repo 更新時當然也回 repo」才能相信 AC2 有被守。
     """
-    assert parity.sync_direction({"a.md": OLDER}, {"a.md": NEWER}) == parity.REPO_NEWER
+    assert judge.sync_direction({"a.md": OLDER}, {"a.md": NEWER}) == judge.REPO_NEWER
 
 
-def test_a_shared_path_with_the_newer_mtime_in_the_installed_copy_is_installed_newer():
+def test_a_shared_path_with_the_newer_mtime_in_the_installed_copy_is_installed_newer(judge):
     """同一個路徑兩邊內容不同，安裝版那份比較新 → `安裝版較新`。
 
     **這是唯一一條靠 mtime 得到「安裝版較新」的 case**（上面那條是靠路徑只出現在
@@ -102,16 +114,16 @@ def test_a_shared_path_with_the_newer_mtime_in_the_installed_copy_is_installed_n
     （不是「只回固定值的實作全綠」：回固定 `repo 較新` 的實作在 `IN_SYNC` 與
     installed-only 兩條上就紅了。這條守的是**比較本身**，不是常數。）
     """
-    assert parity.sync_direction({"a.md": NEWER}, {"a.md": OLDER}) == parity.INSTALLED_NEWER
+    assert judge.sync_direction({"a.md": NEWER}, {"a.md": OLDER}) == judge.INSTALLED_NEWER
 
 
-def test_an_mtime_tie_falls_back_to_repo_newer():
+def test_an_mtime_tie_falls_back_to_repo_newer(judge):
     """mtime 平手 → `repo 較新`（刻意的：猜錯的代價不對稱）。
 
     刪掉這條 → `>` 與 `>=` 再也分不出來，而平手不是假想情況：
     同一次操作寫出來的兩份檔案 mtime 很容易落在同一個刻度上。
     """
-    assert parity.sync_direction({"a.md": NEWER}, {"a.md": NEWER}) == parity.REPO_NEWER
+    assert judge.sync_direction({"a.md": NEWER}, {"a.md": NEWER}) == judge.REPO_NEWER
 
 
 # --------------------------------------------------------------------------

@@ -20,8 +20,12 @@
 #
 # 內容已經一致（`cmp` 相同）的檔案**完全不碰**。碰了就是把佔位符寫進去。
 #
+# 涵蓋哪些 skill 是資料：bin/parity_skills.py 的 `SKILLS`。這支跟正向那支吃同一個
+# `--skill`，不給就是 generate-meeting-notes。
+#
 # 用法
-#   sync-to-installed.sh [DST]    DST 預設 ~/.agents/skills/generate-meeting-notes
+#   sync-to-installed.sh [--skill REL] [DST]
+#       DST 預設 ~/.agents/skills/<skill 目錄名>（安裝版是攤平的，沒有分類目錄那層）
 #
 # 退出碼
 #   0  掉齊完成
@@ -35,11 +39,20 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 SKILL_REL="skills/comms/generate-meeting-notes"
+if [[ ${1:-} == --skill ]]; then
+  SKILL_REL="${2:-}"
+  # 同正向那支：一定要是落在 skills/ 底下兩層的 repo 相對路徑。
+  [[ $SKILL_REL == skills/*/* && $SKILL_REL != *..* ]] ||
+    { echo "--skill 要帶 skills/<分類>/<skill> 形式的 repo 相對路徑：${SKILL_REL:-（空）}" >&2; exit 1; }
+  shift 2
+fi
+
+SKILL_NAME="${SKILL_REL##*/}"
 SRC="$REPO/$SKILL_REL"
-DST="${1:-$HOME/.agents/skills/generate-meeting-notes}"
+DST="${1:-$HOME/.agents/skills/$SKILL_NAME}"
 
 [[ -f $SRC/SKILL.md ]] || { echo "repo 內找不到 skill：$SRC" >&2; exit 1; }
-[[ -f $DST/SKILL.md ]] || { echo "DST 不像 generate-meeting-notes 安裝目錄：$DST" >&2; exit 1; }
+[[ -f $DST/SKILL.md ]] || { echo "DST 不像 $SKILL_NAME 安裝目錄：$DST" >&2; exit 1; }
 
 # rsync 排除的那四類在 base 裡不會出現，所以走檔案時也要跳過，否則每一顆
 # __pycache__ 都會被當成「repo 新增的檔案」複製過去。
@@ -55,7 +68,13 @@ STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 mkdir -p "$STAGE/bin"
 cp "$HERE/sync-from-installed.sh" "$STAGE/bin/"
-"$STAGE/bin/sync-from-installed.sh" "$DST" >/dev/null || {
+# parity_skills.py 一起複製：正向腳本要問它「這支 skill 要不要去識別化」。少了它，
+# 非 sanitize 的 skill 會被 sed 掃過，base 被污染，而三方合併是拿 base 當共同祖先的
+# —— 污染的 base 會把佔位符算成「repo 端的改動」推進安裝版。
+cp "$HERE/parity_skills.py" "$STAGE/bin/"
+# **一定要帶 --skill**：不帶的話正向腳本把東西同步到 stage 的 gmn 路徑，底下的 BASE
+# 就指到一個空目錄 —— 每個檔案都判成「repo 端新增」，安裝版被整包蓋掉。
+"$STAGE/bin/sync-from-installed.sh" --skill "$SKILL_REL" "$DST" >/dev/null || {
   echo "基準產不出來：正向腳本對 $DST 沒有乾淨收尾。沒有可信的 base，不動任何檔案。" >&2
   exit 2
 }
@@ -68,6 +87,16 @@ while IFS= read -r -d '' f; do
   rel="${f#"$SRC/"}"
   ours="$DST/$rel"
   base="$BASE/$rel"
+  # 懸空 symlink：`-e` 跟隨連結，所以底下那個 `! -e` 對它是**真** —— 走「新檔」分支會
+  # `cp` 寫穿到一個不存在的目標，`set -euo pipefail` 當場死，安裝版停在半同步（前面的
+  # 改了、後面的沒改、刪除迴圈根本沒跑）。安裝版的 improve 現在就有 5 個指向 private
+  # repo 的 symlink，沒 clone 那個 repo 的機器上全部懸空。
+  # 當成衝突：安裝版保持原樣、回非零、人工處理 —— 不要靜靜挑一邊。
+  if [[ -L $ours && ! -e $ours ]]; then
+    echo "  ! ${rel}（安裝版是懸空的 symlink，保持原樣）"
+    conflicts=$((conflicts + 1))
+    continue
+  fi
   if [[ ! -e $ours ]]; then
     mkdir -p "$(dirname "$ours")"
     cp "$f" "$ours"

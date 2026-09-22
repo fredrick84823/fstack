@@ -67,8 +67,12 @@ SCRIPTS = ROOT / "skills/comms/generate-meeting-notes/scripts"
 
 
 @lru_cache(maxsize=None)
-def load_script(name: str) -> ModuleType:
-    """把 `scripts/<name>.py` 當模組載進來（`load_script("extract_audio_sources")`）。
+def load_script(name: str, base: Path | None = None) -> ModuleType:
+    """把 `<base>/<name>.py` 當模組載進來（`load_script("extract_audio_sources")`）。
+
+    `base` 預設是這支 skill 的 `scripts/`；repo 層的模組傳 `ROOT / "bin"`。預設值在**呼叫時**
+    才解析（不是掛在簽名上）—— 綁在簽名上的話 `monkeypatch.setattr(conftest, "SCRIPTS", …)`
+    就改不到它，而 harness 自己的契約測試正是那樣換路徑的。
 
     模組名一定要是**路徑推出來的那個**（分隔符換成點），不能自己取一個好看的。mutmut
     給 mutant 的 key 是 `get_mutant_name()` 從檔案路徑算的（`skills.comms.
@@ -79,7 +83,7 @@ def load_script(name: str) -> ModuleType:
 
     同一個 process 內只載一次。mutmut 每顆 mutant 都是新 process，所以快取不會跨 mutant。
     """
-    path = SCRIPTS / f"{name}.py"
+    path = (SCRIPTS if base is None else base) / f"{name}.py"
     modname = str(path.relative_to(ROOT).with_suffix("")).replace(os.sep, ".")
     spec = importlib.util.spec_from_file_location(modname, path)
     if spec is None or spec.loader is None:
