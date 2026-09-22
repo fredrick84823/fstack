@@ -25,8 +25,11 @@ thoughts/
 # improve 的執行期資料：真實訊號、決策記錄與 raw evidence，內容含公司與內部專案名，
 # 不該進 public repo。repo 只留機制，格式說明在 references/ 與 SKILL.md；安裝版的這些檔案
 # 由 signal_state.py / memory.sh / capture-*.sh 自行 mkdir -p + touch 重建，不需版控的樣板。
+# 這幾條不帶尾斜線：安裝版把它們換成了指向 personal-knowledge 的 symlink，
+# 而 `memory/` 這種寫法只匹配目錄，symlink 在 git 眼裡是 blob，會整條漏掉。
 /skills/skill-evolution/improve/signal-queue.md
+/skills/skill-evolution/improve/signal-queue.rejected.log
 /skills/skill-evolution/improve/candidate-queue.md
 /skills/skill-evolution/improve/changelog.md
-/skills/skill-evolution/improve/memory/
+/skills/skill-evolution/improve/memory
 /skills/skill-evolution/improve/.signal-lifecycle.lock
