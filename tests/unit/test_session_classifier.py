@@ -221,11 +221,11 @@ class SessionClassifierTest(unittest.TestCase):
         # CLAUDE_CODE_CHILD_SESSION 曾經是 gate，2026-09-16 它在有人在場的互動 session
         # 裡讀到 "1"，於是每一個真 session 都被靜默跳過，好幾天沒人發現。
         # 是不是自動化，改由 transcript 自己記的 entrypoint 回答。
+        # 沒被跳過還不夠：候選數為零的 session 也是 skipped is None。要看到模型真的被問。
+        # 問了幾次、帶哪些 skill 由候選配對那條測試釘，這裡不重複綁 fixture 內容。
         report = self.run_classifier(WITH_SKILLS, env_extra={"CLAUDE_CODE_CHILD_SESSION": "1"})
         self.assertIsNone(report["skipped"])
-        self.assertEqual(self.validator_calls(), [
-            "generate-meeting-notes", "generate-meeting-notes", "create-handoff",
-        ])
+        self.assertNotEqual(self.validator_calls(), [])
 
     def test_a_claude_p_transcript_is_skipped_even_when_the_environment_says_cli(self) -> None:
         # hook 繼承的環境變數可能是外層 session 的；transcript 自己記著它實際是什麼。

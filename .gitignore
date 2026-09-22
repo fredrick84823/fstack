@@ -21,3 +21,7 @@ thoughts/
 
 # validator eval 的每跑結果；記錄在 evals/VALIDATOR-RESULTS.md，json 是跑完的中間產物。
 /skills/skill-evolution/improve/evals/validator-eval-results.json
+
+# session 結束時 classifier 的執行紀錄；同目錄的 signals.jsonl / skill-graph.json 都在版控，
+# 這支 log 夾在中間很容易被順手 commit 進來，而它每跑一次就長一點。
+/skills/skill-evolution/improve/memory/classifier.log

@@ -165,13 +165,11 @@ class SignalStateTest(unittest.TestCase):
         self.assertIn(f"- **signal_id**: {signal_id}", self.queue.read_text())
         self.assertIn("- **memory_sync**: synced", self.queue.read_text())
 
-    def project_queue(self, *skills: str) -> Path:
-        """專案級 queue，外加幾個**真的存在**的 sibling skill 目錄（doc-echo guard 的判準）。"""
+    def project_queue(self, skill: str) -> Path:
         queue = self.root / ".agents" / "skills" / "improve" / "signal-queue.md"
         queue.parent.mkdir(parents=True)
         queue.write_text("# Signal Queue\n")
-        for skill in skills:
-            (queue.parent.parent / skill).mkdir()
+        (queue.parent.parent / skill).mkdir()
         return queue
 
     def test_stop_hook_core_uses_queue_authoritative_capture(self) -> None:
@@ -196,16 +194,30 @@ class SignalStateTest(unittest.TestCase):
     def test_a_gap_naming_a_skill_that_does_not_exist_is_dropped(self) -> None:
         # doc-echo guard：2026-09-16 Stop hook 把文件裡「示範 marker 長什麼樣」的散文
         # 當成真訊號吃下去，六筆垃圾進 queue 只能手動退掉。skill 目錄不存在就不是訊號。
+        # 散文 marker 排在真訊號**前面**：擋掉的那筆若讓整個迴圈提早收工（continue 寫成
+        # break），後面真的缺口就會跟著無聲消失 —— 正是這個 commit 要修的那種靜默丟失。
         project_queue = self.project_queue("hook-demo")
         subprocess.run(
             ["bash", str(CAPTURE_CORE)],
-            input="格式是 <<GAP skill-name: 一句話>>，例如 <<GAP no-such-skill: 缺了什麼>>。\n",
+            input=(
+                "格式是 <<GAP skill-name: 一句話>>，例如 <<GAP no-such-skill: 缺了什麼>>。\n"
+                "<<GAP hook-demo: 真的缺口>>\n"
+            ),
             text=True,
             cwd=self.root,
             check=True,
         )
-        self.assertEqual(project_queue.read_text(), "# Signal Queue\n")
-        self.assertFalse((project_queue.parent / "memory" / "signals.jsonl").exists())
+        queue_text = project_queue.read_text()
+        self.assertIn("] hook-demo", queue_text)
+        self.assertIn("真的缺口", queue_text)
+        self.assertNotIn("skill-name", queue_text)
+        self.assertNotIn("no-such-skill", queue_text)
+        raw = [
+            json.loads(line)
+            for line in (project_queue.parent / "memory" / "signals.jsonl").read_text().splitlines()
+            if line.strip()
+        ]
+        self.assertEqual([record["target_skill"] for record in raw], ["hook-demo"])
 
 
 if __name__ == "__main__":
