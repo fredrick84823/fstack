@@ -1,0 +1,557 @@
+<!--
+  PROTOTYPE — 丟棄式。三個變體，切換用 ?variant=A|B|C。
+  問題：「部門填會議設定的表單該長什麼樣？」
+  沒有持久化，沒有接 db，狀態只在記憶體裡。挑完一個之後重寫，不要直接升級這份。
+-->
+<title>會議設定 · 三個版本</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bone:#F7F6F3; --paper:#FFFFFF; --sand:#FBFBFA;
+  --ink:#1C1B19; --ink-2:#4A4844; --ink-3:#8A8781;
+  --rule:#E7E5E0; --rule-soft:rgba(0,0,0,.05);
+  --lift:0 1px 2px rgba(28,27,25,.03), 0 12px 32px -18px rgba(28,27,25,.14);
+  --lift-hi:0 1px 2px rgba(28,27,25,.04), 0 20px 44px -20px rgba(28,27,25,.2);
+  --sans:'Geist','SF Pro Display','Helvetica Neue',system-ui,sans-serif;
+  --serif:'Instrument Serif','Lyon Text','Newsreader',Georgia,serif;
+  --mono:'Geist Mono','SF Mono','JetBrains Mono',ui-monospace,monospace;
+  --r:10px;
+  --accent:#3A5E42; --accent-wash:#EDF3EC; --accent-line:#C9DCC9;
+  --warn:#9F2F2D; --warn-wash:#FDEBEC;
+  --ease:cubic-bezier(.16,1,.3,1);
+}
+[data-v="B"]{ --accent:#245C82; --accent-wash:#E4F0F8; --accent-line:#BFD9E9; }
+[data-v="C"]{ --accent:#8A4A2F; --accent-wash:#FAEDE6; --accent-line:#E5CBBB; }
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bone); color:var(--ink);
+  font-family:var(--sans); font-size:15px; line-height:1.6;
+  -webkit-font-smoothing:antialiased; padding-bottom:104px;
+}
+body::after{ /* 環境光，不吃捲動效能 */
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background:radial-gradient(70ch 50ch at 18% -10%, rgba(138,135,129,.10), transparent 70%);
+}
+.wrap{position:relative; z-index:1; max-width:1180px; margin:0 auto; padding-inline:20px}
+h1,h2,h3{margin:0; font-weight:400; letter-spacing:-.02em}
+p{margin:0}
+input,select,textarea,button{font:inherit; color:inherit}
+a{color:var(--accent)}
+
+/* ── 共用欄位 ───────────────────────────────── */
+.f{display:flex; flex-direction:column; gap:7px}
+.f > label{font-size:13.5px; font-weight:500; letter-spacing:-.01em}
+.f .hint{font-size:12.5px; color:var(--ink-3); line-height:1.55}
+.f input[type=text], .f textarea, .f select{
+  width:100%; background:var(--paper); border:1px solid var(--rule);
+  border-radius:7px; padding:10px 12px; outline:none;
+  transition:border-color .18s var(--ease), box-shadow .18s var(--ease);
+}
+.f textarea{resize:vertical; min-height:72px; line-height:1.55}
+.f input:focus, .f textarea:focus, .f select:focus{
+  border-color:var(--accent-line);
+  box-shadow:0 0 0 3px var(--accent-wash);
+}
+.f input::placeholder, .f textarea::placeholder{color:#B9B6B0}
+.mono{font-family:var(--mono); font-size:12.5px}
+
+.chk{display:flex; gap:10px; align-items:flex-start; cursor:pointer; padding:11px 13px;
+  border:1px solid var(--rule); border-radius:8px; background:var(--paper);
+  transition:border-color .18s var(--ease), background .18s var(--ease)}
+.chk:hover{border-color:#D8D5CF}
+.chk input{margin:3px 0 0; accent-color:var(--accent); flex:none}
+.chk span{font-size:13.5px; line-height:1.55}
+.chk.on{border-color:var(--accent-line); background:var(--accent-wash)}
+
+.tag{display:inline-flex; align-items:center; gap:6px; border-radius:9999px;
+  font-size:10.5px; text-transform:uppercase; letter-spacing:.09em; font-weight:500;
+  padding:3px 9px; background:var(--accent-wash); color:var(--accent)}
+.tag.q{background:var(--warn-wash); color:var(--warn)}
+
+.btn{border:0; border-radius:7px; background:var(--ink); color:#fff; padding:10px 18px;
+  font-size:14px; font-weight:500; cursor:pointer; letter-spacing:-.01em;
+  transition:transform .12s var(--ease), background .18s var(--ease)}
+.btn:hover{background:#343029}
+.btn:active{transform:scale(.982)}
+.btn.ghost{background:transparent; color:var(--ink-2); border:1px solid var(--rule)}
+.btn.ghost:hover{background:var(--paper); color:var(--ink)}
+.btn[disabled]{opacity:.4; cursor:not-allowed; transform:none}
+
+.note{border-left:2px solid var(--accent-line); padding:2px 0 2px 14px;
+  font-size:13px; color:var(--ink-2); line-height:1.65}
+.note b{font-weight:500; color:var(--ink)}
+
+.enter{opacity:0; transform:translateY(12px); animation:rise .6s var(--ease) forwards;
+  animation-delay:calc(var(--i,0) * 70ms)}
+@keyframes rise{to{opacity:1; transform:none}}
+@media (prefers-reduced-motion:reduce){ .enter{animation:none; opacity:1; transform:none} }
+
+/* ── 送出內容預覽（三個變體共用內容、不同位置）─ */
+.peek{font-family:var(--mono); font-size:11.5px; line-height:1.75; color:var(--ink-2);
+  white-space:pre-wrap; word-break:break-all; margin:0}
+.peek .k{color:var(--ink-3)}
+.peek .v{color:var(--accent)}
+.peek .miss{color:#C0BDB6}
+
+/* ═══ 變體 A — 文件式 ═══════════════════════ */
+#A .doc{max-width:720px; margin:0 auto; padding:84px 0 72px}
+#A .eyebrow{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3)}
+#A h1{font-family:var(--serif); font-size:clamp(34px,5.4vw,50px); line-height:1.06;
+  letter-spacing:-.025em; margin:16px 0 18px}
+#A h1 em{font-style:italic; color:var(--ink-2)}
+#A .lede{font-size:16px; color:var(--ink-2); line-height:1.7; max-width:60ch}
+#A section{border-top:1px solid var(--rule); padding:38px 0 6px; margin-top:38px}
+#A .sh{display:flex; align-items:baseline; gap:14px; margin-bottom:22px}
+#A .sh .n{font-family:var(--mono); font-size:12px; color:var(--ink-3)}
+#A .sh h2{font-family:var(--serif); font-size:26px; letter-spacing:-.02em}
+#A .rows{display:flex; flex-direction:column; gap:22px}
+#A .pair{display:grid; grid-template-columns:1fr 1fr; gap:22px}
+#A .foot{border-top:1px solid var(--rule); margin-top:44px; padding-top:26px;
+  display:flex; justify-content:space-between; align-items:flex-end; gap:24px; flex-wrap:wrap}
+#A .foot .peekbox{flex:1 1 320px; min-width:0}
+#A .foot .cap{font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); margin-bottom:8px}
+
+/* ═══ 變體 B — 逐步引導 ════════════════════ */
+#B .split{display:grid; grid-template-columns:270px minmax(0,1fr); gap:56px; padding:72px 0 64px; align-items:start}
+#B .rail{position:sticky; top:40px}
+#B .rail h1{font-family:var(--serif); font-size:30px; line-height:1.1; margin-bottom:8px}
+#B .rail .sub{font-size:13px; color:var(--ink-3); margin-bottom:30px}
+#B .steps{list-style:none; margin:0; padding:0; display:flex; flex-direction:column}
+#B .steps li{display:flex; gap:12px; padding:13px 0; border-top:1px solid var(--rule);
+  cursor:pointer; color:var(--ink-3); transition:color .2s var(--ease)}
+#B .steps li:hover{color:var(--ink-2)}
+#B .steps li .dot{flex:none; width:19px; height:19px; border-radius:9999px; border:1px solid var(--rule);
+  display:grid; place-items:center; font-family:var(--mono); font-size:10px; margin-top:2px;
+  transition:all .25s var(--ease)}
+#B .steps li .lbl{font-size:13.5px; line-height:1.45}
+#B .steps li.on{color:var(--ink)}
+#B .steps li.on .dot{border-color:var(--accent); background:var(--accent); color:#fff}
+#B .steps li.done .dot{border-color:var(--accent-line); background:var(--accent-wash); color:var(--accent)}
+#B .panel{background:var(--paper); border:1px solid var(--rule); border-radius:14px;
+  padding:40px; box-shadow:var(--lift); min-height:430px;
+  display:flex; flex-direction:column}
+#B .panel h2{font-family:var(--serif); font-size:28px; margin-bottom:6px}
+#B .panel .why{font-size:13.5px; color:var(--ink-3); margin-bottom:28px; max-width:56ch}
+#B .body{display:flex; flex-direction:column; gap:20px; flex:1}
+#B .nav{display:flex; justify-content:space-between; align-items:center; gap:16px;
+  border-top:1px solid var(--rule); margin-top:32px; padding-top:20px}
+#B .nav .pos{font-family:var(--mono); font-size:11.5px; color:var(--ink-3)}
+#B .peekbox{margin-top:22px; background:var(--sand); border:1px solid var(--rule);
+  border-radius:12px; padding:18px 20px}
+#B .peekbox .cap{font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); margin-bottom:10px}
+
+/* ═══ 變體 C — 總覽優先 ════════════════════ */
+#C .head{padding:64px 0 30px; display:flex; justify-content:space-between; align-items:flex-end; gap:28px; flex-wrap:wrap}
+#C .head h1{font-family:var(--serif); font-size:clamp(30px,4.4vw,42px); line-height:1.08}
+#C .head .lede{font-size:14px; color:var(--ink-2); max-width:46ch; margin-top:10px}
+#C .meter{display:flex; align-items:center; gap:12px}
+#C .meter .bar{width:128px; height:3px; border-radius:2px; background:var(--rule); overflow:hidden}
+#C .meter .bar i{display:block; height:100%; background:var(--accent); width:0;
+  transition:width .5s var(--ease)}
+#C .meter .num{font-family:var(--mono); font-size:12px; color:var(--ink-3)}
+#C .bento{display:grid; grid-template-columns:1.35fr 1fr 1fr; gap:14px; padding-bottom:64px}
+#C .tile{background:var(--paper); border:1px solid var(--rule); border-radius:14px;
+  padding:24px; box-shadow:var(--lift); cursor:pointer;
+  transition:box-shadow .25s var(--ease), border-color .25s var(--ease)}
+#C .tile:hover{box-shadow:var(--lift-hi); border-color:#DCD9D3}
+#C .tile.open{cursor:default; box-shadow:var(--lift-hi)}
+#C .tile .th{display:flex; justify-content:space-between; align-items:flex-start; gap:14px}
+#C .tile h3{font-size:15px; font-weight:500; letter-spacing:-.015em}
+#C .tile .val{margin-top:10px; font-size:13.5px; color:var(--ink-2); line-height:1.55}
+#C .tile .val.empty{color:#B9B6B0}
+#C .tile .fields{display:flex; flex-direction:column; gap:18px; margin-top:20px;
+  padding-top:20px; border-top:1px solid var(--rule)}
+#C .span2{grid-column:span 2}
+#C .span3{grid-column:span 3}
+#C .tile.peekt{background:var(--sand); cursor:default}
+#C .tile.peekt:hover{box-shadow:var(--lift)}
+
+/* ── 切換列 ────────────────────────────────── */
+.sw{position:fixed; left:50%; bottom:22px; transform:translateX(-50%); z-index:60;
+  display:flex; align-items:center; gap:2px; background:var(--ink); color:#fff;
+  border-radius:9999px; padding:5px; box-shadow:0 8px 30px -8px rgba(28,27,25,.45)}
+.sw button{background:transparent; border:0; color:#fff; width:32px; height:32px;
+  border-radius:9999px; cursor:pointer; display:grid; place-items:center; opacity:.65;
+  transition:opacity .15s, background .15s}
+.sw button:hover{opacity:1; background:rgba(255,255,255,.12)}
+.sw .cur{padding:0 14px; font-size:12.5px; letter-spacing:-.01em; white-space:nowrap}
+.sw .cur b{font-family:var(--mono); font-weight:500; margin-right:8px; opacity:.6}
+.sw .hintk{font-family:var(--mono); font-size:10px; opacity:.4; padding-right:8px}
+
+@media (max-width:900px){
+  #B .split{grid-template-columns:1fr; gap:30px; padding-top:48px}
+  #B .rail{position:static}
+  #B .panel{padding:26px}
+  #C .bento{grid-template-columns:1fr}
+  #C .span2,#C .span3{grid-column:span 1}
+  #A .pair{grid-template-columns:1fr}
+  #A .doc{padding-top:52px}
+  .sw .hintk{display:none}
+}
+</style>
+
+<div class="wrap">
+  <!-- ════════ A ════════ -->
+  <div id="A" hidden>
+    <div class="doc">
+      <div class="enter" style="--i:0">
+        <div class="eyebrow">會議記錄自動化</div>
+        <h1>把一場會議<em>交給排程</em>之前，<br>有四件事只有你們知道。</h1>
+        <p class="lede">填完之後，這場會議的錄音只要丟進指定資料夾，記錄就會自己產出來並貼進你們的頻道。整份大約三分鐘。</p>
+      </div>
+
+      <section class="enter" style="--i:1">
+        <div class="sh"><span class="n">01</span><h2>這是什麼會議</h2></div>
+        <div class="rows">
+          <div class="f">
+            <label for="a-name">會議名稱</label>
+            <input id="a-name" type="text" data-k="name" placeholder="週二 RD 專案會議">
+            <span class="hint">用你們平常互相講的那個名字就好。</span>
+          </div>
+          <div class="f">
+            <label for="a-folder">放錄音的 Drive 資料夾</label>
+            <input id="a-folder" type="text" data-k="folder" placeholder="貼上資料夾網址">
+            <span class="hint">在 Drive 打開那個資料夾，把網址整條貼過來。不用管網址裡那串亂碼，我們自己抽。</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="enter" style="--i:2">
+        <div class="sh"><span class="n">02</span><h2>記錄要貼到哪</h2></div>
+        <div class="rows">
+          <div class="f">
+            <label for="a-ch">Slack 頻道</label>
+            <input id="a-ch" type="text" data-k="channel" placeholder="#rd-team">
+            <span class="hint">記錄產好會附一則訊息與 Google Doc 連結。沒產出來時，提醒也會發在同一個頻道。</span>
+          </div>
+          <label class="chk" data-chk><input type="checkbox" data-k="botIn"><span>我已經把「Tagtoo Meeting Notes」這個 bot 邀請進那個頻道了</span></label>
+        </div>
+      </section>
+
+      <section class="enter" style="--i:3">
+        <div class="sh"><span class="n">03</span><h2>誰在場</h2></div>
+        <p class="note" style="margin-bottom:22px"><b>這一段決定記錄的品質。</b>錄音檔本身沒有標記誰在講話，記錄裡的人名是依照你們告訴我們的會議結構推出來的。名單漏了一個人，他講的話就會被算到別人頭上。</p>
+        <div class="rows">
+          <div class="f">
+            <label for="a-att">與會者</label>
+            <textarea id="a-att" data-k="attendees" placeholder="一行一個人，含只聽不報告的人"></textarea>
+          </div>
+          <div class="pair">
+            <div class="f">
+              <label for="a-order">固定的報告順序</label>
+              <input id="a-order" type="text" data-k="order" placeholder="沒有固定順序就留白">
+            </div>
+            <div class="f">
+              <label for="a-to">大家是報告給誰聽</label>
+              <input id="a-to" type="text" data-k="reportTo" placeholder="沒有特定對象就留白">
+              <span class="hint">最常被漏掉的就是這一格。</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="enter" style="--i:4">
+        <div class="sh"><span class="n">04</span><h2>這場會適合自動產記錄嗎</h2></div>
+        <p class="note" style="margin-bottom:20px">記錄產好會<b>自動貼進頻道</b>，沒有「事後改成機密」這個選項。</p>
+        <label class="chk" data-chk><input type="checkbox" data-k="safe"><span>這個會議不會談到人事、薪酬、考績、合約、資遣或法務案件。真的談到時，那次的錄音我們不會丟進這個資料夾。</span></label>
+      </section>
+
+      <div class="foot enter" style="--i:5">
+        <div class="peekbox">
+          <div class="cap">會送出的內容</div>
+          <pre class="peek" data-peek></pre>
+        </div>
+        <button class="btn" data-submit>送出設定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ B ════════ -->
+  <div id="B" hidden>
+    <div class="split">
+      <aside class="rail enter">
+        <h1>會議設定</h1>
+        <p class="sub">四步，約三分鐘</p>
+        <ul class="steps" data-steps></ul>
+        <div class="peekbox">
+          <div class="cap">目前填了什麼</div>
+          <pre class="peek" data-peek></pre>
+        </div>
+      </aside>
+
+      <div class="panel enter" style="--i:1">
+        <h2 data-bt></h2>
+        <p class="why" data-bw></p>
+        <div class="body" data-bbody></div>
+        <div class="nav">
+          <button class="btn ghost" data-prev>上一步</button>
+          <span class="pos" data-bpos></span>
+          <button class="btn" data-next>下一步</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ C ════════ -->
+  <div id="C" hidden>
+    <div class="head enter">
+      <div>
+        <h1>會議設定</h1>
+        <p class="lede">四塊都填完就能開通。點任何一塊就地編輯，隨時可以回頭改。</p>
+      </div>
+      <div class="meter">
+        <span class="num" data-cnum>0 / 4</span>
+        <span class="bar"><i data-cbar></i></span>
+      </div>
+    </div>
+    <div class="bento" data-bento></div>
+  </div>
+</div>
+
+<nav class="sw">
+  <button data-go="-1" aria-label="上一個版本">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <span class="cur"><b data-swk>A</b><span data-swn></span></span>
+  <button data-go="1" aria-label="下一個版本">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <span class="hintk">← →</span>
+</nav>
+
+<script>
+const VARIANTS = [
+  ['A','文件式'],
+  ['B','逐步引導'],
+  ['C','總覽優先'],
+];
+
+const state = {
+  name:'', folder:'', channel:'', botIn:false,
+  attendees:'', order:'', reportTo:'', safe:false,
+};
+
+const LABEL = {
+  name:'會議名稱', folder:'Drive 資料夾', channel:'Slack 頻道', botIn:'bot 已邀請',
+  attendees:'與會者', order:'報告順序', reportTo:'報告對象', safe:'已確認不含敏感內容',
+};
+
+// Drive 網址 → folder id。抽不出來就回原字串，讓人看得見自己貼了什麼。
+function folderId(url){
+  const m = String(url).match(/folders\/([A-Za-z0-9_-]{10,})/);
+  return m ? m[1] : (url.trim() || '');
+}
+
+function peekText(){
+  const fid = folderId(state.folder);
+  const rows = [
+    ['會議名稱', state.name],
+    ['資料夾 id', fid && fid !== state.folder.trim() ? fid : (state.folder ? '網址看起來不對' : '')],
+    ['Slack 頻道', state.channel],
+    ['與會者', state.attendees.split('\n').map(s=>s.trim()).filter(Boolean).join('、')],
+    ['報告順序', state.order],
+    ['報告對象', state.reportTo],
+    ['bot 已邀請', state.botIn ? '是' : ''],
+    ['敏感度已確認', state.safe ? '是' : ''],
+  ];
+  return rows.map(([k,v]) =>
+    `<span class="k">${k.padEnd(7,'　')}</span>` +
+    (v ? `<span class="v">${esc(v)}</span>` : `<span class="miss">—</span>`)
+  ).join('\n');
+}
+function esc(s){ return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+function filledGroups(){
+  return [
+    !!(state.name && state.folder),
+    !!(state.channel && state.botIn),
+    !!(state.attendees.trim()),
+    state.safe,
+  ];
+}
+
+function sync(){
+  document.querySelectorAll('[data-peek]').forEach(el => el.innerHTML = peekText());
+  document.querySelectorAll('[data-chk]').forEach(l => {
+    const i = l.querySelector('input');
+    l.classList.toggle('on', i.checked);
+  });
+  const g = filledGroups(), n = g.filter(Boolean).length;
+  const num = document.querySelector('[data-cnum]'), bar = document.querySelector('[data-cbar]');
+  if(num) num.textContent = `${n} / 4`;
+  if(bar) bar.style.width = (n/4*100) + '%';
+  renderSteps();
+  renderBento();
+  document.querySelectorAll('[data-submit]').forEach(b => b.disabled = n < 4);
+}
+
+// 任何欄位 → state
+document.addEventListener('input', e => {
+  const k = e.target.dataset.k; if(!k) return;
+  state[k] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+  sync();
+});
+document.addEventListener('change', e => {
+  const k = e.target.dataset.k; if(!k) return;
+  state[k] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+  sync();
+});
+
+/* ── B：步驟 ─────────────────────────────── */
+const STEPS = [
+  { t:'這是什麼會議', w:'我們要知道去哪裡找錄音，以及這場會叫什麼。',
+    html:`<div class="f"><label>會議名稱</label><input type="text" data-k="name" placeholder="週二 RD 專案會議"><span class="hint">用你們平常互相講的那個名字。</span></div>
+          <div class="f"><label>放錄音的 Drive 資料夾</label><input type="text" data-k="folder" placeholder="貼上資料夾網址"><span class="hint">在 Drive 打開資料夾，把網址整條貼過來。</span></div>` },
+  { t:'記錄要貼到哪', w:'記錄產好會附連結貼進頻道；沒產出來時提醒也發在同一個地方。',
+    html:`<div class="f"><label>Slack 頻道</label><input type="text" data-k="channel" placeholder="#rd-team"></div>
+          <label class="chk" data-chk><input type="checkbox" data-k="botIn"><span>我已經把「Tagtoo Meeting Notes」這個 bot 邀請進那個頻道了</span></label>` },
+  { t:'誰在場', w:'錄音檔沒有標記誰在講話。記錄裡的人名是依照這一段推出來的 —— 名單漏一個人，他講的話就會算到別人頭上。',
+    html:`<div class="f"><label>與會者</label><textarea data-k="attendees" placeholder="一行一個人，含只聽不報告的人"></textarea></div>
+          <div class="f"><label>固定的報告順序</label><input type="text" data-k="order" placeholder="沒有固定順序就留白"></div>
+          <div class="f"><label>大家是報告給誰聽</label><input type="text" data-k="reportTo" placeholder="沒有特定對象就留白"><span class="hint">最常被漏掉的就是這一格。</span></div>` },
+  { t:'這場會適合自動產記錄嗎', w:'記錄產好會自動貼進頻道，沒有「事後改成機密」這個選項。',
+    html:`<label class="chk" data-chk><input type="checkbox" data-k="safe"><span>這個會議不會談到人事、薪酬、考績、合約、資遣或法務案件。真的談到時，那次的錄音我們不會丟進這個資料夾。</span></label>
+          <p class="note" style="margin-top:6px">不確定某個資料夾有沒有被登記過 —— 先問，不要先丟。</p>` },
+];
+let step = 0;
+
+function renderSteps(){
+  const ul = document.querySelector('[data-steps]'); if(!ul) return;
+  const g = filledGroups();
+  ul.innerHTML = STEPS.map((s,i) =>
+    `<li class="${i===step?'on':''} ${g[i]?'done':''}" data-step="${i}">
+       <span class="dot">${g[i] && i!==step ? '✓' : i+1}</span>
+       <span class="lbl">${s.t}</span>
+     </li>`).join('');
+}
+function renderStep(){
+  const p = document.querySelector('[data-bbody]'); if(!p) return;
+  const s = STEPS[step];
+  document.querySelector('[data-bt]').textContent = s.t;
+  document.querySelector('[data-bw]').textContent = s.w;
+  p.innerHTML = s.html;
+  restore(p);
+  document.querySelector('[data-bpos]').textContent = `${step+1} / ${STEPS.length}`;
+  document.querySelector('[data-prev]').disabled = step === 0;
+  const nx = document.querySelector('[data-next]');
+  if(step === STEPS.length-1){ nx.textContent = '送出設定'; nx.setAttribute('data-submit',''); }
+  else { nx.textContent = '下一步'; nx.removeAttribute('data-submit'); }
+  sync();
+}
+function restore(root){
+  root.querySelectorAll('[data-k]').forEach(el => {
+    const v = state[el.dataset.k];
+    if(el.type === 'checkbox') el.checked = !!v; else el.value = v;
+  });
+}
+document.addEventListener('click', e => {
+  const li = e.target.closest('[data-step]');
+  if(li){ step = +li.dataset.step; renderStep(); return; }
+  if(e.target.closest('[data-prev]')){ if(step>0){ step--; renderStep(); } return; }
+  if(e.target.closest('[data-next]')){
+    if(step < STEPS.length-1){ step++; renderStep(); }
+    else submit();
+    return;
+  }
+  if(e.target.closest('[data-submit]') && !e.target.closest('[data-next]')) submit();
+});
+
+/* ── C：Bento ────────────────────────────── */
+const TILES = [
+  { t:'這是什麼會議', span:'span2',
+    sum:()=> state.name ? `${state.name}　·　${state.folder ? '資料夾已填' : '還沒填資料夾'}` : '',
+    html:`<div class="f"><label>會議名稱</label><input type="text" data-k="name" placeholder="週二 RD 專案會議"></div>
+          <div class="f"><label>放錄音的 Drive 資料夾</label><input type="text" data-k="folder" placeholder="貼上資料夾網址"><span class="hint">在 Drive 打開資料夾，把網址整條貼過來。</span></div>` },
+  { t:'記錄貼到哪',
+    sum:()=> state.channel ? `${state.channel}${state.botIn?'　·　bot 已邀請':'　·　bot 還沒邀請'}` : '',
+    html:`<div class="f"><label>Slack 頻道</label><input type="text" data-k="channel" placeholder="#rd-team"></div>
+          <label class="chk" data-chk><input type="checkbox" data-k="botIn"><span>bot 已經邀請進那個頻道了</span></label>` },
+  { t:'誰在場', span:'span2',
+    sum:()=>{ const a = state.attendees.split('\n').map(s=>s.trim()).filter(Boolean);
+      return a.length ? `${a.length} 人${state.reportTo?`　·　報告給 ${state.reportTo}`:'　·　還沒填報告對象'}` : ''; },
+    html:`<p class="note" style="margin-bottom:4px"><b>這一塊決定記錄的品質。</b>錄音沒有標記誰在講話，人名是依這裡推的。漏一個人，他講的話會算到別人頭上。</p>
+          <div class="f"><label>與會者</label><textarea data-k="attendees" placeholder="一行一個人，含只聽不報告的人"></textarea></div>
+          <div class="f"><label>固定的報告順序</label><input type="text" data-k="order" placeholder="沒有就留白"></div>
+          <div class="f"><label>大家是報告給誰聽</label><input type="text" data-k="reportTo" placeholder="沒有就留白"><span class="hint">最常被漏掉的就是這一格。</span></div>` },
+  { t:'適合自動產嗎',
+    sum:()=> state.safe ? '已確認' : '',
+    html:`<p class="note" style="margin-bottom:4px">記錄會自動貼進頻道，沒有「事後改成機密」這個選項。</p>
+          <label class="chk" data-chk><input type="checkbox" data-k="safe"><span>不會談到人事、薪酬、考績、合約、資遣或法務案件</span></label>` },
+];
+let openTile = -1;
+
+function renderBento(){
+  const b = document.querySelector('[data-bento]'); if(!b) return;
+  const g = filledGroups();
+  b.innerHTML = TILES.map((t,i) => {
+    const sum = t.sum();
+    return `<div class="tile ${t.span||''} ${openTile===i?'open':''}" data-tile="${i}">
+      <div class="th">
+        <h3>${t.t}</h3>
+        <span class="tag ${g[i]?'':'q'}">${g[i]?'完成':'待填'}</span>
+      </div>
+      <p class="val ${sum?'':'empty'}">${sum ? esc(sum) : '點一下開始填'}</p>
+      ${openTile===i ? `<div class="fields">${t.html}</div>` : ''}
+    </div>`;
+  }).join('')
+  + `<div class="tile peekt span3">
+       <div class="th"><h3>會送出的內容</h3><button class="btn" data-submit>送出設定</button></div>
+       <pre class="peek" data-peek style="margin-top:16px"></pre>
+     </div>`;
+  const open = b.querySelector('.tile.open .fields');
+  if(open) restore(open);
+  document.querySelectorAll('[data-peek]').forEach(el => el.innerHTML = peekText());
+  document.querySelectorAll('[data-chk]').forEach(l => l.classList.toggle('on', l.querySelector('input').checked));
+  const n = g.filter(Boolean).length;
+  b.querySelectorAll('[data-submit]').forEach(x => x.disabled = n < 4);
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-tile]');
+  if(t && !e.target.closest('.fields')){
+    openTile = (openTile === +t.dataset.tile) ? -1 : +t.dataset.tile;
+    renderBento();
+  }
+});
+
+function submit(){
+  alert('原型不送出任何東西。\n實際版本會寫進 artifact 的 db，之後由 Claude Code 讀回來。\n\n' +
+        Object.entries(state).map(([k,v]) => `${LABEL[k]}：${v===true?'是':v===false?'否':(v||'（空）')}`).join('\n'));
+}
+
+/* ── 變體切換 ────────────────────────────── */
+function current(){
+  const q = new URLSearchParams(location.search).get('variant');
+  return VARIANTS.some(([k]) => k === q) ? q : 'A';
+}
+function show(k){
+  VARIANTS.forEach(([v]) => document.getElementById(v).hidden = (v !== k));
+  document.documentElement.setAttribute('data-v', k);
+  document.querySelector('[data-swk]').textContent = k;
+  document.querySelector('[data-swn]').textContent = VARIANTS.find(([v]) => v === k)[1];
+  if(k === 'B') renderStep();
+  if(k === 'A') document.querySelectorAll('#A [data-k]').forEach(el => {
+    const v = state[el.dataset.k];
+    if(el.type === 'checkbox') el.checked = !!v; else el.value = v;
+  });
+  sync();
+}
+function go(d){
+  const i = VARIANTS.findIndex(([v]) => v === current());
+  const k = VARIANTS[(i + d + VARIANTS.length) % VARIANTS.length][0];
+  const u = new URL(location.href); u.searchParams.set('variant', k);
+  history.replaceState(null, '', u);
+  show(k);
+}
+document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => go(+b.dataset.go)));
+addEventListener('keydown', e => {
+  if(/^(INPUT|TEXTAREA)$/.test(e.target.tagName) || e.target.isContentEditable) return;
+  if(e.key === 'ArrowLeft') go(-1);
+  if(e.key === 'ArrowRight') go(1);
+});
+
+show(current());
+</script>
