@@ -76,7 +76,18 @@ MUT_LOG := .mutmut-run.log
 # `note_title` / `archive_paths` / `sidecar_content` / `write_local_archive` /
 # `_configured_root`）不掛：它們是 #6 的既有介面，這張票沒有為它們補測試，掛進去只會
 # 多一牆 🫥 no-tests。
+# parity_skills.py（bin/）掛四支：`_sanitized` 是涵蓋與否的唯一判準（放行一支沒被涵蓋的
+# skill＝那支從此沒有任何東西在比對它）、`installed_dir` 是「安裝版是攤平的」那條規則
+#（算錯就是找不到安裝版，而找不到的行為是安靜地跳過）、`_probes` 決定 git 收不收得到
+# 目錄規則與會不會被 symlink 打成整批 abort、`_differs` 是比對本身的五類清單（漏收
+# funny 那兩類＝懸空連結對著一般檔被讀成「一致」，閘門放行 rsync --delete）。
+# `_gitignored` 不掛：它起子行程，是 I/O 那一層（判準已經切進 `_probes`）。
+# `sync_direction` 早就在清單裡，但它的新家不在 source_paths 之前等於沒掛 —— 見 setup.cfg。
 PURE := \
+	_sanitized \
+	installed_dir \
+	_probes \
+	_differs \
 	outline \
 	open_items \
 	_open_items_block \

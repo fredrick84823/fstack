@@ -562,15 +562,28 @@ def test_a_missing_direction_judge_does_not_touch_the_destination(sandbox: Path,
 
 
 # --------------------------------------------------------------------------
-# `--skill` / `--no-sanitize` —— 同一支腳本要能服務多支 skill
+# `--skill` —— 同一支腳本要能服務多支 skill
 # --------------------------------------------------------------------------
 #
-# 這支腳本原本把 `skills/comms/generate-meeting-notes` 寫死在三個地方之一，於是 60 幾支
-# skill 裡只有 1 支被保護：improve 在安裝版被直接改了五天沒人發現，slack-pm 的客戶名
-# 躺在 public repo 幾個月（去識別化從來沒掃過它）。涵蓋清單現在是資料
-# （`bin/parity_skills.py` 的 `SKILLS`），這支只吃參數。
+# 這支腳本原本把 `skills/comms/generate-meeting-notes` 寫死，於是 60 幾支 skill 裡只有
+# 1 支被保護：improve 在安裝版被直接改了五天沒人發現，slack-pm 的客戶名躺在 public repo
+# 幾個月（去識別化從來沒掃過它）。涵蓋清單現在是資料（`bin/parity_skills.py` 的
+# `SKILLS`），這支只吃 `--skill`，連「要不要去識別化」都是問那份清單 —— 不是第二個旗標。
 
 OTHER_REL = Path("skills/skill-evolution/plain-skill")
+
+
+def register(sandbox: Path, skill_rel: Path, *, sanitize: bool) -> None:
+    """把一支假 skill 掛進**沙箱那份** `parity_skills.py` 的 `SKILLS`。
+
+    改的是複本，真實的涵蓋清單一個字都不動 —— 測的是機制（腳本有沒有真的去問那份
+    清單），不是哪一支 skill 已經被涵蓋。
+
+    插在 `if __name__` **之前**：那支是被當腳本跑的，附加在檔尾的那行永遠等不到執行。
+    """
+    path = sandbox / "bin" / PARITY.name
+    head, sep, tail = path.read_text(encoding="utf-8").partition('if __name__ == "__main__":')
+    path.write_text(f'{head}SKILLS["{skill_rel}"] = {sanitize}\n\n\n{sep}{tail}', encoding="utf-8")
 
 
 def test_skill_flag_sends_the_sync_into_that_skills_directory(sandbox: Path, home: Path):
@@ -579,6 +592,7 @@ def test_skill_flag_sends_the_sync_into_that_skills_directory(sandbox: Path, hom
     刪掉這條 → 旗標被吃掉但目的地還是寫死那一支，症狀是**安靜的**：使用者以為在同步
     improve，實際上把 improve 的內容 `rsync --delete` 進了 gmn 的目錄。
     """
+    register(sandbox, OTHER_REL, sanitize=True)
     src = make_src(sandbox, **{"sub/notes.md": "content\n"})
 
     result = run(sandbox / "bin" / SCRIPT.name, "--skill", str(OTHER_REL), str(src), home=home)
@@ -594,6 +608,7 @@ def test_skill_flag_defaults_src_to_the_flat_installed_path(sandbox: Path, home:
     刪掉這條 → 預設路徑跟著 repo 的分類目錄一起長（`…/skills/skill-evolution/…`），
     日常唯一的用法（不給參數）在每一支非 gmn 的 skill 上都找不到安裝版。
     """
+    register(sandbox, OTHER_REL, sanitize=True)
     installed = home / ".agents" / "skills" / OTHER_REL.name
     installed.mkdir(parents=True)
     (installed / "SKILL.md").write_text("from default src\n", encoding="utf-8")
@@ -607,7 +622,8 @@ def test_skill_flag_defaults_src_to_the_flat_installed_path(sandbox: Path, home:
 def test_check_scans_the_skill_named_by_the_flag(sandbox: Path, home: Path):
     """`--skill REL --check` 不給 DIR 時掃 `$REPO/REL`。
 
-    這是 slack-pm 那起事故的修法：guard 要掃得到 gmn 以外的 skill。
+    這是 slack-pm 那起事故的修法：guard 要掃得到 gmn 以外的 skill。`--check` 不寫任何
+    檔案，所以它也是把一支新 skill 拉進 repo **之前**先看一眼的工具 —— 因此不要求涵蓋。
     刪掉這條 → `--check` 永遠掃 gmn，其他 skill 的內部指涉永遠掃不到。
     """
     probe = sandbox / OTHER_REL / "probe.md"
@@ -635,76 +651,84 @@ def test_a_skill_path_outside_skills_is_refused(sandbox: Path, home: Path, bad: 
     assert bad in result.stderr
 
 
-def test_no_sanitize_leaves_the_content_verbatim(sandbox: Path, home: Path):
-    """`--no-sanitize` 不跑替換表 —— repo 版就是安裝版的原樣。
+# --------------------------------------------------------------------------
+# 去識別化跑不跑，問 `SKILLS` —— 不是第二個旗標
+# --------------------------------------------------------------------------
+#
+# 那個布林在 CLI 上再抄一次就會有人忘了打，而忘了打的症狀是 sed 掃過一支不該被
+# sanitize 的 skill，把佔位符寫進它的機制檔。兩個方向都要測：只測其中一邊的話，
+# 一個「永遠跑」或「永遠不跑」的實作照樣全綠。
 
-    improve 那類 skill 的 repo 版沒有佔位符，跑 sed 只會讓兩邊長得不一樣，
-    而兩邊不一樣正是 parity 要叫的事。
-    刪掉這條 → 旗標被吃掉但 sed 照跑，那類 skill 的 parity 永遠紅，而且修不掉。
+DEIDENTIFIED = "project <your-gcp-project>\n"
+VERBATIM = "project example-gcp-project\n"
+
+
+@pytest.mark.parametrize(
+    "sanitize, expected", [(True, DEIDENTIFIED), (False, VERBATIM)], ids=["True", "False"]
+)
+def test_the_sanitize_step_follows_the_coverage_list(
+    sandbox: Path, home: Path, sanitize: bool, expected: str
+):
+    """`SKILLS` 說 True 就跑 sed、說 False 就原樣留著 —— 沒有第二個旗標要打。
+
+    刪掉這條 → 那個布林只有 Python 端讀得到，「涵蓋範圍資料化」漏掉的剛好是它自己
+    定義的那個布林。
     """
-    src = make_src(sandbox, **{"t.md": "project example-gcp-project\n"})
+    register(sandbox, OTHER_REL, sanitize=sanitize)
+    src = make_src(sandbox, **{"t.md": VERBATIM})
 
-    result = run(
-        sandbox / "bin" / SCRIPT.name, "--skill", str(OTHER_REL), "--no-sanitize", str(src),
-        home=home,
-    )
+    result = run(sandbox / "bin" / SCRIPT.name, "--skill", str(OTHER_REL), str(src), home=home)
 
     assert result.returncode == 0
-    assert (sandbox / OTHER_REL / "t.md").read_text(encoding="utf-8") == (
-        "project example-gcp-project\n"
-    )
+    assert (sandbox / OTHER_REL / "t.md").read_text(encoding="utf-8") == expected
 
 
-def test_no_sanitize_still_runs_the_guard(sandbox: Path, home: Path):
-    """`--no-sanitize` 不等於不掃內部指涉 —— guard 照跑，命中照樣回 2。
+def test_a_skill_that_skips_sanitize_still_runs_the_guard(sandbox: Path, home: Path):
+    """去識別化跳過不等於 guard 跳過 —— 命中照樣回 2。
 
     去識別化沒需求不等於內部指涉沒需求：slack-pm 的客戶名就是從這個縫隙漏出去的。
-    刪掉這條 → 旗標順手把 guard 也關掉，新涵蓋進來的每一支 skill 都是無防護的。
+    刪掉這條 → 那個布林順手把 guard 也關掉，新涵蓋進來的每一支 skill 都是無防護的。
     """
+    register(sandbox, OTHER_REL, sanitize=False)
     src = make_src(sandbox, **{"dirty.md": "我們在 AcmeCorp\n"})
 
-    result = run(
-        sandbox / "bin" / SCRIPT.name, "--skill", str(OTHER_REL), "--no-sanitize", str(src),
-        home=home,
-    )
+    result = run(sandbox / "bin" / SCRIPT.name, "--skill", str(OTHER_REL), str(src), home=home)
 
     assert result.returncode == 2
     assert "dirty.md:1:" in result.stdout
 
 
-def test_no_sanitize_does_not_require_the_substitution_table(sandbox: Path, tmp_path_factory):
-    """`--no-sanitize` 的 skill 不需要 `sanitize.sed` 存在。
+def test_a_skill_that_skips_sanitize_does_not_require_the_substitution_table(
+    sandbox: Path, tmp_path_factory
+):
+    """`SKILLS` 是 False 的 skill 不需要 `sanitize.sed` 存在。
 
-    刪掉這條 → 那個 need_conf 留在旗標外面，沒有替換表的機器上連「不需要替換」的
-    skill 都同步不了，而錯誤訊息說的是一個它根本不會用到的檔案。
+    刪掉這條 → 那個 need_conf 留在布林外面，沒有替換表的機器上連「不需要替換」的 skill
+    都同步不了，而錯誤訊息說的是一個它根本不會用到的檔案。
     """
+    register(sandbox, OTHER_REL, sanitize=False)
     no_sed = write_conf(tmp_path_factory.mktemp("home"), sanitize=None)
     src = make_src(sandbox, **{"t.md": "content\n"})
 
-    result = run(
-        sandbox / "bin" / SCRIPT.name, "--skill", str(OTHER_REL), "--no-sanitize", str(src),
-        home=no_sed,
-    )
+    result = run(sandbox / "bin" / SCRIPT.name, "--skill", str(OTHER_REL), str(src), home=no_sed)
 
     assert result.returncode == 0
     assert (sandbox / OTHER_REL / "t.md").read_text(encoding="utf-8") == "content\n"
 
 
-def test_a_skill_outside_the_coverage_list_is_refused_not_synced(sandbox: Path, home: Path):
-    """目的地已經有這支 skill、但它不在 parity 的涵蓋清單裡 → 拒絕，而且不動檔案。
+def test_a_skill_outside_the_coverage_list_is_refused_before_anything_is_written(
+    sandbox: Path, home: Path
+):
+    """沒掛進 `SKILLS` 的 skill 一律拒絕，而且在動任何檔案**之前**。
 
     放行的話就是「同步得進來、但從此沒有任何東西在比對它」—— 正是 improve 漂移五天
-    沒人發現的那個形狀。訊息要直接指出下一步在哪一行。
-    （目的地**還沒有**這支 skill 時閘門本來就跳過，所以第一次拉進來不受影響。）
+    沒人發現的那個形狀。擋在這裡而不是擋在方向閘門：目的地還空的時候閘門本來就跳過，
+    所以**首次**把一支新 skill 拉進 repo 正好是完全沒有涵蓋檢查的那一次。
     """
-    src, dest = make_mirror(sandbox, **{"t.md": "same\n"})
-    other = sandbox / OTHER_REL
-    shutil.copytree(dest, other)
-    before = snapshot(other)
+    src = make_src(sandbox, **{"t.md": "x\n"})
 
     result = run(sandbox / "bin" / SCRIPT.name, "--skill", str(OTHER_REL), str(src), home=home)
 
     assert result.returncode != 0
     assert "涵蓋清單" in result.stderr
-    assert "SKILLS" in result.stderr
-    assert snapshot(other) == before
+    assert not (sandbox / OTHER_REL).exists()

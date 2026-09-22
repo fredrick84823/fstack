@@ -24,6 +24,7 @@ from .conftest import load_script
 from .test_sync_diff import write_tree
 from .test_sync_from_installed import (  # noqa: F401  `home` 是 fixture，靠名字解析
     DEST_REL,
+    PARITY,
     SCRIPT,
     home,
     run,
@@ -49,10 +50,10 @@ REPO_BASE = {"SKILL.md": HEAD + MASKED + TAIL, "references/glossary.md": "詞彙
 @pytest.fixture
 def trees(tmp_path: Path) -> tuple[Path, Path]:
     """回傳 (repo 根目錄, DST)。repo 的 `bin/` 裡兩支腳本都有 —— 反向腳本要靠正向
-    腳本產出 base。"""
+    腳本產出 base，而正向腳本要問 `parity_skills.py` 這支 skill 要不要去識別化。"""
     repo = tmp_path / "repo"
     (repo / "bin").mkdir(parents=True)
-    for script in (TO_SCRIPT, SCRIPT):
+    for script in (TO_SCRIPT, SCRIPT, PARITY):
         (repo / "bin" / script.name).write_bytes(script.read_bytes())
         (repo / "bin" / script.name).chmod(0o755)
     write_tree(repo / DEST_REL, REPO_BASE)
