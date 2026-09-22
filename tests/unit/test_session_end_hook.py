@@ -2,11 +2,13 @@
 """SessionEnd hook adapter 的單元測試。
 
 分類器每次跑完的結果只留在這支 hook 寫的 classifier.log 裡 —— 2026-09-16 之前它根本
-不落地，跑完就沒了。所以這裡釘的是「寫下來而且留得住」：每跑一次多一行、行首有時間戳、
-目錄不存在時自己建，而且 stderr 也要一起收進來。
+不落地，跑完就沒了。所以這裡釘的是「寫下來而且留得住」：每跑一次都往後接、行首有時間戳、
+目錄不存在時自己建，而且 stderr 也要一起收進來。一次執行落幾行由分類器印了幾股決定：
+session_classifier.py:262 的 validate-gap 錯誤走 stderr、成功報告走 stdout，這種
+一次兩行（第二行不帶時間戳）正是 `2>&1` 要接住的形狀。
 
 hook 的 log 路徑是相對它自己算的（`$(dirname)/..`），直接跑 repo 裡那份會把 log 寫進
-repo，所以測試把**真的那個檔案**複製進 temp 樹，classifier 換成印得出可辨識輸出的 stub。
+repo，所以測試把**真的那個檔案**複製進 temp 樹，classifier 換成兩股都印的 stub。
 """
 
 from __future__ import annotations
@@ -18,18 +20,13 @@ import tempfile
 import unittest
 
 
-HOOK = Path(__file__).resolve().parents[2] / (
-    "skills/skill-evolution/improve/scripts/hooks/claude-session-end.sh"
-)
+SCRIPTS = Path(__file__).resolve().parents[2] / "skills/skill-evolution/improve/scripts"
+HOOK = SCRIPTS / "hooks/claude-session-end.sh"
 
 STUB_CLASSIFIER = """import sys
-print("classified:" + sys.stdin.read().strip())
-"""
-
-# 真正的分類器出事時只會留下 stderr：catch-all（session_classifier.py:409）印完就
-# `sys.exit(0)`，stdout 一個字也沒有。這支 stub 模擬的就是那條路。
-STUB_CLASSIFIER_CRASHES = """import sys
-print("session_classifier: RuntimeError: " + sys.stdin.read().strip(), file=sys.stderr)
+payload = sys.stdin.read().strip()
+print("classified:" + payload)                  # 成功路徑：session_classifier.py:400
+print("crashed:" + payload, file=sys.stderr)    # 出事路徑：:409 catch-all，印完 exit 0
 """
 
 
@@ -57,36 +54,26 @@ class SessionEndHookTest(unittest.TestCase):
             check=True,
         )
 
-    def log_lines(self) -> list[str]:
-        return self.log.read_text().splitlines()
-
-    def test_each_run_appends_a_timestamped_line_instead_of_replacing_the_last_one(self) -> None:
+    def test_both_streams_of_every_run_land_in_the_log_instead_of_replacing_the_last_one(self) -> None:
         # memory/ 這時還不存在：hook 在 set -e 底下跑，少了 mkdir -p 就是重導向失敗、整支
         # hook 非零退出 —— 第一次安裝的機器上分類器等於完全不會留下紀錄。
         self.assertFalse(self.log.parent.exists())
         self.run_hook('{"session_id":"first"}')
         self.run_hook('{"session_id":"second"}')
 
-        lines = self.log_lines()
-        self.assertEqual(len(lines), 2)
+        text = self.log.read_text()
+        lines = text.splitlines()
+        # 一次執行兩行：stderr 的診斷加 stdout 的報告。少了 `2>&1`，分類器最有價值的輸出
+        # （catch-all、validate-gap 錯誤）整個消失；而 `printf '%s '` 不帶換行是刻意的，
+        # 時間戳要黏在同一行行首，換成 '%s\n' 行數就會多出來。
+        self.assertEqual(len(lines), 4)
         # 第一次的結果還在：`>` 而不是 `>>` 的話只剩最後一次，而「上一個 session 發生什麼」
-        # 正是這支 log 唯一的用途。
-        self.assertIn('classified:{"session_id":"first"}', lines[0])
-        self.assertIn('classified:{"session_id":"second"}', lines[1])
+        # 正是這支 log 唯一的用途。兩股誰先落地不斷言：stdout 對檔案是 block-buffered、
+        # 退出才 flush，順序是 buffering 的副產物，不是契約。
+        for payload in ('{"session_id":"first"}', '{"session_id":"second"}'):
+            self.assertIn("classified:" + payload, text)
+            self.assertIn("crashed:" + payload, text)
         self.assertRegex(lines[0], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
-
-    def test_a_classifier_that_only_writes_stderr_still_lands_in_the_log(self) -> None:
-        # 分類器最有價值的輸出全走 stderr（catch-all、validate-gap 錯誤），而且它出事時
-        # 是印完 stderr 就 exit 0 —— 少了 `2>&1`，這行診斷整個消失。更糟的是 hook 的
-        # `printf '%s '` 不帶換行，兩次這種執行會黏成一行，log 行數還會無聲少算。
-        self.classifier.write_text(STUB_CLASSIFIER_CRASHES)
-        self.run_hook('{"session_id":"boom-first"}')
-        self.run_hook('{"session_id":"boom-second"}')
-
-        lines = self.log_lines()
-        self.assertEqual(len(lines), 2)
-        self.assertIn('session_classifier: RuntimeError: {"session_id":"boom-first"}', lines[0])
-        self.assertIn('session_classifier: RuntimeError: {"session_id":"boom-second"}', lines[1])
 
 
 if __name__ == "__main__":

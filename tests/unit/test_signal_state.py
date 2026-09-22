@@ -51,14 +51,13 @@ class SignalStateTest(unittest.TestCase):
         )
         return result.stdout.strip()
 
-    def read_jsonl(self, name: str) -> list[dict]:
-        path = self.memory / name
+    def read_jsonl(self, path: Path) -> list[dict]:
         return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
     def test_capture_shares_id_and_keeps_raw_status_as_capture_snapshot(self) -> None:
         signal_id = self.capture()
         queue_text = self.queue.read_text()
-        raw = self.read_jsonl("signals.jsonl")
+        raw = self.read_jsonl(self.memory / "signals.jsonl")
         graph = json.loads((self.memory / "skill-graph.json").read_text())
 
         self.assertIn(f"- **signal_id**: {signal_id}", queue_text)
@@ -88,8 +87,8 @@ class SignalStateTest(unittest.TestCase):
         )
 
         queue_text = self.queue.read_text()
-        raw = self.read_jsonl("signals.jsonl")
-        transitions = self.read_jsonl("transitions.jsonl")
+        raw = self.read_jsonl(self.memory / "signals.jsonl")
+        transitions = self.read_jsonl(self.memory / "transitions.jsonl")
         graph = json.loads((self.memory / "skill-graph.json").read_text())
         self.assertIn("- **status**: resolved", queue_text)
         self.assertIn("- **memory_sync**: synced", queue_text)
@@ -190,12 +189,11 @@ class SignalStateTest(unittest.TestCase):
         project_queue = self.project_queue("hook-demo")
         self.run_capture("Result complete.\n<<GAP hook-demo: reusable hook gap>>\n")
         queue_text = project_queue.read_text()
-        raw_path = project_queue.parent / "memory" / "signals.jsonl"
         self.assertIn("## [", queue_text)
         self.assertIn("] hook-demo", queue_text)
         self.assertIn("- **signal_id**: sig_", queue_text)
         self.assertIn("- **memory_sync**: synced", queue_text)
-        raw = [json.loads(line) for line in raw_path.read_text().splitlines() if line.strip()]
+        raw = self.read_jsonl(project_queue.parent / "memory" / "signals.jsonl")
         self.assertEqual(raw[0]["target_skill"], "hook-demo")
         self.assertEqual(raw[0]["status_semantics"], "captured_at_ingest")
 
@@ -213,11 +211,7 @@ class SignalStateTest(unittest.TestCase):
         self.assertIn("] hook-demo", queue_text)
         self.assertIn("真的缺口", queue_text)
         self.assertNotIn("skill-name", queue_text)
-        raw = [
-            json.loads(line)
-            for line in (project_queue.parent / "memory" / "signals.jsonl").read_text().splitlines()
-            if line.strip()
-        ]
+        raw = self.read_jsonl(project_queue.parent / "memory" / "signals.jsonl")
         self.assertEqual([record["target_skill"] for record in raw], ["hook-demo"])
 
 

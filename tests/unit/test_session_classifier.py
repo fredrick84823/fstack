@@ -221,8 +221,6 @@ class SessionClassifierTest(unittest.TestCase):
         # CLAUDE_CODE_CHILD_SESSION 曾經是 gate，2026-09-16 它在有人在場的互動 session
         # 裡讀到 "1"，於是每一個真 session 都被靜默跳過，好幾天沒人發現。
         # 是不是自動化，改由 transcript 自己記的 entrypoint 回答。
-        # 沒被跳過還不夠：候選數為零的 session 也是 skipped is None。要看到模型真的被問。
-        # 問了幾次、帶哪些 skill 由候選配對那條測試釘，這裡不重複綁 fixture 內容。
         report = self.run_classifier(WITH_SKILLS, env_extra={"CLAUDE_CODE_CHILD_SESSION": "1"})
         self.assertIsNone(report["skipped"])
         self.assertNotEqual(self.validator_calls(), [])
