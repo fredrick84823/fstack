@@ -1,0 +1,23 @@
+{
+  "skill_name": "closed-loop",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/closed-loop Add a --json flag to the existing status command. Preserve the human-readable output as the default, follow the repository's current CLI conventions, and keep the change backward-compatible.",
+      "expected_output": "Runs a feature-shaped closed loop with separate Implement and Test agents, mandatory code-review and ponytail review, fast inner checks, relevant CLI dogfood, and no interrogate unless repository evidence reveals residual reasoning risk.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "/closed-loop Debug the checkout bug where retrying after a timeout can charge the same order twice. Stress-test this and find blind spots before calling it done.",
+      "expected_output": "Runs Test-first reproduction, then a separate Implement agent; forces interrogate from both payment/idempotency risk and explicit adversarial wording; verifies concurrency/retry behavior and dogfoods a safe real user retry journey without creating real charges.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "/closed-loop Implement the issue for reading long documents without silent truncation. The service has two external retrieval paths, offset-based continuation, a local container make verify target, and existing mutation and property-test tooling.",
+      "expected_output": "Selects invariants/property testing, targeted mutation, integration and make verify; automatically triggers interrogate because of silent-failure and external-contract risk even though the user did not request it; performs exploratory client-level dogfood and loops findings back through Test and Implement agents.",
+      "files": []
+    }
+  ]
+}
