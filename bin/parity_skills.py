@@ -20,7 +20,10 @@
       `bin/sync-from-installed.sh` 到暫存目錄，再跟 repo 版比 —— sed 規則只能有一份，
       走腳本就不必在這裡再抄一次。
   False（repo 版就是安裝版的原樣）
-      直接比對，排除 rsync 也排除的那四類雜訊。
+      直接比對，排除 rsync 也排除的那四類雜訊，**再排除 repo 的 `.gitignore` 已經忽略
+      的路徑** —— 執行期資料（佇列、log、lock、memory/）刻意不進版控，repo 端永遠沒有
+      它們，不排除就是每次都報一串永遠修不掉的假漂移。每次都喊狼來了的護欄跟沒有護欄
+      是同一件事，而那正是這張票在治的病。
 
 沒有為這個布林建註冊表或 config schema：它只是一個布林，而 `SKILLS` 就是那一處資料。
 
@@ -41,7 +44,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -82,6 +85,45 @@ def _sanitized(skill_rel: str) -> bool:
         ) from None
 
 
+def _gitignored(repo: Path, skill_rel: str, rels: Sequence[str]) -> set[str]:
+    """`rels` 之中 repo 端已經被 `.gitignore` 忽略的那些。
+
+    判準問 repo 自己的 git，不在這裡再維護第二份清單 —— 同一份清單散在三個地方的代價
+    已經寫在 `EXCLUDES` 上面那條註記裡，不要再加第四處。
+
+    判定對 **repo 端**的路徑做：安裝版不在 git 裡，問它等於問錯人。
+
+    每個候選送兩次，`rel` 與 `rel/`。目錄規則（`memory/`）只在 git 認得那個路徑是目錄時
+    才命中，而 repo 端**刻意沒有**那個目錄（它被忽略了），git 沒得 stat 就不會命中 ——
+    加一條斜線是直接告訴它「這是目錄」。少了這一半，整個目錄的忽略規則會漏掉。
+
+    git 自己出錯（不是 git repo、找不到 git）→ **raise**。回空集合是「什麼都沒被忽略」
+    （假漂移照報），回全集是靜默吞掉真漂移 —— 兩個都不行，所以讓呼叫端知道這次沒比成。
+    退出碼 1 是「一個都沒命中」，那是正常答案，不是錯誤。
+    """
+    if not rels:
+        return set()
+    probes = [f"{skill_rel}/{rel}{slash}" for rel in rels for slash in ("", "/")]
+    try:
+        done = subprocess.run(
+            ["git", "-C", str(repo), "check-ignore", "--stdin"],
+            input="\n".join(probes),
+            capture_output=True,
+            text=True,
+        )
+    except OSError as exc:
+        raise RuntimeError(f"問不到 .gitignore（{type(exc).__name__}: {exc}）") from None
+    if done.returncode > 1:
+        why = (done.stderr or done.stdout).strip().rsplit("\n", 1)[-1]
+        raise RuntimeError(f"git check-ignore exit {done.returncode}: {why}")
+    prefix = f"{skill_rel}/"
+    return {
+        line[len(prefix):].rstrip("/")
+        for line in done.stdout.splitlines()
+        if line.startswith(prefix)
+    }
+
+
 def _differs(cmp: filecmp.dircmp, prefix: str = "") -> list[str]:
     out = [prefix + n for n in cmp.left_only + cmp.right_only + cmp.diff_files]
     for name, sub in cmp.subdirs.items():
@@ -104,6 +146,10 @@ def sync_diff(
     比不了的時候回空清單（`installed` 不像安裝目錄、repo 內沒有同步腳本）——
     「沒有安裝版」與「安裝版一致」在呼叫端是同一件事：沒東西要講。
 
+    直接比對那條路徑上，repo 的 `.gitignore` 忽略掉的路徑不算漂移：執行期資料刻意不進
+    版控，repo 端永遠沒有它們。sanitize 那條路徑不需要這道過濾 —— 它比的是暫存基準與
+    repo 版，而基準是同步腳本產的，兩邊本來就都不含那些東西。
+
     sanitize 那條路徑上，同步**沒有乾淨收尾**（退出碼不是 0）則 raise `RuntimeError`。
     回空清單的話，一支壞掉的腳本會讓所有比對永遠通過 —— 連 integration test 都會跟著
     變成永遠綠。退出碼 2（guard 命中內部指涉）預設也算沒收乾淨。
@@ -113,7 +159,9 @@ def sync_diff(
     if not (installed / "SKILL.md").is_file():
         return []
     if not sanitized:
-        return _differs(filecmp.dircmp(installed, repo / skill_rel, ignore=EXCLUDES))
+        rels = _differs(filecmp.dircmp(installed, repo / skill_rel, ignore=EXCLUDES))
+        ignored = _gitignored(repo, skill_rel, rels)
+        return [rel for rel in rels if rel not in ignored]
 
     script = repo / SYNC_SCRIPT
     if not script.is_file():

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -156,6 +157,18 @@ def test_a_sanitized_skill_still_detects_a_planted_drift(pair):  # noqa: F811
 PLAIN = "skills/skill-evolution/plain-skill"
 
 
+def git_init(repo: Path, ignore: str = "") -> Path:
+    """把 `repo` 變成一個真的 git checkout，`.gitignore` 內容照給的來。
+
+    直接比對那條路徑要問 repo 自己的 git「這條路徑被忽略了嗎」，所以假 repo 不能只是
+    一個普通目錄。造一個真的 checkout 比把 `git check-ignore` 換成替身誠實 ——
+    替身證明不了「`memory/` 這種目錄規則配得到」，而那正是假漂移的大宗。
+    """
+    subprocess.run(["git", "init", "-q", str(repo)], check=True, capture_output=True)
+    (repo / ".gitignore").write_text(ignore, encoding="utf-8")
+    return repo
+
+
 @pytest.fixture
 def plain(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
     """一組內容相同的 (installed, repo)，skill 掛在 `SKILLS` 裡是 `False`。
@@ -164,7 +177,7 @@ def plain(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
     哪一支 skill 已經被涵蓋。
     """
     monkeypatch.setitem(parity_skills.SKILLS, PLAIN, False)
-    repo = tmp_path / "repo"
+    repo = git_init(tmp_path / "repo")
     write_tree(repo / PLAIN, BASE)
     return write_tree(tmp_path / "installed", BASE), repo
 
@@ -215,3 +228,94 @@ def test_a_missing_installed_copy_is_not_a_comparison(plain: tuple[Path, Path]):
     (installed / "SKILL.md").unlink()
 
     assert parity_skills.sync_diff(PLAIN, installed, repo) == []
+
+
+# --------------------------------------------------------------------------
+# .gitignore —— 執行期資料不是漂移
+# --------------------------------------------------------------------------
+#
+# improve 那類 skill 的安裝版帶著佇列、log、lock 與 memory/：全部是執行期資料，全部被
+# repo 的 .gitignore 擋在版控外面。repo 端**永遠**沒有它們，所以不排除就是每次都報一串
+# 修不掉的假漂移 —— 一個每次都喊狼來了的護欄跟沒有護欄是同一件事。
+# 判準問 repo 自己的 git，不在 parity_skills.py 再維護第二份清單。
+
+# (id, .gitignore 的規則, repo 端多的檔案, 安裝版多的檔案)
+IGNORED = [
+    ("整條路徑", "signal-queue.md", {}, {"signal-queue.md": "佇列\n"}),
+    ("glob", "*.lock", {}, {".signal-lifecycle.lock": ""}),
+    # 整個目錄只存在於安裝版：repo 端沒有那個目錄可以 stat，判定必須自己告訴 git
+    # 「這是目錄」，否則 `memory/` 這條規則配不到，而它是假漂移的大宗。
+    ("整個目錄", "memory/", {}, {"memory/transitions.jsonl": "執行期\n"}),
+    # 兩邊都有的目錄，底下多一個被忽略的檔案 —— 這條走的是遞迴那一半。
+    (
+        "共用目錄底下",
+        "memory/",
+        {"memory/README.md": "說明\n"},
+        {"memory/README.md": "說明\n", "memory/classifier.log": "執行期\n"},
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "rule, repo_extra, installed_extra", [c[1:] for c in IGNORED], ids=[c[0] for c in IGNORED]
+)
+def test_a_gitignored_path_is_not_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    rule: str,
+    repo_extra: dict[str, str],
+    installed_extra: dict[str, str],
+):
+    """repo 端 gitignore 掉的路徑，安裝版有也不算漂移。
+
+    刪掉這條 → improve 那類 skill 每次比對都報一串 `memory`／`*.lock`／佇列檔，
+    而且永遠修不掉（repo 端刻意沒有它們）。每次都喊狼來了的護欄跟沒有護欄是同一件事。
+    """
+    monkeypatch.setitem(parity_skills.SKILLS, PLAIN, False)
+    repo = git_init(tmp_path / "repo", f"{PLAIN}/{rule}\n")
+    write_tree(repo / PLAIN, {**BASE, **repo_extra})
+    installed = write_tree(tmp_path / "installed", {**BASE, **installed_extra})
+
+    assert parity_skills.sync_diff(PLAIN, installed, repo) == []
+
+
+def test_a_path_the_gitignore_does_not_cover_is_still_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """同一棵樹上，**沒有**被 gitignore 的差異照樣要報出來。
+
+    只測「被忽略的不算」等於沒測：一個把整份清單都丟掉的實作也會全綠，而那是把真漂移
+    吞掉 —— 比假漂移糟得多（improve 的三個 hotfix 就是這樣在安裝版活了五天）。
+    """
+    monkeypatch.setitem(parity_skills.SKILLS, PLAIN, False)
+    repo = git_init(tmp_path / "repo", f"{PLAIN}/memory/\n{PLAIN}/*.lock\n")
+    write_tree(repo / PLAIN, BASE)
+    installed = write_tree(
+        tmp_path / "installed",
+        {
+            **BASE,
+            "memory/transitions.jsonl": "執行期\n",
+            ".signal-lifecycle.lock": "",
+            "scripts/session_classifier.py": "# 只活在安裝版的 hotfix\n",
+        },
+    )
+
+    assert parity_skills.sync_diff(PLAIN, installed, repo) == ["scripts/session_classifier.py"]
+
+
+def test_a_repo_that_is_not_a_git_checkout_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """問不到 .gitignore → raise，**不可以**靜默當成「沒有漂移」。
+
+    回空集合（什麼都沒被忽略）會讓假漂移照報，回全集會靜默吞掉真漂移。兩個都不行，
+    所以讓呼叫端知道這次沒比成 —— 同 `_sanitized()` 立過的原則。
+    刪掉這條 → 判定壞掉時整套護欄退化成永遠綠，而症狀是安靜的。
+    """
+    monkeypatch.setitem(parity_skills.SKILLS, PLAIN, False)
+    repo = tmp_path / "repo"          # 沒有 git init
+    write_tree(repo / PLAIN, BASE)
+    installed = write_tree(tmp_path / "installed", {**BASE, "NEW.md": "新的\n"})
+
+    with pytest.raises(RuntimeError, match="check-ignore"):
+        parity_skills.sync_diff(PLAIN, installed, repo)
