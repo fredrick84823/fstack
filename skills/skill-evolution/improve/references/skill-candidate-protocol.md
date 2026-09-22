@@ -68,4 +68,23 @@ Agent 應在以下情況輸出 marker：
 
 ## 後續處理
 
+`candidate-queue.md` 不隨 repo 發佈，hook 與 `propose.sh` 在檔案不存在時自行建立。條目格式：
+
+```markdown
+## [{ISO 8601 timestamp}] {suggested-kebab-case-name}
+
+- **status**: pending
+- **hit_count**: 3
+- **first_seen**: {ISO 8601 timestamp}
+- **last_seen**: {ISO 8601 timestamp}
+- **reason**: 重複執行 gcloud build + deploy + verify 三步驟
+- **steps**: |
+  1. gcloud builds submit
+  2. gcloud functions deploy
+  3. gcloud functions logs read
+- **invoker_hints**: 「deploy CF」、「部署 cloud function」
+```
+
+**Status 值**：`pending` | `created` | `rejected` | `merged` | `duplicate`
+
 累積候選後，執行 `/extract-skill` 批次審核並建立正式 skill。

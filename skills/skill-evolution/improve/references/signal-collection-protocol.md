@@ -62,6 +62,11 @@ Signal 應 append 到以下路徑（優先順序）：
 
 若兩者都不存在，建立 user-level 檔案後，再使用 `signal_state.py capture`；不要直接 append queue 後另寫 JSONL。
 
+queue 不隨 repo 發佈，`signal_state.py` 在檔案不存在時自行建立。
+
+**Status 值**：`pending` | `resolved` | `rejected` | `deferred`。queue 是 current lifecycle status
+的唯一 source of truth，`/improve` 只處理 `pending`。
+
 ## Precision Guard
 
 只有同時具備下列三個證據時才收集 signal：
