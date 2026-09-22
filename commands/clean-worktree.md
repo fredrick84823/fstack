@@ -72,7 +72,7 @@ rsync -av --update {WORKTREE_PATH}/output/ {MAIN_REPO_PATH}/output/
 ```bash
 # 找出同步的頂層目錄（client 層級）
 ls {WORKTREE_PATH}/output/
-# e.g. bettermilk → output/bettermilk/
+# e.g. acme → output/acme/
 
 # 刪除該 client 目錄下的所有 .json
 find {MAIN_REPO_PATH}/output/{CLIENT}/ -name "*.json" -type f -delete

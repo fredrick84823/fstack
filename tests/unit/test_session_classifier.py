@@ -10,7 +10,7 @@ session 出手、不讓同一個 gap 佔兩個 queue 位子、不讓一個壞 se
 帶什麼 skill 進去」，不是只看 queue 的結果。把 `skills_used` 改成永遠回 `[]`，
 結果斷言照樣綠，呼叫記錄那條會紅。
 
-transcript fixture 取自真實 transcript（tagtoo-mcp-servers，2026-08）去識別化後裁切：
+transcript fixture 取自真實 transcript（<internal-project>，2026-08）去識別化後裁切：
 envelope 欄位保留真實鍵集，payload 全部換掉。用真料換來的一個發現是
 **人類打的字是 `content: <str>` 且 `isMeta: false`**，`text` block 反而是系統注入的
 skill 本體 —— 憑印象寫的 fixture 會把兩者寫反，於是 `user_messages` 抓到注入的

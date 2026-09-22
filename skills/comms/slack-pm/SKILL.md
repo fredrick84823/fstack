@@ -45,13 +45,13 @@ description: 把要發給非工程師同事（PM／AM／業務／主管）的 Sl
 
 **改前**（12 行，PM 讀完仍不知道要做什麼）
 
-> @nina 味王杯麵市場分析的 SQL 交付包已備好，需要 PM 端轉給家樂福資料窗口。
+> @pm A 品牌泡麵市場分析的 SQL 交付包已備好，需要 PM 端轉給通路客戶資料窗口。
 > 交付內容：兩個檔案 run_all.sql ＋ README.md（Vendor Execution Pack）
 > 對方要做的事
 > 1. 取代 script 內兩個佔位字串：交易表全名、GCS bucket 名稱
 > 2. 執行帳號需三個權限：專案層級 bigquery.jobUser、來源 dataset dataViewer、bucket storage.objectAdmin（不需要建表權限）
 > 3. BigQuery console 整支 script 一次執行（勿分段，建議先對開頭 CREATE TEMP TABLE 做 dry-run 看成本）
-> 4. 結果自動寫入 gs://<對方bucket>/weiwang_202604_202608/，整個資料夾完整回傳（含所有分片檔）
+> 4. 結果自動寫入 gs://<對方bucket>/<專案代號>_202604_202608/，整個資料夾完整回傳（含所有分片檔）
 > 5. 回信只需回答一件事：有無改動 script 任何一行。執行時間、來源表名等 script 會自動寫進 _diagnostics__run_info，不用填表單
 > …
 
@@ -59,7 +59,7 @@ description: 把要發給非工程師同事（PM／AM／業務／主管）的 Sl
 
 **改後**（6 行）
 
-> @nina 味王杯麵的 SQL 交付包做好了，麻煩幫忙轉給家樂福窗口 🙏
+> @pm A 品牌泡麵的 SQL 交付包做好了，麻煩幫忙轉給通路客戶窗口 🙏
 >
 > **附件兩個檔**：`run_all.sql` + `README.md`，對方照 README 跑一次就好，約 15 分鐘。
 > **對方回什麼**：整包結果檔 + 一句「有沒有改到 script」。其他資訊 script 會自己寫進結果裡，不用填表。

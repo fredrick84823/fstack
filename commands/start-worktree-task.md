@@ -16,7 +16,7 @@ Create a new git worktree with appropriate branch naming for isolated developmen
    - For client work: `{client}-{brief-description}`
    - For features: `{feature-name}-{date}`
    - For refactoring: `refactor-{component-name}`
-   - Examples: `bettermilk-analysis`, `prepare-sql-refactor`
+   - Examples: `acme-analysis`, `prepare-sql-refactor`
 
 2. **Check for existing worktrees**
    - Run `git worktree list` to see active worktrees
@@ -32,8 +32,8 @@ Create a new git worktree with appropriate branch naming for isolated developmen
    - Confirm with `pwd` and `git branch`
 
 5. **Attach thoughts (first time per worktree)**
-   - If this worktree has not been initialized, run `humanlayer thoughts init --directory tagtoo-retail-reporter --force`
-   - This maps the worktree path to `~/thoughts/repos/tagtoo-retail-reporter` so notes stay shared across worktrees
+   - If this worktree has not been initialized, run `humanlayer thoughts init --directory <repo-name> --force`
+   - This maps the worktree path to `~/thoughts/repos/<repo-name>` so notes stay shared across worktrees
 
 6. **Inform user**
    - Display worktree location
