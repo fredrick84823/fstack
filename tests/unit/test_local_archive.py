@@ -312,4 +312,7 @@ def test_every_shape_the_messages_promise_is_a_shape_the_parser_accepts():
 def test_the_shape_sentence_names_both_forms():
     """只講 `YYYYMMDD` 的那一版正是 #57 的訊息在 #56 落地當天變得不完整的樣子。"""
     assert "YYYYMMDD" in DATE_DIR_SHAPES
-    assert "YYYYMMDD_<場次>" in DATE_DIR_SHAPES
+    assert "YYYYMMDD_〈場次〉" in DATE_DIR_SHAPES
+    # 半形角括號在 Slack mrkdwn 裡是實體的開頭。這幾個字串會進 Slack，所以形狀
+    # 那句不准帶 `<` —— 靠 Slack 幫忙轉義的話，它改規則的那天沒有人會發現。
+    assert "<" not in DATE_DIR_SHAPES and ">" not in DATE_DIR_SHAPES
