@@ -2,6 +2,10 @@
 
 單次工具，沒有 artifact 鏈 —— 你現在需要一件事做完。跟 [`pipeline/`](../pipeline/README.md) 的階段式相對。
 
+**User-invoked** — reachable only when you type them.
+
+- **[clean-room-implement](./clean-room-implement/SKILL.md)**: 寫的人不驗、驗的人不寫 —— 實作、測試、review、dogfood 交給互不兼任的角色，直到同一個未改動的候選通過每一道 gate
+
 **Model-invoked** — the model can reach for these when the description matches.
 
 - **[codex-brainstorm](./codex-brainstorm/SKILL.md)**: Adversarial brainstorming. Claude and Codex independently research then debate until Nash equilibrium. For solution exploration, feasibility analysis,…

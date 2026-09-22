@@ -30,6 +30,7 @@
     "./skills/pipeline/humanlayer/structure-outline",
     "./skills/pipeline/matt-pocock/ask-codebase-questions",
     "./skills/pipeline/matt-pocock/grill-me",
+    "./skills/engineering/clean-room-implement",
     "./skills/engineering/codex-brainstorm",
     "./skills/engineering/codex-cli-review",
     "./skills/engineering/describe-pr",

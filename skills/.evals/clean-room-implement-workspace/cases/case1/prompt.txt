@@ -1,0 +1,1 @@
+/clean-room-implement Add a --json flag to the existing status command. Preserve the human-readable output as the default, follow the repository's current CLI conventions, and keep the change backward-compatible.
