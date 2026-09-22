@@ -36,6 +36,11 @@ By behavior, never by the name the orchestrator picked. Whoever writes or commit
 `mytool/` is the implementer; whoever writes or commits `tests/` is the tester. A run
 that renames its agents still grades correctly.
 
+`case1` grants no test-scaffold path, so "the implementer wrote no tests" is graded as an
+absolute. A case whose contract calls for test-driven implementation has to grade the
+ownership map instead: each writer stays inside its own path, and the Test Agent never
+reads the implementer's tests.
+
 Writes are attributed from `Write`/`Edit` tool calls, from the files of the commit each
 actor's `git commit` produced, and — for roles that must not write at all — from write
 verbs aimed at repository paths inside `Bash` commands.

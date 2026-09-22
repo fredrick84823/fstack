@@ -2,6 +2,10 @@
 
 Select the cheapest evidence that can falsify the changed behavior, then climb toward real boundaries. Existing repository commands and policies override generic examples.
 
+Tests the implementer wrote for itself are excluded from every gate below. They run, and a
+failing one blocks, but they cannot close an acceptance criterion or stand as discrimination
+evidence—they were written by the same reasoning they would have to falsify.
+
 ## Inner loop
 
 Run after initial implementation and every correction.

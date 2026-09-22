@@ -5,7 +5,7 @@
 | Role | Product code | Tests | Review findings | Runtime exploration |
 |---|---:|---:|---:|---:|
 | Orchestrator | no | no | adjudicates | coordinates |
-| Implement Agent | writes | no | receives fixes | may reproduce for diagnosis |
+| Implement Agent | writes | only its own scaffold path, and only when the contract grants one | receives fixes | may reproduce for diagnosis |
 | Test Agent | no | writes | reports test gaps | runs verification |
 | Review Agents | no | no | report only | read-only inspection |
 | Dogfood Agent | no | no | reports observations | operates public product surface |
@@ -27,11 +27,17 @@ Give it:
 Require it to:
 
 - inspect the real call path before editing;
-- change product code only;
+- change product code only, unless the contract grants it a test-scaffold path;
 - commit its own scoped product files itself;
 - keep the diff scoped;
 - report public interface changes and unresolved assumptions;
-- avoid editing, weakening, deleting, or skipping tests.
+- avoid editing, weakening, deleting, or skipping tests it does not own.
+
+When the contract calls for test-driven implementation it names one path for the Implement
+Agent's red-green tests. Inside that path the agent writes freely; outside it the `no`
+still stands, and the Test Agent's files are never its to touch. Those scaffolding tests
+are a design aid, not evidence: an acceptance criterion is closed by the independent
+suite, never by the implementer's own assertions. They do have to pass.
 
 The same Implement Agent may handle correction rounds. Independence is between implementation and review, not between successive implementation rounds.
 
@@ -43,7 +49,9 @@ Give it:
 - user-visible bug evidence for debug tasks;
 - public interfaces or ports;
 - repository test conventions and commands;
-- no implementation rationale from the Implement Agent.
+- no implementation rationale from the Implement Agent;
+- no sight of the Implement Agent's scaffolding tests when the contract granted one—they
+  carry the same assumptions as the implementation.
 
 Before writing its first test, keep it independent of implementation details. It may inspect existing test conventions, public contracts, boundary adapters, and usage documentation. It should not derive assertions from the implementation body.
 

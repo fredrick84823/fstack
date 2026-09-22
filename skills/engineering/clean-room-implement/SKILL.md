@@ -67,7 +67,8 @@ Write a compact run contract for agents:
 - in-scope and out-of-scope behavior;
 - baseline and diff command;
 - repository rules;
-- known risks and approval-gated operations.
+- known risks and approval-gated operations;
+- the test-ownership map when the task calls for test-driven implementation (see below).
 
 Resolve missing product decisions with the user. Discover repository facts yourself.
 
@@ -76,6 +77,29 @@ Resolve missing product decisions with the user. Discover repository facts yours
 1. Dispatch an **Implement Agent** with the contract. It writes product code only and reports changed public interfaces.
 2. Dispatch a separate **Test Agent** with the spec, acceptance criteria, repository test conventions, and public interfaces—not the Implement Agent's reasoning. It writes tests only.
 3. If tests fail because product behavior is wrong, return evidence to Implement. If the test is wrong, return it to Test. The Orchestrator decides ownership; agents do not edit each other's files.
+
+#### When the task calls for test-driven implementation
+
+A spec, repository policy, or user instruction may require the implementer to work
+test-first. Red-green is a design technique, so the tests it produces encode the
+implementer's own assumptions—the very thing independent testing exists to catch. Allow
+both, and keep them apart:
+
+1. Before dispatching, write the **test-ownership map** into the contract: one path the
+   Implement Agent owns for its red-green tests, one path the Test Agent owns. Prefer the
+   repository's existing convention for developer-level unit tests; if it has none, give
+   the Implement Agent a dedicated file or directory and record it. The two sets never
+   overlap, and neither agent edits the other's path.
+2. The Implement Agent drives its own red-green loop inside its path, and still writes no
+   product behavior the spec did not ask for.
+3. The Test Agent writes its independent suite from the spec and public interfaces as
+   usual. It does not read the Implement Agent's tests: those carry the same assumptions
+   as the implementation, and reading them defeats the separation.
+4. Scaffolding is not verification. Only the independent suite closes an acceptance
+   criterion or demonstrates discrimination. The implementer's tests must still pass—a red
+   one blocks like any other failing test—but a gate is never satisfied by them alone.
+
+Without such a requirement, the default holds: the Implement Agent writes no tests.
 
 ### 2B. Debug path
 
@@ -143,6 +167,7 @@ Completion requires all of these:
 - every review and dogfood finding has a disposition;
 - no unresolved blocker or user decision remains;
 - Implement and Review were always different agents;
+- no acceptance criterion or discrimination claim rests on the implementer's own tests;
 - no non-writing role modified the candidate worktree, even transiently;
 - final review and final verification refer to the same unchanged candidate;
 - unrelated pre-existing changes remain preserved.
