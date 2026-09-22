@@ -22,5 +22,19 @@ thoughts/
 # validator eval 的每跑結果；記錄在 evals/VALIDATOR-RESULTS.md，json 是跑完的中間產物。
 /skills/skill-evolution/improve/evals/validator-eval-results.json
 
-# classifier 的執行紀錄；夾在版控中的 signals.jsonl / skill-graph.json 之間容易被誤 commit，每跑一次又長一點。
-/skills/skill-evolution/improve/memory/classifier.log
+# improve 的執行期資料：真實訊號、決策記錄與 raw evidence，內容含公司與內部專案名，
+# 不該進 public repo。repo 只留機制，格式說明在 references/ 與 SKILL.md。
+#
+# 共通點不是「由誰建立」—— 有的腳本自己 mkdir -p + touch，changelog.md 是 agent 照
+# SKILL.md Step 7 用 Write 建，signal-queue.rejected.log 沒有任何 writer、只存在於安裝版
+# —— 而是沒有一個需要先存在於版控：repo 端不會有腳本或測試因為它不在而壞掉。所以一個都
+# 不留，規則同時壓掉 parity 對「安裝版有、repo 永遠不會有」的 left_only 假漂移。
+#
+# 都不帶尾斜線：安裝版把其中幾個換成指向 personal-knowledge 的 symlink，而 `memory/`
+# 這種寫法只匹配目錄，symlink 在 git 眼裡是 blob，會整條漏掉。
+/skills/skill-evolution/improve/signal-queue.md
+/skills/skill-evolution/improve/signal-queue.rejected.log
+/skills/skill-evolution/improve/candidate-queue.md
+/skills/skill-evolution/improve/changelog.md
+/skills/skill-evolution/improve/memory
+/skills/skill-evolution/improve/.signal-lifecycle.lock
