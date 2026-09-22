@@ -63,15 +63,20 @@ def build_message(series_name: str, date_str: str, doc_url: str, drive_path: str
     try:
         meeting_date = date(int(date_str[:4]), int(date_str[4:6]), int(date_str[6:8]))
         yesterday = date.today() - timedelta(days=1)
-        date_prefix = "昨天的" if meeting_date == yesterday else f"{display_date} 的"
+        when = "昨天" if meeting_date == yesterday else display_date
     except ValueError:
-        date_prefix = f"{display_date} 的"
+        when = display_date
 
-    return (
-        f"{date_prefix} {series_name} 會議紀錄整理好囉！連結在下面，再麻煩大家確認。\n\n"
-        f"📄 連結： {doc_url}\n\n"
-        f"📂 雲端： {drive_path}"
-    )
+    # 三段：抬頭（哪一場、哪一天）、一句話、兩條路徑。空行是刻意的 —— 這是大家每天
+    # 唯一會看到的那則，擠成一坨的話「該點哪個連結」得在字堆裡找。
+    return "\n".join([
+        f"📝 *{series_name}*　{when}",
+        "",
+        "會議紀錄整理好了，再麻煩大家確認。",
+        "",
+        f"📄 連結　{doc_url}",
+        f"📂 雲端　{drive_path}",
+    ])
 
 
 def _post(token: str, target: str, text: str, what: str) -> bool:
