@@ -41,6 +41,7 @@ SYNC_SCRIPT = Path("bin/sync-from-installed.sh")
 # **加一支 skill 就是在這裡加一行**，邏輯不用動。
 SKILLS: dict[str, bool] = {
     "skills/comms/generate-meeting-notes": True,
+    "skills/skill-evolution/improve": False,
 }
 
 
