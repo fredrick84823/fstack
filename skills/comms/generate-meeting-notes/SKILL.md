@@ -413,6 +413,7 @@ cd "$SKILL_DIR" && uv run scripts/reconcile_drive.py --dry-run    # 只印差集
 | 需要時 | 讀 |
 |---|---|
 | 首次設定、`config.json` 結構、Google 認證檔案的角色、排程 | `references/setup.md` |
+| 要發給會議成員的丟檔說明（丟哪、多久出現、沒出現怎麼辦、哪些會議不要丟） | `references/meeting-members-guide.md` |
 | glossary 格式、共用 glossary 的合併與降級、回寫共用檔 | `references/glossary.md` |
 | 同日同類型多檔／多場次、`meeting_instance` 命名 | `references/multi-session.md` |
 | 403 / `This app is blocked` / scope 診斷 / NotebookLM 重跑 | `references/troubleshooting.md` |
