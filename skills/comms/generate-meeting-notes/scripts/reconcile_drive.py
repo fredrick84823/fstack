@@ -65,6 +65,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections import Counter
 from datetime import date, datetime
 from operator import attrgetter
 from pathlib import Path
@@ -142,6 +143,11 @@ CHANNEL_CAUSES = {
 # 是「只有你做得了、請去移動它」。所以另起一個抬頭，不共用 `CHANNEL_HEADER`。
 MISPLACED_HEADER = "📥 有一個錄音檔還沒進到日期資料夾"
 MISPLACED_CAUSE = "錄音檔放在系列資料夾最外層"
+
+# 維運者那兩則 DM 的去重身份（`dm_notice_key` 的第一格）。跟 channel 那幾則共用同一個
+# 狀態檔與同一支 `notice_due`，所以名字要跟 `notice_key` 的第三格分得開。
+MISPLACED_DM = "維運者DM：放錯層的音檔"
+UNREGISTERED_DM = "維運者DM：不在設定檔裡的系列"
 
 # 子行程的硬上限。NotebookLM 那段要上傳幾十段再等 AI 處理，所以給得寬；但一定要有，
 # 卡住的排程是「每小時卡一次而沒人知道」，不是「變紅」。
@@ -543,17 +549,50 @@ def misplaced_notice(series_name: str, file_name: str) -> str:
 
 
 def dm_misplaced(items: list[Misplaced]) -> str:
-    """放錯層的那幾個要 DM 給維運者的字。沒有要講的就回 `""`，呼叫端據此決定發不發。
+    """**已登記**系列的根目錄音檔要 DM 給維運者的字。沒有要講的就回 `""`。
 
     與 `dm_skipped` 分開：那支列的是**場次**（系列/日期/理由），這裡一筆是一個**檔案**，
     沒有日期可列 —— 硬塞進同一份清單會讓讀 DM 的人以為那個空白的日期是資料壞了。
+
+    沒有 `meeting_key` 的**不在這裡**（見 `dm_unregistered`）。分界不是「重不重要」，
+    是**這個建議執行得了嗎**：已登記的系列移進日期資料夾，下一輪就會產；未登記的移了
+    也產不出來。#57 上線第一輪掃出的 102 個全是後者（`series_folders` 從 parent 反推，
+    把同一層其他部門的資料夾也掃了進來），而 102 行每小時刷一次會連帶弄死同一則 DM 裡
+    真正可執行的那幾行。
     """
-    if not items:
+    known = [i for i in items if i.meeting_key]
+    if not known:
         return ""
-    lines = [f"{DM_HEADER}：{len(items)} 個音檔躺在系列資料夾根目錄"]
-    lines += [f"• {i.series}/{i.name}" for i in items]
+    lines = [f"{DM_HEADER}：{len(known)} 個音檔躺在系列資料夾根目錄"]
+    lines += [f"• {i.series}/{i.name}" for i in known]
     lines.append(
         f"請它們的主人移進日期資料夾（{DATE_DIR_SHAPES}），在那之前這幾個不會有記錄。"
+    )
+    return "\n".join(lines)
+
+
+def dm_unregistered(items: list[Misplaced]) -> str:
+    """設定檔裡沒有的系列，根目錄有音檔的那則。**一個系列一行，不逐檔。**
+
+    這則要說的是「有幾個部門還沒 onboard」，不是「哪幾個檔案要搬」 —— 那些系列沒有
+    `meeting_key`，搬到日期資料夾照樣產不出來，逐檔喊等於發一個**執行不了**的建議。
+
+    **這則的身份是系列，不是檔案**：同一個系列再多丟一個音檔，這則不會多一行。逐檔
+    那份（`dm_misplaced` 與 `notify_misplaced`）身份才是 Drive 檔案 id —— 那裡要人動的
+    正是那個檔案本人。
+
+    也只有這一則、只給維運者：未登記的系列連 `meeting_key` 都沒有，不知道要發哪個會議
+    channel（三態自然落在 `UNSET`），而且要動手的是把系列登記進設定檔的那個人。
+
+    行的順序跟著 `compute_misplaced` 的排序走（`Counter` 保插入序），所以 DM 每輪長一樣。
+    """
+    counts = Counter(i.series for i in items if not i.meeting_key)
+    if not counts:
+        return ""
+    lines = [f"{DM_HEADER}：{len(counts)} 個系列資料夾不在設定檔裡"]
+    lines += [f"• {series}　根目錄有 {n} 個音檔" for series, n in counts.items()]
+    lines.append(
+        f"這幾個系列沒有登記過，搬進日期資料夾也產不出來。要產就先加進設定檔：{CONFIG_PATH}"
     )
     return "\n".join(lines)
 
@@ -571,6 +610,23 @@ def notice_key(series: str, folder: str, cause: str) -> str:
     連資料夾都沒有，放的是 Drive 檔案 id（理由見 `notify_misplaced`）。
     """
     return f"{series}/{folder}/{cause}"
+
+
+def dm_notice_key(cause: str, ids: list[str]) -> str:
+    """維運者 DM 的去重身份：`cause` ＋ 一份排序過的 id 清單。
+
+    DM 與 channel 那幾則的形狀不同 —— 一則訊息講 N 件事，所以身份是**那 N 件事的集合
+    本身**：集合沒變 → 今天已經講過 → 不重發；集合變了（多一個檔、多一個系列）→ 那是
+    一則有新資訊的提醒，該發。
+
+    放進來的是「要被當成身份的那一格」，由呼叫端決定：逐檔那則放 Drive 檔案 id（同
+    `notify_misplaced` —— 改名不算新的），未登記那則放**系列名**（同一個系列再多丟一個
+    音檔，身份不變）。**數量不進 key** —— 進了的話多丟一個檔就等於一則新提醒，而那則
+    要說的事從頭到尾都是同一件。
+
+    排序過再接：清單順序是 Drive 給的，順序一換就變成另一個 key，等於去重失效一次。
+    """
+    return f"{cause}/{','.join(sorted(set(ids)))}"
 
 
 def notice_due(sent: dict[str, str], key: str, today: str) -> bool:
@@ -824,26 +880,65 @@ def notify_once(
     """
     if channel_state(meeting) != SEND:
         return
+    send_once(
+        key, text, state_path, today,
+        lambda t: send and send_channel(channel_id(meeting), t),
+    )
 
+
+def read_state(state_path: Path) -> dict:
+    """狀態檔 → dict。壞掉、不見、不是 dict 一律當空的。
+
+    壞掉時不拋：這支是無人看管跑的，為了一個去重記錄讓整輪停下來，代價是那一輪的記錄
+    整批不產 —— 而重發一則提醒的代價只是重發一則提醒。
+    """
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        state = {}
-    if not isinstance(state, dict):
-        state = {}
+        return {}
+    return state if isinstance(state, dict) else {}
+
+
+def write_state(state_path: Path, state: dict) -> None:
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(
+        json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+
+
+def send_once(
+    key: str, text: str, state_path: Path, today: str, deliver
+) -> None:
+    """一天最多一次地送一則。`deliver(text)` 回「真的送出去了沒有」。
+
+    **channel 與 DM 共用這一支**：「一天一次」與「送出去了才記進狀態檔」這兩條規則只能
+    有一份。DM 原本走的是 `notify()`，每輪重發 —— 每小時一輪，於是同一面 102 行的牆一天
+    出現 24 次，而同一則 DM 裡真正該看的那幾行（要產的、多音檔的、認不得資料夾的）就跟
+    著一起被學會忽略。
+
+    **送出去了才記**：Slack 當下送不出去（沒 token、API 掛了）不算發過，下一輪會再試。
+    """
+    state = read_state(state_path)
     sent = state.get("notified", {})
     if not notice_due(sent, key, today):
         return
 
     print(f"\n{text}")
-    if not (send and send_channel(channel_id(meeting), text)):
+    if not deliver(text):
         return
 
     state["notified"] = {**prune_sent(sent, today), key: today}
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(
-        json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    write_state(state_path, state)
+
+
+def notify_dm_once(text: str, key: str, state_path: Path, today: str) -> None:
+    """維運者的 DM，一天最多一次。空字串就不發（呼叫端據此決定發不發）。
+
+    與 `notify()` 的差別只有去重。`dm_blocked` 那幾則**不走這裡** —— 那是「這輪停了」，
+    每一輪都該講一次；這裡兩則講的是「有東西躺在那裡沒動」，而那件事一天講一次就夠。
+    """
+    if text:
+        send_once(key, text, state_path, today, send_dm)
 
 
 def notify_channel(
@@ -955,7 +1050,22 @@ def main() -> int:
     misplaced = compute_misplaced(scan.roots, known)
     report(round_, misplaced)
     notify(dm_skipped(round_.skipped))
-    notify(dm_misplaced(misplaced))
+
+    # 放錯層的兩則 DM **一天一次**，走 channel 那條同一支 `send_once`：每小時重發一次
+    # 的話，102 行的牆一天出現 24 次，而同一個收件匣裡真正該看的東西會跟著被忽略。
+    # 身份分別是「有哪幾個檔案」與「有哪幾個系列」（見 `dm_notice_key`）。
+    notify_dm_once(
+        dm_misplaced(misplaced),
+        dm_notice_key(MISPLACED_DM, [i.file_id for i in misplaced if i.meeting_key]),
+        state_path,
+        today,
+    )
+    notify_dm_once(
+        dm_unregistered(misplaced),
+        dm_notice_key(UNREGISTERED_DM, [i.series for i in misplaced if not i.meeting_key]),
+        state_path,
+        today,
+    )
 
     # 掃到了沒產的那些，會議成員也該知道。哪幾個理由走到這裡見 `CHANNEL_CAUSES`
     # —— 新的理由要不要對外發聲是那張表的事，不是在這裡多一條 `or`。
@@ -969,6 +1079,10 @@ def main() -> int:
     # 掉在系列資料夾最外層的音檔。**不產任何記錄** —— 沒有日期資料夾就沒有可信的日期。
     # 一個檔案一則（身份是 Drive 檔案 id，見 `notify_misplaced`），因為要移動的是那個
     # 檔案本人；走的是上面同一條通知路徑，三態與一天一次都照舊。
+    #
+    # 未登記系列的那些在這裡**自然安靜**：沒有 `meeting_key` → `meetings.get` 拿到空
+    # dict → 三態是 `UNSET` → `notify_once` 第一行就回。它們只出現在維運者的
+    # `dm_unregistered`，一個系列一行。
     for item in misplaced:
         notify_misplaced(item, meetings, state_path, today, send=not quiet)
 
@@ -979,11 +1093,9 @@ def main() -> int:
         print("\n這是 dry-run，沒有產任何記錄。")
         return 0
     if first_run:
-        state_path.parent.mkdir(parents=True, exist_ok=True)
-        state_path.write_text(
-            json.dumps({"first_run": today}, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        # 併進去而不是覆蓋：這一輪的 DM 已經發過、也已經記進 `notified` 了，整個蓋掉
+        # 等於下一輪再發一次同一則。
+        write_state(state_path, {**read_state(state_path), "first_run": today})
         print(f"\n這是首次執行，強制 dry-run，沒有產任何記錄。狀態檔已建立：{state_path}")
         print("確認上面的差集無誤之後，下一輪就會真的產。")
         return 0

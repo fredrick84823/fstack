@@ -56,6 +56,11 @@ MUT_LOG := .mutmut-run.log
 # 去重那兩支（`notice_key` / `notice_due`）最該被 mutant 問一次 —— `!=` 變成 `==` 的症狀
 # 是「該提醒的那天不提醒、不該提醒的每輪都提醒」，兩個方向都不會讓任何東西變紅。
 # `notify_channel` 不掛：它讀寫狀態檔、發 Slack，是 I/O 那一層（判準已經切出來了）。
+# `dm_notice_key` 是 #64 把維運者的 DM 也納進去重時加的：`sorted` 掉了的症狀是
+# 「Drive 換個順序就等於一則新提醒」，而那正是去重本來要擋的那件事。
+# `dm_unregistered` 是 #64 加的：未登記系列只報系列、不逐檔。那句 `if not i.meeting_key`
+# 被變異掉的症狀是兩份清單互換（可執行的建議消失、101 行不可執行的湧進來），而兩個方向
+# 都不會讓任何東西變紅。
 # `compute_misplaced` 到 `misplaced_notice` 是 #57 加的「放錯層的音檔」：那兩道濾網
 #（不是資料夾、而且是音檔）任何一道被變異掉，症狀都是每小時對整個會議 channel 喊一次
 # 假警報 —— 而假警報跟無聲一樣會讓人學會忽略這條通知。`notify_once` / `notify_misplaced`
@@ -123,10 +128,12 @@ PURE := \
 	dm_blocked \
 	failure_notice \
 	notice_key \
+	dm_notice_key \
 	notice_due \
 	prune_sent \
 	compute_misplaced \
 	dm_misplaced \
+	dm_unregistered \
 	misplaced_notice \
 	when_label \
 	_by_date \
