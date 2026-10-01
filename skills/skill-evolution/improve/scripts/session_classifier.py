@@ -122,23 +122,59 @@ def content_blocks(row: dict[str, Any]) -> list[Any]:
     return [content] if content else []
 
 
-def skills_used(rows: Iterable[dict[str, Any]]) -> list[str]:
-    """Skill names this session actually invoked, first call first.
+# A skill is also in use when the agent works inside its directory without the Skill
+# tool — repo skills under .agents/skills are mostly driven by Read/Bash (audit
+# 2026-10-01: tagtoo-audience-creation ran a whole session and was never attributed).
+SKILL_PATH = re.compile(r"\.(?:agents|claude)/skills/([A-Za-z0-9][\w.-]*)/")
+COMMAND_NAME = re.compile(r"<command-name>/?([^<\s]+)</command-name>")
 
-    Attribution is limited to what the transcript proves was called. A gap blamed on a
-    skill that never ran is the misroute the Layer 2 validator kept catching by hand.
-    """
-    seen: list[str] = []
-    for row in rows:
-        if row.get("type") != "assistant" or row.get("isSidechain"):
-            continue
+
+def is_installed_skill(name: str, cwd: str, home: Path) -> bool:
+    """Tell a skill's slash command from a built-in one like /clear or /model."""
+    if ":" in name:  # plugin skills are namespaced; built-ins never are
+        return True
+    roots = [home / ".claude/skills", home / ".agents/skills"]
+    if cwd:
+        roots += [Path(cwd) / ".claude/skills", Path(cwd) / ".agents/skills"]
+    return any((root / name).is_dir() for root in roots)
+
+
+def skill_events(row: dict[str, Any], home: Path) -> list[str]:
+    """Skills this row shows being used, in order: Skill calls, slash commands, and
+    tool calls that touch a skill's directory."""
+    found: list[str] = []
+    if row.get("type") == "assistant":
         for block in content_blocks(row):
             if not isinstance(block, dict) or block.get("type") != "tool_use":
                 continue
-            if block.get("name") != "Skill":
+            payload = block.get("input") or {}
+            if block.get("name") == "Skill":
+                if payload.get("skill"):
+                    found.append(payload["skill"])
                 continue
-            skill = (block.get("input") or {}).get("skill")
-            if skill and skill not in seen:
+            found += SKILL_PATH.findall(json.dumps(payload, ensure_ascii=False))
+    elif row.get("type") == "user":
+        for block in content_blocks(row):
+            text = block.get("text", "") if isinstance(block, dict) else block
+            if isinstance(text, str):
+                found += [name for name in COMMAND_NAME.findall(text)
+                          if is_installed_skill(name, str(row.get("cwd") or ""), home)]
+    return found
+
+
+def skills_used(rows: Iterable[dict[str, Any]], home: Path | None = None) -> list[str]:
+    """Skill names this session actually used, first use first.
+
+    Attribution is limited to what the transcript proves was used. A gap blamed on a
+    skill that never ran is the misroute the Layer 2 validator kept catching by hand.
+    """
+    home = home or Path.home()
+    seen: list[str] = []
+    for row in rows:
+        if row.get("isSidechain"):
+            continue
+        for skill in skill_events(row, home):
+            if skill not in seen:
                 seen.append(skill)
     return seen
 
@@ -176,7 +212,7 @@ def build_excerpt(skills: list[str], messages: list[str], *, limit: int = 8000) 
     return header + body[-limit:]
 
 
-def candidates(rows: Iterable[dict[str, Any]]) -> list[tuple[str, str]]:
+def candidates(rows: Iterable[dict[str, Any]], home: Path | None = None) -> list[tuple[str, str]]:
     """`(skill, user message)` pairs — one proposed gap each, in transcript order.
 
     validate-gap.sh validates *a* claim; it does not go looking for one. Measured against
@@ -192,18 +228,16 @@ def candidates(rows: Iterable[dict[str, Any]]) -> list[tuple[str, str]]:
     what the sentence means; the validator still re-checks attribution and rejects
     `misroute` when the pairing is wrong.
     """
+    home = home or Path.home()
     pairs: list[tuple[str, str]] = []
     current: str | None = None
     for row in rows:
         if row.get("isSidechain"):
             continue
-        if row.get("type") == "assistant":
-            for block in content_blocks(row):
-                if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "Skill":
-                    skill = (block.get("input") or {}).get("skill")
-                    if skill:
-                        current = skill
-        elif current:
+        events = skill_events(row, home)
+        if events:
+            current = events[-1]
+        if row.get("type") == "user" and current:
             for message in user_messages([row]):
                 pairs.append((current, message))
     return pairs
@@ -336,7 +370,8 @@ def classify(payload: dict[str, Any], args: argparse.Namespace, env: dict[str, s
     if reason:
         return {"skipped": reason, "skills": [], "calls": 0, "captured": [], "deduped": []}
 
-    skills = skills_used(rows)
+    home = Path(env.get("HOME") or Path.home())
+    skills = skills_used(rows, home)
     if not skills:
         # The cheap exit that makes this affordable: no Skill ran, so there is nothing to
         # attribute a gap to, and the model is never called.
@@ -354,7 +389,7 @@ def classify(payload: dict[str, Any], args: argparse.Namespace, env: dict[str, s
     memory_dir = queue.parent / "memory"
     # Most recent last: a correction late in a session is the one still worth acting on,
     # and the budget is spent from that end.
-    queued = candidates(rows)
+    queued = candidates(rows, home)
     if args.max_signals > 0:
         queued = queued[-args.max_signals:]
     captured: list[dict[str, Any]] = []

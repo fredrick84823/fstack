@@ -217,6 +217,41 @@ class SessionClassifierTest(unittest.TestCase):
         report = self.run_classifier(WITH_SKILLS, env_extra={"IMPROVE_MAX_SIGNALS": "0"})
         self.assertEqual(report["calls"], 3)
 
+    def test_skills_used_without_the_skill_tool_are_still_attributed(self) -> None:
+        # 稽核 2026-10-01：repo skill 靠 Read/Bash 跑、slash command 呼叫，都被判
+        # 「no skill invoked」或歸錯 skill。
+        import importlib.util
+        import tempfile
+
+        spec = importlib.util.spec_from_file_location("sc", CLASSIFIER)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        home = Path(tempfile.mkdtemp())
+        (home / ".claude/skills/generate-meeting-notes").mkdir(parents=True)
+
+        def tool(name: str, payload: dict) -> dict:
+            return {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "name": name, "input": payload}]}}
+
+        def user(text: str) -> dict:
+            return {"type": "user", "message": {"content": text}}
+
+        rows = [
+            user("<command-name>/clear</command-name>"),
+            user("<command-name>/generate-meeting-notes</command-name>"),
+            user("glossary 的 F2 應該是 phase2"),
+            tool("Bash", {"command": "python3 .agents/skills/tagtoo-audience-creation/scripts/run.py"}),
+            user("受眾名稱還是要符合業務需求"),
+        ]
+        # /clear 不是 skill；不在任何 skills 目錄就不算。
+        self.assertEqual(module.skills_used(rows, home),
+                         ["generate-meeting-notes", "tagtoo-audience-creation"])
+        self.assertEqual(module.candidates(rows, home), [
+            ("generate-meeting-notes", "glossary 的 F2 應該是 phase2"),
+            ("tagtoo-audience-creation", "受眾名稱還是要符合業務需求"),
+        ])
+
     # --- 不呼叫模型的那條路 --------------------------------------------------
 
     def test_a_session_that_called_no_skill_never_reaches_the_model(self) -> None:
