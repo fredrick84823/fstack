@@ -252,6 +252,23 @@ class SessionClassifierTest(unittest.TestCase):
             ("tagtoo-audience-creation", "受眾名稱還是要符合業務需求"),
         ])
 
+    def test_the_excerpt_is_centred_on_the_candidate_and_shows_the_agents_side(self) -> None:
+        # 稽核 2026-10-01：尾端截斷把原話切掉；沒有 agent 的話，validator 寫不出 actual。
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("sc", CLASSIFIER)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        session = [("assistant", "說明我寫成英文了")] + [("user", "受眾說明要用繁體中文")] + [
+            ("user", f"後續閒聊 {i} " + "x" * 500) for i in range(40)
+        ]
+        excerpt = module.build_excerpt(["tagtoo-audience-creation"], session, "受眾說明要用繁體中文", limit=2000)
+        self.assertIn("[assistant] 說明我寫成英文了", excerpt)
+        self.assertIn("[user] 受眾說明要用繁體中文", excerpt)
+        self.assertNotIn("後續閒聊 39", excerpt)
+        self.assertLess(len(excerpt), 2000 + 600)
+
     # --- 不呼叫模型的那條路 --------------------------------------------------
 
     def test_a_session_that_called_no_skill_never_reaches_the_model(self) -> None:

@@ -205,11 +205,58 @@ def user_messages(rows: Iterable[dict[str, Any]]) -> list[str]:
     return messages
 
 
-def build_excerpt(skills: list[str], messages: list[str], *, limit: int = 8000) -> str:
-    """The context the validator reasons over: what ran, and what the user said about it."""
-    body = "\n\n".join(f"[user] {message}" for message in messages)
+# Per-turn caps keep one long reply or pasted log from crowding out the rest.
+ASSISTANT_TURN_CHARS = 600
+USER_TURN_CHARS = 1500
+
+
+def turns(rows: Iterable[dict[str, Any]]) -> list[tuple[str, str]]:
+    """`(role, text)` in transcript order: the user's own words and the agent's prose.
+
+    The agent's side is what lets the validator state `actual` — with user turns alone it
+    could only guess what the skill did (audit 2026-10-01: same sentence, reject without
+    agent text, accept with it).
+    """
+    out: list[tuple[str, str]] = []
+    for row in rows:
+        if row.get("isSidechain"):
+            continue
+        if row.get("type") == "assistant":
+            text = "\n".join(
+                block.get("text", "") for block in content_blocks(row)
+                if isinstance(block, dict) and block.get("type") == "text"
+            ).strip()
+            if text:
+                out.append(("assistant", text))
+        else:
+            out += [("user", message) for message in user_messages([row])]
+    return out
+
+
+def build_excerpt(skills: list[str], session: list[tuple[str, str]], candidate: str,
+                  *, limit: int = 8000) -> str:
+    """The context the validator reasons over, centred on the sentence being judged.
+
+    Mostly what led up to the candidate (the skill's output it is reacting to), then
+    what followed. Cutting from the session's tail instead dropped the very sentence
+    under review whenever the session kept going after it.
+    """
+    def render(turn: tuple[str, str]) -> str:
+        role, text = turn
+        cap = ASSISTANT_TURN_CHARS if role == "assistant" else USER_TURN_CHARS
+        return f"[{role}] {text[:cap]}"
+
+    at = next((i for i, turn in enumerate(session) if turn == ("user", candidate)), len(session) - 1)
+    picked = {at: render(session[at])} if session else {}
+    used = sum(len(v) for v in picked.values())
+    before, after = at - 1, at + 1
+    # Spend three quarters of the room looking back, the rest looking forward.
+    while before >= 0 and used < limit * 3 // 4:
+        picked[before] = render(session[before]); used += len(picked[before]); before -= 1
+    while after < len(session) and used < limit:
+        picked[after] = render(session[after]); used += len(picked[after]); after += 1
     header = "skills_invoked: " + ", ".join(skills) + "\n\n"
-    return header + body[-limit:]
+    return header + "\n\n".join(picked[i] for i in sorted(picked))
 
 
 def candidates(rows: Iterable[dict[str, Any]], home: Path | None = None) -> list[tuple[str, str]]:
@@ -377,8 +424,7 @@ def classify(payload: dict[str, Any], args: argparse.Namespace, env: dict[str, s
         # attribute a gap to, and the model is never called.
         return {"skipped": "no skill invoked", "skills": [], "calls": 0, "captured": [], "deduped": []}
 
-    messages = user_messages(rows)
-    excerpt = build_excerpt(skills, messages)
+    session = turns(rows)
     queue = resolve_queue(Path(payload.get("cwd") or "."), env)
     scripts = Path(__file__).resolve().parent
     validator = Path(env.get("IMPROVE_VALIDATOR") or scripts / "validate-gap.sh")
@@ -402,6 +448,7 @@ def classify(payload: dict[str, Any], args: argparse.Namespace, env: dict[str, s
     def ask(pair: tuple[str, str]) -> dict[str, Any] | None:
         skill, candidate = pair
         prior = known_signals(scripts / "memory.sh", memory_dir, skill)
+        excerpt = build_excerpt(skills, session, candidate)
         return run_validator(
             validator, skill, candidate, excerpt, render_known_signals(prior), child_env,
         )
