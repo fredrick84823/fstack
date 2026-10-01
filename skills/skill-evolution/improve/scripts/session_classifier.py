@@ -350,18 +350,27 @@ def classify(payload: dict[str, Any], args: argparse.Namespace, env: dict[str, s
     queued = candidates(rows)[-args.max_signals:]
     captured: list[dict[str, Any]] = []
     deduped: list[dict[str, Any]] = []
+    # Rejects go to the log, not the queue. Without them a run of zero captures cannot
+    # tell "nothing to find" from "the validator turned everything down" (2026-10: 76
+    # calls, 0 captures, nothing to audit).
+    rejected: list[dict[str, Any]] = []
+    failed = 0
     for skill, candidate in queued:
         prior = known_signals(scripts / "memory.sh", memory_dir, skill)
         verdict = run_validator(
             validator, skill, candidate, excerpt, render_known_signals(prior), child_env,
         )
         if verdict is None:
+            failed += 1
             continue
         duplicate_of = str(verdict.get("duplicate_of") or "")
         # A duplicate arrives as a *reject* carrying an id — the schema forbids an accept
         # from pointing at an existing signal. So the id is read before the verdict is,
         # otherwise every semantic duplicate is dropped on the floor instead of counted.
         if not duplicate_of and verdict.get("verdict") != "accept":
+            rejected.append({"target_skill": skill, "candidate": candidate[:160],
+                             "risk_class": verdict.get("risk_class"),
+                             "reason": str(verdict.get("reason") or "")[:240]})
             continue
         signal_id = capture(state_script, queue, verdict, args.timestamp)
         if not signal_id:
@@ -375,7 +384,7 @@ def classify(payload: dict[str, Any], args: argparse.Namespace, env: dict[str, s
         else:
             captured.append(entry)
     return {"skipped": None, "skills": skills, "calls": len(queued),
-            "captured": captured, "deduped": deduped}
+            "captured": captured, "deduped": deduped, "rejected": rejected, "failed": failed}
 
 
 def main(argv: list[str] | None = None) -> int:

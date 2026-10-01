@@ -252,6 +252,11 @@ class SessionClassifierTest(unittest.TestCase):
         report = self.run_classifier(WITH_SKILLS, validator=self.write_validator(REJECTING_VALIDATOR))
         self.assertEqual(report["captured"], [])
         self.assertEqual(self.queue_entries(), [])
+        # 判否要留在 log 裡，否則「0 筆收」分不出是沒東西還是全被擋。
+        self.assertEqual(len(report["rejected"]), 3)
+        self.assertEqual(report["rejected"][0]["reason"], "no quotable user sentence")
+        self.assertTrue(report["rejected"][0]["candidate"])
+        self.assertEqual(report["failed"], 0)
         # 判否不等於沒問。問的是候選句，不是 skill —— 同一個 skill 有兩句修正就問兩次，
         # 而每一句都帶著「說這句話時正在跑的那個 skill」。
         self.assertEqual(
@@ -301,6 +306,9 @@ class SessionClassifierTest(unittest.TestCase):
         self.assertEqual(report["captured"], [])
         self.assertEqual(report["deduped"], [])
         self.assertEqual(self.queue_entries(), [])
+        # 沒跑成不是判否：分開計，log 才看得出認證過期。
+        self.assertEqual(report["rejected"], [])
+        self.assertEqual(report["failed"], report["calls"])
 
     def test_a_duplicate_of_verdict_adds_a_witness_instead_of_a_queue_entry(self) -> None:
         first = self.run_classifier(WITH_SKILLS, args=["--max-signals", "1"])
