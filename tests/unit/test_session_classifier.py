@@ -193,6 +193,30 @@ class SessionClassifierTest(unittest.TestCase):
         # 沒有 skill 可歸因，所以不該變成候選。
         self.assertNotIn("幫我把這場會議的逐字稿整理成會議記錄", [message for _, message in pairs])
 
+    def test_system_generated_turns_are_not_candidates(self) -> None:
+        # 2026-10-01 稽核：送審句有 21% 是這些，把真正的修正擠出額度。
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("sc", CLASSIFIER)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        noise = [
+            "<task-notification>agent done</task-notification>",
+            "<teammate-message>hi</teammate-message>",
+            "<bash-input>ls</bash-input>",
+            "<bash-stdout>a.txt</bash-stdout>",
+            "[Request interrupted by user]",
+            "This session is being continued from a previous conversation.",
+        ]
+        rows = [{"type": "user", "message": {"content": text}} for text in noise + ["名稱要照業務給的"]]
+        self.assertEqual(module.user_messages(rows), ["名稱要照業務給的"])
+
+    def test_with_no_cap_every_candidate_is_asked(self) -> None:
+        # 修正多在 session 中段，只問最後幾句就會漏（稽核 2026-10-01）。
+        report = self.run_classifier(WITH_SKILLS, env_extra={"IMPROVE_MAX_SIGNALS": "0"})
+        self.assertEqual(report["calls"], 3)
+
     # --- 不呼叫模型的那條路 --------------------------------------------------
 
     def test_a_session_that_called_no_skill_never_reaches_the_model(self) -> None:
@@ -259,7 +283,8 @@ class SessionClassifierTest(unittest.TestCase):
         self.assertEqual(report["failed"], 0)
         # 判否不等於沒問。問的是候選句，不是 skill —— 同一個 skill 有兩句修正就問兩次，
         # 而每一句都帶著「說這句話時正在跑的那個 skill」。
-        self.assertEqual(
+        # 平行呼叫，順序不固定；看的是每句都問到。
+        self.assertCountEqual(
             self.validator_calls(),
             ["generate-meeting-notes", "generate-meeting-notes", "create-handoff"],
         )

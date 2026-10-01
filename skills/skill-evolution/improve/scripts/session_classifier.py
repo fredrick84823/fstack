@@ -13,8 +13,8 @@ Three things keep the cost near zero for the sessions that have nothing to say:
 - A session that called no Skill exits before the model is ever invoked.
 - An unattended session (`claude -p`, subagent, anything but a human at a terminal)
   exits at the gate — otherwise the classifier would grade its own runs.
-- At most `--max-signals` validator calls per session (N=3 ≈ $0.12), so neither the queue
-  nor the bill can run away on one session.
+- `--max-signals` can cap validator calls per session. Default is no cap (2026-10): the
+  old cap of 3 spent its budget on the last three turns, while corrections sit mid-session.
 - A gap already on file for that skill comes back as one more witness, not a second queue
   entry — including when it is worded differently, which the validator decides by
   answering `duplicate_of` against the KNOWN_SIGNALS it is shown.
@@ -27,6 +27,7 @@ and not a debounced Stop hook.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
@@ -36,15 +37,21 @@ import sys
 from typing import Any, Iterable
 
 
-# Caps validator calls, not just captures. Each call is one `claude -p`; #43 measured
-# ~$0.04 each, so N=3 is also the ~$0.12 per-session ceiling. Capping captures alone
-# would leave a ten-skill session free to spend $0.40 before hitting any limit.
-DEFAULT_MAX_SIGNALS = 3
+# Caps validator calls; 0 means every candidate is asked. The old default of 3 took the
+# last three turns and missed every mid-session correction (audit 2026-10-01: 2 real
+# gaps lost). Subscription usage is not the constraint, so recall wins. Set
+# IMPROVE_MAX_SIGNALS to bring a cap back.
+DEFAULT_MAX_SIGNALS = 0
+# Validator calls run concurrently so an uncapped session still ends inside the
+# SessionEnd hook timeout (300s; ~11s per call).
+VALIDATOR_WORKERS = 8
 DEFAULT_MODEL = "claude-sonnet-5"
 # A user turn Claude Code generated on the user's behalf is not the user talking.
 WRAPPED_USER_TEXT = re.compile(
     r"<(local-command-stdout|local-command-caveat|command-name|command-message|command-args"
-    r"|system-reminder|user-prompt-submit-hook)>",
+    r"|system-reminder|user-prompt-submit-hook"
+    r"|task-notification|teammate-message|bash-input|bash-stdout|bash-stderr)>"
+    r"|^\[Request interrupted|^This session is being continued",
 )
 
 
@@ -347,7 +354,9 @@ def classify(payload: dict[str, Any], args: argparse.Namespace, env: dict[str, s
     memory_dir = queue.parent / "memory"
     # Most recent last: a correction late in a session is the one still worth acting on,
     # and the budget is spent from that end.
-    queued = candidates(rows)[-args.max_signals:]
+    queued = candidates(rows)
+    if args.max_signals > 0:
+        queued = queued[-args.max_signals:]
     captured: list[dict[str, Any]] = []
     deduped: list[dict[str, Any]] = []
     # Rejects go to the log, not the queue. Without them a run of zero captures cannot
@@ -355,11 +364,18 @@ def classify(payload: dict[str, Any], args: argparse.Namespace, env: dict[str, s
     # calls, 0 captures, nothing to audit).
     rejected: list[dict[str, Any]] = []
     failed = 0
-    for skill, candidate in queued:
+    def ask(pair: tuple[str, str]) -> dict[str, Any] | None:
+        skill, candidate = pair
         prior = known_signals(scripts / "memory.sh", memory_dir, skill)
-        verdict = run_validator(
+        return run_validator(
             validator, skill, candidate, excerpt, render_known_signals(prior), child_env,
         )
+
+    # Ask in parallel, capture in transcript order: capture owns the queue lock and its
+    # dedup depends on what came before.
+    with ThreadPoolExecutor(max_workers=VALIDATOR_WORKERS) as pool:
+        verdicts = list(pool.map(ask, queued))
+    for (skill, candidate), verdict in zip(queued, verdicts):
         if verdict is None:
             failed += 1
             continue
@@ -392,7 +408,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--max-signals", type=int,
         default=int(os.environ.get("IMPROVE_MAX_SIGNALS", DEFAULT_MAX_SIGNALS)),
-        help="validator calls per session, which also bounds signals captured (default 3)",
+        help="cap on validator calls per session, latest turns first; 0 = no cap (default)",
     )
     parser.add_argument("--model", default=os.environ.get("IMPROVE_VALIDATOR_MODEL", DEFAULT_MODEL))
     parser.add_argument("--timestamp", default="")
