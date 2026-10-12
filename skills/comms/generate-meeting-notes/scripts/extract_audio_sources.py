@@ -31,7 +31,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from history_index import build_index
+from history_index import build_index, related_series
 
 CONFIG_DIR = Path.home() / ".config" / "generate-meeting-notes"
 CONFIG_PATH = CONFIG_DIR / "config.json"
@@ -1076,6 +1076,7 @@ async def main(
         meeting.get("folder_name", meeting["series_name"]),
         meeting["series_name"],
         date,
+        related=related_series(meetings, meeting),
     )
 
     print(f"\n{'=' * 50}")
