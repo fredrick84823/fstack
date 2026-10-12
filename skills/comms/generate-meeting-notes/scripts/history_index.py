@@ -43,6 +43,7 @@ import argparse
 import json
 import re
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import NamedTuple
 
@@ -60,6 +61,10 @@ from local_archive import (
 
 INDEX_FILENAME = "history-index.md"
 DEFAULT_SESSIONS = 3
+# 未結案只列近 N 週的場次。更舊的場次大綱照留，未結案收成一行「另有 X 條」。理由是
+# 8/13 的待辦到 10/8 還一條條列出來時，它幾乎都在中間沒歸檔的場次結案了，列出來只是
+# 逼 agent 把過期的東西寫進「前次未結案項目」。`--max-age-weeks 0` 關掉這道上限。
+DEFAULT_MAX_AGE_WEEKS = 4
 MAX_DEPTH = 3
 
 # 「這一項已經結案了」在正式稿裡的兩種寫法。**其餘每個值都算未結案** —— 白名單而不是
@@ -126,6 +131,7 @@ class Session(NamedTuple):
     doc_url: str | None
     outline: list[tuple[int, str]]
     open_items: tuple[str, ...] = ()
+    stale_open: int = 0   # 超過年齡上限、沒列出的未結案條數（見 `DEFAULT_MAX_AGE_WEEKS`）
 
 
 def outline(markdown: str) -> list[tuple[int, str]]:
@@ -340,6 +346,7 @@ def read_session(note_path: Path, series_name: str) -> Session:
 
 OPEN_ITEMS_LABEL = "未結案（上一場留下的，逐條確認本次有沒有再提到）"
 MORE_ITEMS = "…另有 {count} 條未結案沒列出，需要完整清單就沿 `本機:` 讀全文"
+STALE_ITEMS = "另有 {count} 條未結案超過 {weeks} 週未更新，未列出；需要時沿 `本機:` 讀全文"
 
 
 def _open_items_block(items: tuple[str, ...]) -> list[str]:
@@ -359,7 +366,12 @@ def _open_items_block(items: tuple[str, ...]) -> list[str]:
     return lines
 
 
-def render(series_name: str, before_date: str, sessions: list[Session]) -> str:
+def render(
+    series_name: str,
+    before_date: str,
+    sessions: list[Session],
+    max_age_weeks: int = DEFAULT_MAX_AGE_WEEKS,
+) -> str:
     """索引的 Markdown。沒有任何場次時說明為什麼，不留一份空白檔讓人以為壞了。"""
     lines = [f"# 歷史會議索引：{series_name}", "", INDEX_HEADER, ""]
     if not sessions:
@@ -373,7 +385,26 @@ def render(series_name: str, before_date: str, sessions: list[Session]) -> str:
             lines.append(f"Doc: {session.doc_url}")
         lines += [f"{'  ' * (level - 1)}- {text}" for level, text in session.outline]
         lines += _open_items_block(session.open_items)
+        if session.stale_open:
+            lines.append(f"- {STALE_ITEMS.format(count=session.stale_open, weeks=max_age_weeks)}")
     return "\n".join(lines) + "\n"
+
+
+def related_series(meetings: dict, meeting: dict) -> list[tuple[str, str]]:
+    """config 的 `related_meetings` 轉成 [(folder_name, series_name)]。
+
+    同一批人分成兩個系列開會時（週四 RD 會議與週二 RD 專案會議），前一個系列留下的
+    待辦常常在另一個系列結案；只看自己系列的索引會把它當成還懸著。key 在 config 裡
+    找不到時印一行並跳過 —— 打錯字不該讓整個 source extraction 掛掉，但也不能靜靜少一個系列。
+    """
+    found: list[tuple[str, str]] = []
+    for key in meeting.get("related_meetings", []):
+        other = meetings.get(key)
+        if other is None:
+            print(f"⚠️  related_meetings 裡的 '{key}' 不在 config 的 meetings 裡，略過")
+            continue
+        found.append((other.get("folder_name", other["series_name"]), other["series_name"]))
+    return found
 
 
 def build_index(
@@ -383,21 +414,45 @@ def build_index(
     before_date: str,
     root: Path = LOCAL_ARCHIVE_ROOT,
     limit: int = DEFAULT_SESSIONS,
+    related: list[tuple[str, str]] = (),
+    max_age_weeks: int = DEFAULT_MAX_AGE_WEEKS,
 ) -> Path:
     """產索引檔並回傳路徑。
+
+    `related` 是相關系列 [(folder_name, series_name)]：**每個系列各取近 `limit` 場**，
+    全部按日期由舊到新排在一起，相關系列的場次小標前面加系列名（`RD專案會議 · 20260915`）。
+    各取 N 場而不是總共 N 場：開會頻率高的系列會把總額吃光，本系列反而被擠掉。
+
+    `max_age_weeks` > 0 時，早於「本次日期往前 N 週」的場次只留大綱，未結案收成一行。
 
     單一份正式稿讀不進來時只跳過那一場並印出原因 —— 歸檔裡一個壞檔不該讓整個
     source extraction 流程掛掉，但也不能靜靜少一場。
     """
-    sessions: list[Session] = []
-    for note_path in find_notes(root, folder_name, before_date, limit):
-        try:
-            sessions.append(read_session(note_path, series_name))
-        except (OSError, ValueError) as e:
-            print(f"⚠️  歷史索引略過讀不到的正式稿：{note_path}（{e}）")
+    cutoff = ""
+    if max_age_weeks > 0:
+        start = datetime.strptime(before_date, "%Y%m%d") - timedelta(weeks=max_age_weeks)
+        cutoff = start.strftime("%Y%m%d")
+    dated: list[tuple[str, Session]] = []
+    for i, (folder, series) in enumerate([(folder_name, series_name), *related]):
+        for note_path in find_notes(root, folder, before_date, limit):
+            try:
+                session = read_session(note_path, series)
+            except (OSError, ValueError) as e:
+                print(f"⚠️  歷史索引略過讀不到的正式稿：{note_path}（{e}）")
+                continue
+            if i:
+                session = session._replace(label=f"{series} · {session.label}")
+            date = note_path.parent.name[:8]
+            if date < cutoff and session.open_items:
+                session = session._replace(open_items=(), stale_open=len(session.open_items))
+            dated.append((date, session))
+    # sorted 是穩定的：同一天時本系列在前、同系列內維持 find_notes 的場次時序。
+    sessions = [s for _, s in sorted(dated, key=lambda d: d[0])]
     index_path = Path(source_dir) / INDEX_FILENAME
     index_path.parent.mkdir(parents=True, exist_ok=True)
-    index_path.write_text(render(series_name, before_date, sessions), encoding="utf-8")
+    index_path.write_text(
+        render(series_name, before_date, sessions, max_age_weeks), encoding="utf-8"
+    )
     return index_path
 
 
@@ -411,6 +466,10 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True, help="source artifacts 目錄，索引寫在裡面")
     parser.add_argument("--sessions", type=int, default=DEFAULT_SESSIONS, help=f"取近 N 場（預設 {DEFAULT_SESSIONS}）")
     parser.add_argument("--root", help="歸檔根目錄（預設吃 config 的 local_archive_root）")
+    parser.add_argument(
+        "--max-age-weeks", type=int, default=DEFAULT_MAX_AGE_WEEKS,
+        help=f"未結案只列近 N 週的場次（預設 {DEFAULT_MAX_AGE_WEEKS}；0 = 不設上限）",
+    )
     args = parser.parse_args()
 
     # 日期比較是字串比較。`--date` 不是 8 位數字時（例如 `2026-09-14`），每一場都會被
@@ -435,6 +494,8 @@ def main() -> None:
         args.date,
         root=Path(args.root).expanduser() if args.root else LOCAL_ARCHIVE_ROOT,
         limit=args.sessions,
+        related=related_series(meetings, meeting),
+        max_age_weeks=args.max_age_weeks,
     )
     print(f"RESULT_HISTORY_INDEX: {index_path}")
 
