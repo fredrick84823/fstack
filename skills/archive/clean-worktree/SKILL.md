@@ -1,4 +1,5 @@
 ---
+name: clean-worktree
 description: Safely clean up a merged git worktree — sync output/, remove JSON raw files, delete worktree and branch
 allowed-tools: [Bash, AskUserQuestion]
 ---
