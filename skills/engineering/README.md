@@ -4,6 +4,7 @@
 
 **Model-invoked** — the model can reach for these when the description matches.
 
+- **[clean-env](./clean-env/SKILL.md)**: 把用不到的 herdr 與 git 環境收乾淨，先列清單等確認才刪
 - **[codex-brainstorm](./codex-brainstorm/SKILL.md)**: Adversarial brainstorming. Claude and Codex independently research then debate until Nash equilibrium. For solution exploration, feasibility analysis,…
 - **[codex-cli-review](./codex-cli-review/SKILL.md)**: Use Codex CLI (not MCP) to review uncommitted changes. Codex explores the codebase independently with full disk read access
 - **[describe-pr](./describe-pr/SKILL.md)**: Write a pull request description a reviewer can digest without opening the diff

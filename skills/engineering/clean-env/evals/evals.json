@@ -1,0 +1,23 @@
+{
+  "skill_name": "clean-env",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "幫我把用不到的 herdr and git 環境都清理乾淨",
+      "expected_output": "先唯讀盤點，列出 manifest（worktree、本地／遠端分支、herdr workspace／tab、lavish session 各一列，分安全／會遺失／保留），用 AskUserQuestion 等確認後才刪；自己所在的 pane／tab／workspace 與主 checkout 不在清單內。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "清掉那 5 個 reviewer worktree，有一個 exp worktree 裡還有沒 commit 的改動",
+      "expected_output": "有改動的 worktree 歸進「會遺失」，給出封存後刪／commit 推上去／保留／直接刪的選項，不直接 --force；herdr 管的 worktree 用 herdr worktree remove --workspace，刪完再 prune 與刪分支。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "一起清除已經合併的 branch local and origin both",
+      "expected_output": "PR 已 MERGED 的本地分支用 -D（squash merge 會讓 -d 失敗）；遠端先 git ls-remote 確認還在才 push --delete；遠端刪除在確認清單中另列一區。",
+      "files": []
+    }
+  ]
+}

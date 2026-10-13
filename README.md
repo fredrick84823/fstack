@@ -172,6 +172,7 @@ See [docs/skill-evolution-loop.md](docs/skill-evolution-loop.md),
 
 | Skill | Description |
 |-------|-------------|
+| [`clean-env`](skills/engineering/clean-env/SKILL.md) | 把用不到的 herdr 與 git 環境收乾淨，先列清單等確認才刪 |
 | [`codex-brainstorm`](skills/engineering/codex-brainstorm/SKILL.md) | Adversarial brainstorming. Claude and Codex independently research then debate until Nash equilibrium. For solution exploration, feasibility analysis,… |
 | [`codex-cli-review`](skills/engineering/codex-cli-review/SKILL.md) | Use Codex CLI (not MCP) to review uncommitted changes. Codex explores the codebase independently with full disk read access |
 | [`describe-pr`](skills/engineering/describe-pr/SKILL.md) | Write a pull request description a reviewer can digest without opening the diff |
@@ -238,7 +239,7 @@ See [docs/skill-evolution-loop.md](docs/skill-evolution-loop.md),
 |---------|-------------|
 | `/brief-mode` | Enable terse response mode |
 | `/cf-verify` | Cloud Function full test & verification |
-| `/clean-worktree` | Safely clean up a merged git worktree |
+| `/clean-worktree` | Safely clean up a merged git worktree (single worktree + `output/` sync; for a repo-wide sweep use `clean-env`) |
 | `/heptabase-title` | Generate Heptabase document titles |
 | `/refine-text` | Tighten text, remove filler |
 | `/safe-pull` | Pull from origin with auto stash/rebase |
