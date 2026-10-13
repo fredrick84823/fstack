@@ -146,7 +146,7 @@ See [docs/skill-evolution-loop.md](docs/skill-evolution-loop.md),
 - **Scope-aware mutation**: user, project, and repo skill scopes prevent
   accidental cross-context edits.
 
-## Skills (34 loaded + 1 archived)
+## Skills (34 loaded + 2 archived)
 
 #### Pipeline
 
@@ -231,15 +231,15 @@ See [docs/skill-evolution-loop.md](docs/skill-evolution-loop.md),
 
 | Skill | Description |
 |-------|-------------|
+| [`clean-worktree`](skills/archive/clean-worktree/SKILL.md) | 清理單一已 merge worktree 並同步 `output/`；由 [`clean-env`](skills/engineering/clean-env/SKILL.md) 取代 |
 | [`deep-module`](skills/archive/deep-module/SKILL.md) | Apply the Deep Module principle — human designs the interface outline, AI fills the implementation |
 
-## Commands (8)
+## Commands (7)
 
 | Command | Description |
 |---------|-------------|
 | `/brief-mode` | Enable terse response mode |
 | `/cf-verify` | Cloud Function full test & verification |
-| `/clean-worktree` | Safely clean up a merged git worktree (single worktree + `output/` sync; for a repo-wide sweep use `clean-env`) |
 | `/heptabase-title` | Generate Heptabase document titles |
 | `/refine-text` | Tighten text, remove filler |
 | `/safe-pull` | Pull from origin with auto stash/rebase |

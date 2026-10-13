@@ -7,8 +7,6 @@ description: 把用不到的 herdr 與 git 環境收乾淨：worktree、herdr wo
 
 一次 sweep 收掉一個 repo（或一個 session）留下的開發環境。核心是 **manifest**：先唯讀盤點，每個對象一列、標好處置，使用者點頭後才動手。
 
-單一已 merge worktree 且要把 `output/` 同步回主 repo → 用 `/clean-worktree`，不是這個。
-
 ## 1. 定範圍
 
 | 使用者說 | 範圍 |
@@ -70,7 +68,9 @@ git -C $WT ls-files --others --exclude-standard -z | tar -czf $A/$NAME.untracked
 echo "$(git -C $WT rev-parse HEAD)" > $A/$NAME.base
 ```
 
-不可重建的 ignored 資料（salt、錄製檔）搬到長期位置，用 `cmp`／`diff -rq` 比對一致後才刪原檔。
+gitignored 的 `output/`（分析結果）用 `rsync -av --update $WT/output/ $MAIN/output/` 同步回主 checkout，先加 `--dry-run` 給使用者看清單。
+
+其他不可重建的 ignored 資料（salt、錄製檔）搬到長期位置，用 `cmp`／`diff -rq` 比對一致後才刪原檔。
 
 ## 4. 確認
 
