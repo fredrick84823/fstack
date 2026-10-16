@@ -292,6 +292,13 @@ Wires the `improve` skill's signal capture into session lifecycle:
   餵進 `===KNOWN_SIGNALS===`，驗證器回 `duplicate_of` 時走 `signal_state.py witness`
   累加，不進 capture。
 
+### PR assignee guard
+
+`hooks/pr-assignee/pr-assignee-guard.sh`（PreToolUse，matcher `Bash`）擋下沒帶 `--assignee` 的
+`gh pr create` / `gh-axi pr create`，提示加 `--assignee @me` 重跑。GitHub Project 的
+auto-import workflow 靠 assignee 把 PR 拉進看板，漏了就不會出現。用擋而不是改寫指令：
+其他 PreToolUse hook（例如 rtk）可能也在改寫 `gh`，兩支都回 `updatedInput` 時誰勝出不確定。
+
 ## Post-install: gap detection
 
 **Nothing to add to your `~/.claude/CLAUDE.md`.** Earlier versions of this README asked
