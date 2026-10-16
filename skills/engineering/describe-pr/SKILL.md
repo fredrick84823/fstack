@@ -12,7 +12,7 @@ Reviewer *digests* **problem → observable change → how → proof** without o
 
 The reader is a **cold reader**: a teammate who has never opened this corner of the repo and sees only this body. [**Cold reader**](#cold-reader) sets how every name gets introduced.
 
-Repo has `.github/PULL_REQUEST_TEMPLATE.md`? Fill that, plus `Merge danger`. Else the six questions below. Section rules apply either way.
+Repo has `.github/PULL_REQUEST_TEMPLATE.md`? Fill that, plus `Merge danger`. Else the six questions below, skeleton in [`reference/template.md`](reference/template.md). Section rules apply either way.
 
 Presentation (fold, alerts, details, ship markdown): load the [`scannable-pr`](../scannable-pr/SKILL.md) skill **after the body exists**：start at **Pack bulk**. Keep these headings.
 
@@ -137,15 +137,7 @@ One sentence, ship-note voice. Future readers / release notes.
 
 ### Merge danger
 
-**每個 PR 都寫，不可省略**；repo template 沒有這節就接在最後。兩行定調，其餘選填：
-
-```markdown
-## Merge danger
-
-**Door:** two-way｜revert 這個 commit 就回到原狀，沒有資料或外部狀態被改
-
-**Blast radius:** 小｜只有 `export.py` 的 NDJSON 輸出，下游唯一 consumer 是 Looker 報表
-```
+**每個 PR 都寫，不可省略**；repo template 沒有這節就接在最後。兩行定調（`Door`、`Blast radius`），其餘選填；寫法見 [`reference/template.md`](reference/template.md) 的 `## Merge danger`。
 
 **Door**：merge 之後走得回來嗎？
 
