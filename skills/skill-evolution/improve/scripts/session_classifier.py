@@ -13,8 +13,8 @@ Three things keep the cost near zero for the sessions that have nothing to say:
 - A session that called no Skill exits before the model is ever invoked.
 - An unattended session (`claude -p`, subagent, anything but a human at a terminal)
   exits at the gate — otherwise the classifier would grade its own runs.
-- At most `--max-signals` validator calls per session (N=3 ≈ $0.12), so neither the queue
-  nor the bill can run away on one session.
+- `--max-signals` can cap validator calls per session. Default is no cap (2026-10): the
+  old cap of 3 spent its budget on the last three turns, while corrections sit mid-session.
 - A gap already on file for that skill comes back as one more witness, not a second queue
   entry — including when it is worded differently, which the validator decides by
   answering `duplicate_of` against the KNOWN_SIGNALS it is shown.
@@ -27,6 +27,7 @@ and not a debounced Stop hook.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
@@ -36,15 +37,21 @@ import sys
 from typing import Any, Iterable
 
 
-# Caps validator calls, not just captures. Each call is one `claude -p`; #43 measured
-# ~$0.04 each, so N=3 is also the ~$0.12 per-session ceiling. Capping captures alone
-# would leave a ten-skill session free to spend $0.40 before hitting any limit.
-DEFAULT_MAX_SIGNALS = 3
+# Caps validator calls; 0 means every candidate is asked. The old default of 3 took the
+# last three turns and missed every mid-session correction (audit 2026-10-01: 2 real
+# gaps lost). Subscription usage is not the constraint, so recall wins. Set
+# IMPROVE_MAX_SIGNALS to bring a cap back.
+DEFAULT_MAX_SIGNALS = 0
+# Validator calls run concurrently so an uncapped session still ends inside the
+# SessionEnd hook timeout (300s; ~11s per call).
+VALIDATOR_WORKERS = 8
 DEFAULT_MODEL = "claude-sonnet-5"
 # A user turn Claude Code generated on the user's behalf is not the user talking.
 WRAPPED_USER_TEXT = re.compile(
     r"<(local-command-stdout|local-command-caveat|command-name|command-message|command-args"
-    r"|system-reminder|user-prompt-submit-hook)>",
+    r"|system-reminder|user-prompt-submit-hook"
+    r"|task-notification|teammate-message|bash-input|bash-stdout|bash-stderr)>"
+    r"|^\[Request interrupted|^This session is being continued",
 )
 
 
@@ -115,23 +122,59 @@ def content_blocks(row: dict[str, Any]) -> list[Any]:
     return [content] if content else []
 
 
-def skills_used(rows: Iterable[dict[str, Any]]) -> list[str]:
-    """Skill names this session actually invoked, first call first.
+# A skill is also in use when the agent works inside its directory without the Skill
+# tool — repo skills under .agents/skills are mostly driven by Read/Bash (audit
+# 2026-10-01: tagtoo-audience-creation ran a whole session and was never attributed).
+SKILL_PATH = re.compile(r"\.(?:agents|claude)/skills/([A-Za-z0-9][\w.-]*)/")
+COMMAND_NAME = re.compile(r"<command-name>/?([^<\s]+)</command-name>")
 
-    Attribution is limited to what the transcript proves was called. A gap blamed on a
-    skill that never ran is the misroute the Layer 2 validator kept catching by hand.
-    """
-    seen: list[str] = []
-    for row in rows:
-        if row.get("type") != "assistant" or row.get("isSidechain"):
-            continue
+
+def is_installed_skill(name: str, cwd: str, home: Path) -> bool:
+    """Tell a skill's slash command from a built-in one like /clear or /model."""
+    if ":" in name:  # plugin skills are namespaced; built-ins never are
+        return True
+    roots = [home / ".claude/skills", home / ".agents/skills"]
+    if cwd:
+        roots += [Path(cwd) / ".claude/skills", Path(cwd) / ".agents/skills"]
+    return any((root / name).is_dir() for root in roots)
+
+
+def skill_events(row: dict[str, Any], home: Path) -> list[str]:
+    """Skills this row shows being used, in order: Skill calls, slash commands, and
+    tool calls that touch a skill's directory."""
+    found: list[str] = []
+    if row.get("type") == "assistant":
         for block in content_blocks(row):
             if not isinstance(block, dict) or block.get("type") != "tool_use":
                 continue
-            if block.get("name") != "Skill":
+            payload = block.get("input") or {}
+            if block.get("name") == "Skill":
+                if payload.get("skill"):
+                    found.append(payload["skill"])
                 continue
-            skill = (block.get("input") or {}).get("skill")
-            if skill and skill not in seen:
+            found += SKILL_PATH.findall(json.dumps(payload, ensure_ascii=False))
+    elif row.get("type") == "user":
+        for block in content_blocks(row):
+            text = block.get("text", "") if isinstance(block, dict) else block
+            if isinstance(text, str):
+                found += [name for name in COMMAND_NAME.findall(text)
+                          if is_installed_skill(name, str(row.get("cwd") or ""), home)]
+    return found
+
+
+def skills_used(rows: Iterable[dict[str, Any]], home: Path | None = None) -> list[str]:
+    """Skill names this session actually used, first use first.
+
+    Attribution is limited to what the transcript proves was used. A gap blamed on a
+    skill that never ran is the misroute the Layer 2 validator kept catching by hand.
+    """
+    home = home or Path.home()
+    seen: list[str] = []
+    for row in rows:
+        if row.get("isSidechain"):
+            continue
+        for skill in skill_events(row, home):
+            if skill not in seen:
                 seen.append(skill)
     return seen
 
@@ -162,14 +205,61 @@ def user_messages(rows: Iterable[dict[str, Any]]) -> list[str]:
     return messages
 
 
-def build_excerpt(skills: list[str], messages: list[str], *, limit: int = 8000) -> str:
-    """The context the validator reasons over: what ran, and what the user said about it."""
-    body = "\n\n".join(f"[user] {message}" for message in messages)
+# Per-turn caps keep one long reply or pasted log from crowding out the rest.
+ASSISTANT_TURN_CHARS = 600
+USER_TURN_CHARS = 1500
+
+
+def turns(rows: Iterable[dict[str, Any]]) -> list[tuple[str, str]]:
+    """`(role, text)` in transcript order: the user's own words and the agent's prose.
+
+    The agent's side is what lets the validator state `actual` — with user turns alone it
+    could only guess what the skill did (audit 2026-10-01: same sentence, reject without
+    agent text, accept with it).
+    """
+    out: list[tuple[str, str]] = []
+    for row in rows:
+        if row.get("isSidechain"):
+            continue
+        if row.get("type") == "assistant":
+            text = "\n".join(
+                block.get("text", "") for block in content_blocks(row)
+                if isinstance(block, dict) and block.get("type") == "text"
+            ).strip()
+            if text:
+                out.append(("assistant", text))
+        else:
+            out += [("user", message) for message in user_messages([row])]
+    return out
+
+
+def build_excerpt(skills: list[str], session: list[tuple[str, str]], candidate: str,
+                  *, limit: int = 8000) -> str:
+    """The context the validator reasons over, centred on the sentence being judged.
+
+    Mostly what led up to the candidate (the skill's output it is reacting to), then
+    what followed. Cutting from the session's tail instead dropped the very sentence
+    under review whenever the session kept going after it.
+    """
+    def render(turn: tuple[str, str]) -> str:
+        role, text = turn
+        cap = ASSISTANT_TURN_CHARS if role == "assistant" else USER_TURN_CHARS
+        return f"[{role}] {text[:cap]}"
+
+    at = next((i for i, turn in enumerate(session) if turn == ("user", candidate)), len(session) - 1)
+    picked = {at: render(session[at])} if session else {}
+    used = sum(len(v) for v in picked.values())
+    before, after = at - 1, at + 1
+    # Spend three quarters of the room looking back, the rest looking forward.
+    while before >= 0 and used < limit * 3 // 4:
+        picked[before] = render(session[before]); used += len(picked[before]); before -= 1
+    while after < len(session) and used < limit:
+        picked[after] = render(session[after]); used += len(picked[after]); after += 1
     header = "skills_invoked: " + ", ".join(skills) + "\n\n"
-    return header + body[-limit:]
+    return header + "\n\n".join(picked[i] for i in sorted(picked))
 
 
-def candidates(rows: Iterable[dict[str, Any]]) -> list[tuple[str, str]]:
+def candidates(rows: Iterable[dict[str, Any]], home: Path | None = None) -> list[tuple[str, str]]:
     """`(skill, user message)` pairs — one proposed gap each, in transcript order.
 
     validate-gap.sh validates *a* claim; it does not go looking for one. Measured against
@@ -185,18 +275,16 @@ def candidates(rows: Iterable[dict[str, Any]]) -> list[tuple[str, str]]:
     what the sentence means; the validator still re-checks attribution and rejects
     `misroute` when the pairing is wrong.
     """
+    home = home or Path.home()
     pairs: list[tuple[str, str]] = []
     current: str | None = None
     for row in rows:
         if row.get("isSidechain"):
             continue
-        if row.get("type") == "assistant":
-            for block in content_blocks(row):
-                if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "Skill":
-                    skill = (block.get("input") or {}).get("skill")
-                    if skill:
-                        current = skill
-        elif current:
+        events = skill_events(row, home)
+        if events:
+            current = events[-1]
+        if row.get("type") == "user" and current:
             for message in user_messages([row]):
                 pairs.append((current, message))
     return pairs
@@ -329,14 +417,14 @@ def classify(payload: dict[str, Any], args: argparse.Namespace, env: dict[str, s
     if reason:
         return {"skipped": reason, "skills": [], "calls": 0, "captured": [], "deduped": []}
 
-    skills = skills_used(rows)
+    home = Path(env.get("HOME") or Path.home())
+    skills = skills_used(rows, home)
     if not skills:
         # The cheap exit that makes this affordable: no Skill ran, so there is nothing to
         # attribute a gap to, and the model is never called.
         return {"skipped": "no skill invoked", "skills": [], "calls": 0, "captured": [], "deduped": []}
 
-    messages = user_messages(rows)
-    excerpt = build_excerpt(skills, messages)
+    session = turns(rows)
     queue = resolve_queue(Path(payload.get("cwd") or "."), env)
     scripts = Path(__file__).resolve().parent
     validator = Path(env.get("IMPROVE_VALIDATOR") or scripts / "validate-gap.sh")
@@ -347,21 +435,40 @@ def classify(payload: dict[str, Any], args: argparse.Namespace, env: dict[str, s
     memory_dir = queue.parent / "memory"
     # Most recent last: a correction late in a session is the one still worth acting on,
     # and the budget is spent from that end.
-    queued = candidates(rows)[-args.max_signals:]
+    queued = candidates(rows, home)
+    if args.max_signals > 0:
+        queued = queued[-args.max_signals:]
     captured: list[dict[str, Any]] = []
     deduped: list[dict[str, Any]] = []
-    for skill, candidate in queued:
+    # Rejects go to the log, not the queue. Without them a run of zero captures cannot
+    # tell "nothing to find" from "the validator turned everything down" (2026-10: 76
+    # calls, 0 captures, nothing to audit).
+    rejected: list[dict[str, Any]] = []
+    failed = 0
+    def ask(pair: tuple[str, str]) -> dict[str, Any] | None:
+        skill, candidate = pair
         prior = known_signals(scripts / "memory.sh", memory_dir, skill)
-        verdict = run_validator(
+        excerpt = build_excerpt(skills, session, candidate)
+        return run_validator(
             validator, skill, candidate, excerpt, render_known_signals(prior), child_env,
         )
+
+    # Ask in parallel, capture in transcript order: capture owns the queue lock and its
+    # dedup depends on what came before.
+    with ThreadPoolExecutor(max_workers=VALIDATOR_WORKERS) as pool:
+        verdicts = list(pool.map(ask, queued))
+    for (skill, candidate), verdict in zip(queued, verdicts):
         if verdict is None:
+            failed += 1
             continue
         duplicate_of = str(verdict.get("duplicate_of") or "")
         # A duplicate arrives as a *reject* carrying an id — the schema forbids an accept
         # from pointing at an existing signal. So the id is read before the verdict is,
         # otherwise every semantic duplicate is dropped on the floor instead of counted.
         if not duplicate_of and verdict.get("verdict") != "accept":
+            rejected.append({"target_skill": skill, "candidate": candidate[:160],
+                             "risk_class": verdict.get("risk_class"),
+                             "reason": str(verdict.get("reason") or "")[:240]})
             continue
         signal_id = capture(state_script, queue, verdict, args.timestamp)
         if not signal_id:
@@ -375,7 +482,7 @@ def classify(payload: dict[str, Any], args: argparse.Namespace, env: dict[str, s
         else:
             captured.append(entry)
     return {"skipped": None, "skills": skills, "calls": len(queued),
-            "captured": captured, "deduped": deduped}
+            "captured": captured, "deduped": deduped, "rejected": rejected, "failed": failed}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -383,7 +490,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--max-signals", type=int,
         default=int(os.environ.get("IMPROVE_MAX_SIGNALS", DEFAULT_MAX_SIGNALS)),
-        help="validator calls per session, which also bounds signals captured (default 3)",
+        help="cap on validator calls per session, latest turns first; 0 = no cap (default)",
     )
     parser.add_argument("--model", default=os.environ.get("IMPROVE_VALIDATOR_MODEL", DEFAULT_MODEL))
     parser.add_argument("--timestamp", default="")

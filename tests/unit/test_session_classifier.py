@@ -193,6 +193,82 @@ class SessionClassifierTest(unittest.TestCase):
         # 沒有 skill 可歸因，所以不該變成候選。
         self.assertNotIn("幫我把這場會議的逐字稿整理成會議記錄", [message for _, message in pairs])
 
+    def test_system_generated_turns_are_not_candidates(self) -> None:
+        # 2026-10-01 稽核：送審句有 21% 是這些，把真正的修正擠出額度。
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("sc", CLASSIFIER)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        noise = [
+            "<task-notification>agent done</task-notification>",
+            "<teammate-message>hi</teammate-message>",
+            "<bash-input>ls</bash-input>",
+            "<bash-stdout>a.txt</bash-stdout>",
+            "[Request interrupted by user]",
+            "This session is being continued from a previous conversation.",
+        ]
+        rows = [{"type": "user", "message": {"content": text}} for text in noise + ["名稱要照業務給的"]]
+        self.assertEqual(module.user_messages(rows), ["名稱要照業務給的"])
+
+    def test_with_no_cap_every_candidate_is_asked(self) -> None:
+        # 修正多在 session 中段，只問最後幾句就會漏（稽核 2026-10-01）。
+        report = self.run_classifier(WITH_SKILLS, env_extra={"IMPROVE_MAX_SIGNALS": "0"})
+        self.assertEqual(report["calls"], 3)
+
+    def test_skills_used_without_the_skill_tool_are_still_attributed(self) -> None:
+        # 稽核 2026-10-01：repo skill 靠 Read/Bash 跑、slash command 呼叫，都被判
+        # 「no skill invoked」或歸錯 skill。
+        import importlib.util
+        import tempfile
+
+        spec = importlib.util.spec_from_file_location("sc", CLASSIFIER)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        home = Path(tempfile.mkdtemp())
+        (home / ".claude/skills/generate-meeting-notes").mkdir(parents=True)
+
+        def tool(name: str, payload: dict) -> dict:
+            return {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "name": name, "input": payload}]}}
+
+        def user(text: str) -> dict:
+            return {"type": "user", "message": {"content": text}}
+
+        rows = [
+            user("<command-name>/clear</command-name>"),
+            user("<command-name>/generate-meeting-notes</command-name>"),
+            user("glossary 的 F2 應該是 phase2"),
+            tool("Bash", {"command": "python3 .agents/skills/tagtoo-audience-creation/scripts/run.py"}),
+            user("受眾名稱還是要符合業務需求"),
+        ]
+        # /clear 不是 skill；不在任何 skills 目錄就不算。
+        self.assertEqual(module.skills_used(rows, home),
+                         ["generate-meeting-notes", "tagtoo-audience-creation"])
+        self.assertEqual(module.candidates(rows, home), [
+            ("generate-meeting-notes", "glossary 的 F2 應該是 phase2"),
+            ("tagtoo-audience-creation", "受眾名稱還是要符合業務需求"),
+        ])
+
+    def test_the_excerpt_is_centred_on_the_candidate_and_shows_the_agents_side(self) -> None:
+        # 稽核 2026-10-01：尾端截斷把原話切掉；沒有 agent 的話，validator 寫不出 actual。
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("sc", CLASSIFIER)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        session = [("assistant", "說明我寫成英文了")] + [("user", "受眾說明要用繁體中文")] + [
+            ("user", f"後續閒聊 {i} " + "x" * 500) for i in range(40)
+        ]
+        excerpt = module.build_excerpt(["tagtoo-audience-creation"], session, "受眾說明要用繁體中文", limit=2000)
+        self.assertIn("[assistant] 說明我寫成英文了", excerpt)
+        self.assertIn("[user] 受眾說明要用繁體中文", excerpt)
+        self.assertNotIn("後續閒聊 39", excerpt)
+        self.assertLess(len(excerpt), 2000 + 600)
+
     # --- 不呼叫模型的那條路 --------------------------------------------------
 
     def test_a_session_that_called_no_skill_never_reaches_the_model(self) -> None:
@@ -252,9 +328,15 @@ class SessionClassifierTest(unittest.TestCase):
         report = self.run_classifier(WITH_SKILLS, validator=self.write_validator(REJECTING_VALIDATOR))
         self.assertEqual(report["captured"], [])
         self.assertEqual(self.queue_entries(), [])
+        # 判否要留在 log 裡，否則「0 筆收」分不出是沒東西還是全被擋。
+        self.assertEqual(len(report["rejected"]), 3)
+        self.assertEqual(report["rejected"][0]["reason"], "no quotable user sentence")
+        self.assertTrue(report["rejected"][0]["candidate"])
+        self.assertEqual(report["failed"], 0)
         # 判否不等於沒問。問的是候選句，不是 skill —— 同一個 skill 有兩句修正就問兩次，
         # 而每一句都帶著「說這句話時正在跑的那個 skill」。
-        self.assertEqual(
+        # 平行呼叫，順序不固定；看的是每句都問到。
+        self.assertCountEqual(
             self.validator_calls(),
             ["generate-meeting-notes", "generate-meeting-notes", "create-handoff"],
         )
@@ -301,6 +383,9 @@ class SessionClassifierTest(unittest.TestCase):
         self.assertEqual(report["captured"], [])
         self.assertEqual(report["deduped"], [])
         self.assertEqual(self.queue_entries(), [])
+        # 沒跑成不是判否：分開計，log 才看得出認證過期。
+        self.assertEqual(report["rejected"], [])
+        self.assertEqual(report["failed"], report["calls"])
 
     def test_a_duplicate_of_verdict_adds_a_witness_instead_of_a_queue_entry(self) -> None:
         first = self.run_classifier(WITH_SKILLS, args=["--max-signals", "1"])
