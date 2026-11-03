@@ -34,7 +34,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
-from typing import Any, Iterable
+from typing import Any, Iterable, TypeVar
 
 
 # Caps validator calls; 0 means every candidate is asked. The old default of 3 took the
@@ -47,12 +47,21 @@ DEFAULT_MAX_SIGNALS = 0
 VALIDATOR_WORKERS = 8
 DEFAULT_MODEL = "claude-sonnet-5"
 # A user turn Claude Code generated on the user's behalf is not the user talking.
+# Tags close on `[\s>]`, not `>`: `<teammate-message teammate_id="…">` carries attributes,
+# and the bare-`>` form let 430 of them through as human prompts (2026-10-05 to 11-03).
 WRAPPED_USER_TEXT = re.compile(
     r"<(local-command-stdout|local-command-caveat|command-name|command-message|command-args"
-    r"|system-reminder|user-prompt-submit-hook"
-    r"|task-notification|teammate-message|bash-input|bash-stdout|bash-stderr)>"
-    r"|^\[Request interrupted|^This session is being continued",
+    r"|system-reminder|user-prompt-submit-hook|task-notification|teammate-message"
+    r"|cross-session-message|hc|bash-input|bash-stdout|bash-stderr)[\s>]"
+    r"|^\[Request interrupted|^This session is being continued|^Your claude\.ai usage limit"
+    # Another agent typing into this terminal: a sibling session, a side agent, a spawned
+    # child reporting back (`hc send … "[spawn tN] …"`), pm-agent's bin/report-to-pm.
+    r"|^Another Claude session|^Here is a note offered by a side agent|^\[spawn |^有新的 inbox 回報：",
 )
+# A delegated brief ends by telling the session where to report back. Nothing structural
+# marks a worker: herdr sets HC_TERMINAL_ID on every terminal, and a brief passed as
+# `claude "<task>"` is recorded as origin=human, promptSource=typed, same as a human.
+REPORT_BACK = re.compile(r'^\s*(?:hc send|herdr agent prompt)\s+\S+\s+"\[', re.M)
 
 
 # --- gates -----------------------------------------------------------------------
@@ -86,6 +95,11 @@ def skip_reason(env: dict[str, str], rows: list[dict[str, Any]]) -> str | None:
         return f"non-interactive transcript: {sorted(recorded)[0]}"
     if rows and all(row.get("isSidechain") or row.get("agentId") for row in conversation(rows)):
         return "subagent transcript"
+    # /spawn, /clean-room-implement and teamlead dispatches: the human is in the parent
+    # session, and this one's "user" is a brief another agent wrote (2026-10-27 week:
+    # 23 of 58 sessions that passed every gate above).
+    if REPORT_BACK.search(first_prompt(rows) or ""):
+        return "delegated worker session"
     return None
 
 
@@ -192,6 +206,9 @@ def user_messages(rows: Iterable[dict[str, Any]]) -> list[str]:
             continue
         if row.get("userType") not in (None, "external"):
             continue
+        # Newer rows say who spoke: task notifications and peer agents are not "human".
+        if (row.get("origin") or {}).get("kind", "human") != "human":
+            continue
         for block in content_blocks(row):
             if isinstance(block, dict):
                 if block.get("type") != "text":
@@ -203,6 +220,65 @@ def user_messages(rows: Iterable[dict[str, Any]]) -> list[str]:
             if text and not WRAPPED_USER_TEXT.search(text):
                 messages.append(text)
     return messages
+
+
+COMMAND_ARGS = re.compile(r"<command-args>(.*?)</command-args>", re.S)
+
+
+def first_prompt(rows: Iterable[dict[str, Any]]) -> str | None:
+    """The sentence that opened the session: what the human typed first, or the slash
+    command they opened with. An argument-less command like `/clear` opens nothing."""
+    for row in rows:
+        typed = user_messages([row])
+        if typed:
+            return typed[0]
+        if row.get("type") != "user" or row.get("isSidechain") or row.get("isMeta"):
+            continue
+        text = " ".join(block.get("text", "") if isinstance(block, dict) else str(block)
+                        for block in content_blocks(row))
+        name, args = COMMAND_NAME.search(text), COMMAND_ARGS.search(text)
+        if name and args and args.group(1).strip():
+            return f"/{name.group(1)} {args.group(1).strip()}"
+    return None
+
+
+T = TypeVar("T")
+
+
+def distinct_by_first_prompt(sessions: Iterable[tuple[T, list[dict[str, Any]]]]) -> list[T]:
+    """Keys of `(key, rows)` pairs, one per opening sentence, first seen wins.
+
+    A fork (`--fork-session`) copies the parent's rows, and so does resuming a session
+    from another cwd, so each opens with the parent's first prompt. Counted separately
+    they inflate how many sessions "agree" on something (2026-11-03 weekly sample: one
+    conversation counted five times). Sessions with no opener are all kept.
+    """
+    seen: set[str] = set()
+    kept: list[T] = []
+    for key, rows in sessions:
+        opener = first_prompt(rows)
+        if opener is not None:
+            opener = normalize(opener)
+            if opener in seen:
+                continue
+            seen.add(opener)
+        kept.append(key)
+    return kept
+
+
+def own_rows_start(rows: list[dict[str, Any]]) -> int:
+    """Index of the first row this session wrote itself.
+
+    `--fork-session` copies the parent's rows in, then fires SessionStart with source
+    `fork`, which the transcript records as a `SessionStart:fork` hook attachment. Rows
+    before the last such marker belong to the parent and were already its evidence.
+    No SessionStart hook configured means no marker, and every row counts as its own.
+    """
+    for index in range(len(rows) - 1, -1, -1):
+        attachment = rows[index].get("attachment") or {}
+        if rows[index].get("type") == "attachment" and attachment.get("hookName") == "SessionStart:fork":
+            return index + 1
+    return 0
 
 
 # Per-turn caps keep one long reply or pasted log from crowding out the rest.
@@ -276,15 +352,19 @@ def candidates(rows: Iterable[dict[str, Any]], home: Path | None = None) -> list
     `misroute` when the pairing is wrong.
     """
     home = home or Path.home()
+    rows = list(rows)
+    # A fork re-reads the parent's corrections; asking again would add a witness to a gap
+    # the parent already filed, or reopen one that has since been resolved as a regression.
+    start = own_rows_start(rows)
     pairs: list[tuple[str, str]] = []
     current: str | None = None
-    for row in rows:
+    for index, row in enumerate(rows):
         if row.get("isSidechain"):
             continue
         events = skill_events(row, home)
         if events:
             current = events[-1]
-        if row.get("type") == "user" and current:
+        if row.get("type") == "user" and current and index >= start:
             for message in user_messages([row]):
                 pairs.append((current, message))
     return pairs

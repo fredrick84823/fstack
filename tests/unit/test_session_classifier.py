@@ -208,8 +208,20 @@ class SessionClassifierTest(unittest.TestCase):
             "<bash-stdout>a.txt</bash-stdout>",
             "[Request interrupted by user]",
             "This session is being continued from a previous conversation.",
+            # 以下是真實 transcript 裡的長相（2026-10-27 週）：標籤帶屬性，前面還有一行
+            # 前綴。舊的 `<teammate-message>` 寫法一筆都沒擋到，430 筆被當成人話。
+            'Another Claude session sent a message:\n<teammate-message teammate_id="test-agent">已 commit</teammate-message>',
+            '<teammate-message teammate_id="test-agent" color="blue">hi</teammate-message>',
+            '<cross-session-message from="uds:/tmp/cc-socks/1.sock">ping</cross-session-message>',
+            '<hc from="t2m">[spawn t2m] 報告在 thoughts</hc>',
+            "[spawn w75:p1] #568 完成：PR #569 已開",
+            "Your claude.ai usage limit has been reached.",
+            "Here is a note offered by a side agent:\n\n> Heads up",
+            "有新的 inbox 回報：/Users/x/pm-agent/inbox/2026-10-30.md",
         ]
         rows = [{"type": "user", "message": {"content": text}} for text in noise + ["名稱要照業務給的"]]
+        # 新版 transcript 自己標了誰在講話：peer agent 與 task notification 不是人。
+        rows.append({"type": "user", "origin": {"kind": "peer"}, "message": {"content": "#577 已 commit"}})
         self.assertEqual(module.user_messages(rows), ["名稱要照業務給的"])
 
     def test_with_no_cap_every_candidate_is_asked(self) -> None:
@@ -306,6 +318,83 @@ class SessionClassifierTest(unittest.TestCase):
         report = self.run_classifier(SDK_CLI)
         self.assertEqual(report["skipped"], "non-interactive transcript: sdk-cli")
         self.assertEqual(self.validator_calls(), [])
+
+    def write_variant(self, name: str, edit) -> Path:
+        """WITH_SKILLS 的改寫版：`edit` 拿到 rows list，原地改。"""
+        rows = [json.loads(line) for line in WITH_SKILLS.read_text().splitlines() if line.strip()]
+        edit(rows)
+        path = self.root / name
+        path.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows))
+        return path
+
+    def test_a_delegated_worker_brief_stops_the_run_before_the_model(self) -> None:
+        # herdr 派出的 worker：entrypoint=cli、origin=human、promptSource=typed，跟真人
+        # 一模一樣；HC_TERMINAL_ID 每個 herdr terminal 都有。唯一的共同點是 brief 結尾
+        # 那行回報指令（2026-10-27 週：通過其他 gate 的 58 個 session 裡 27 個）。
+        briefs = {
+            "spawn": '任務：修 build.py\n\nWhen done, run this verbatim:\nhc send t1j "[spawn t2q] <one-line result>"',
+            "herdr": '處理 #577。\n做完時照原樣執行：\nherdr agent prompt w76:p1 "[spawn w7C:p1] <一行結果>"',
+            "clean-room": (
+                "<command-message>clean-room-implement</command-message>\n"
+                "<command-name>/clean-room-implement</command-name>\n"
+                '<command-args>處理 #455。\n完成時原樣執行：\nhc send t26 "[gsheet-#455] <一行結果>"</command-args>'
+            ),
+        }
+        for label, brief in briefs.items():
+            with self.subTest(label):
+                self.log.write_text("")
+                def edit(rows, brief=brief):
+                    rows[2]["message"]["content"] = brief
+                report = self.run_classifier(self.write_variant(f"{label}.jsonl", edit))
+                self.assertEqual(report["skipped"], "delegated worker session")
+                self.assertEqual(self.validator_calls(), [])
+
+    def test_a_report_back_line_later_in_the_session_does_not_make_it_a_worker(self) -> None:
+        # 人在自己的 session 裡貼一段 brief 是常事；只有開場那句是 brief 才算 worker。
+        def edit(rows):
+            rows[13]["message"]["content"] = '幫我派出去：\nhc send t1j "[spawn t2q] <one-line result>"'
+        report = self.run_classifier(self.write_variant("late-brief.jsonl", edit))
+        self.assertIsNone(report["skipped"])
+
+    def test_a_fork_does_not_re_ask_the_corrections_it_inherited(self) -> None:
+        # --fork-session 把父 session 的列複製進來，再記一筆 SessionStart:fork。父的修正
+        # 若再送審，會替父已入列的 gap 多灌一票；那個 gap 若已 resolved，還會被誤開成
+        # regression。
+        marker = {"type": "attachment", "attachment": {
+            "type": "hook_success", "hookName": "SessionStart:fork", "hookEvent": "SessionStart"}}
+        def edit(rows):
+            rows.insert(12, marker)
+        report = self.run_classifier(self.write_variant("fork.jsonl", edit))
+        # 父的那句「不對，未結案的項目…」在 marker 之前；剩下 fork 自己的兩句。
+        self.assertEqual(report["calls"], 2)
+        self.assertEqual(sorted(self.validator_calls()), ["create-handoff", "generate-meeting-notes"])
+
+    def test_forks_of_one_conversation_count_once(self) -> None:
+        # 給每週批次用：fork 與換 cwd resume 都帶著父的第一句，分開算會灌「跨 N 個
+        # session 都出現」的票數（2026-11-03 週樣本：同一段對話被算五次）。
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("sc", CLASSIFIER)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        def user(text):
+            return {"type": "user", "message": {"content": text}}
+        clear = user("<command-name>/clear</command-name>\n<command-message>clear</command-message>\n<command-args></command-args>")
+        sessions = [
+            ("parent", [user("整理 AI 培訓教材的問題")]),
+            ("fork", [user("整理  AI 培訓教材的問題\n"), user("另一個方向")]),
+            ("clear-a", [clear]),
+            ("clear-b", [clear, user("換個題目")]),
+            ("handoff", [user("<command-name>/resume-handoff</command-name>\n<command-args>h.md</command-args>")]),
+            ("handoff-again", [user("<command-name>/resume-handoff</command-name>\n<command-args>h.md</command-args>")]),
+            ("empty", []),
+            ("empty-too", []),
+        ]
+        # /clear 沒有參數，不算開場句：clear-b 的開場是「換個題目」，clear-a 沒有開場，
+        # 沒有開場的 session 全部保留。
+        self.assertEqual(module.distinct_by_first_prompt(sessions),
+                         ["parent", "clear-a", "clear-b", "handoff", "empty", "empty-too"])
 
     # --- 上限 N --------------------------------------------------------------
 
