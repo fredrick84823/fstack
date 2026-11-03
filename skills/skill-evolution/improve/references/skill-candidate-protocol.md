@@ -88,3 +88,11 @@ Agent 應在以下情況輸出 marker：
 **Status 值**：`pending` | `created` | `rejected` | `merged` | `duplicate`
 
 累積候選後，執行 `/extract-skill` 批次審核並建立正式 skill。
+
+## 每週批次（2026-11 起的主要來源）
+
+收工時由 agent 自述的 marker 一個月 0 筆真實候選，改由 `scripts/skill_miner.py` 每週讀 transcript：
+真人 session 分群（`scripts/cluster-sessions.sh`，同一件事 ≥3 個不同 session），再用各 session
+實際叫用的 skill 過第一關。寫入的條目多兩個欄位：`kind`（`new` | `bypassed`）與 `sessions`；
+`bypassed` 條目名稱是 `bypass:<既有 skill>`，代表任務有 skill 但 ≥3 個 session 沒叫用它。
+同一支也每週重寫 `memory/stale-skills.md`（30 天未叫用的已安裝 skill，只列不刪）。

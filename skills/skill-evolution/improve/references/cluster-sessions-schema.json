@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "properties": {
+    "clusters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string", "description": "kebab-case name for the recurring task, as a skill would be named."},
+          "task": {"type": "string", "description": "One sentence: what the user keeps asking for."},
+          "session_ids": {"type": "array", "items": {"type": "string"}, "description": "Ids from ===SESSIONS=== (s1, s2, …) whose work is this task. Only ids that appear in the input."},
+          "existing_skill": {"type": ["string", "null"], "description": "Exact name from ===INSTALLED_SKILLS=== whose description covers this task, else null."},
+          "steps": {"type": "array", "items": {"type": "string"}, "description": "The repeatable procedure the sessions share, 2-6 short steps."},
+          "invoker_hints": {"type": "array", "items": {"type": "string"}, "description": "Phrases the user actually typed to start this task, quoted from the prompts."},
+          "reason": {"type": "string", "description": "One sentence naming the shared procedure that makes these sessions one task."}
+        },
+        "required": ["name", "task", "session_ids", "existing_skill", "steps", "invoker_hints", "reason"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["clusters"],
+  "additionalProperties": false
+}

@@ -1,92 +1,109 @@
 ---
 name: extract-skill
 description: >
-  從 candidate-queue.md 讀取待審候選 skill，進行去重、合併、review，
-  使用者批准後呼叫 skill-creator 實際建立。
-  觸發詞：「extract-skill」「抽取 skill」「建立 skill 從 queue」「處理 skill 候選」
-  「有 skill 候選待建立」「extract skills from queue」「把候選做成 skill」
+  審核每週 skill miner 寫進 candidate-queue.md 的候選：新 skill 候選批准後在 fstack 建立並安裝，
+  「既有 skill 被繞過」的條目改既有 skill 的觸發描述。人工 review gate 永遠在，不自動建立。
+  觸發詞：「extract-skill」「處理 skill 候選」「審 skill 候選」「把候選做成 skill」
+  「digest 裡的 skill 候選」「bypass 候選」
 ---
 
-# Extract Skill — Skill 候選審核與建立
+# Extract Skill：審核 skill 候選
 
-將 agent 在執行過程中發現的重複模式，從候選 queue 整理後建立為正式 skill。
+候選來源是每週批次 `~/.agents/skills/improve/scripts/skill_miner.py`：它把一週的真人 session
+分群，同一件事 ≥3 個不同 session 才成群，再用 transcript 的 skill 叫用紀錄過第一關。
+每日 digest 會列出 pending 條目；這支 skill 負責把它們審完。
 
-## 前提條件
+## Queue
 
-需要 `/Users/fredrick/.gemini/skills/extract-skill/../improve/candidate-queue.md`（由 capture-skill-candidate hook 或 propose.sh 寫入）。
+`~/.agents/skills/improve/candidate-queue.md`（symlink 到 personal-knowledge 私有 repo）。
+只處理 `status: pending`。HTML 註解裡的範例不是條目。
+
+```markdown
+## [2026-11-10T09:00:00+08:00] bypass:report-to-pm
+
+- **status**: pending
+- **kind**: bypassed              # new | bypassed
+- **existing_skill**: report-to-pm  # 只有 bypassed 有
+- **hit_count**: 4                # 符合的不同 session 數
+- **first_seen**: 2026-11-03
+- **last_seen**: 2026-11-09
+- **task**: 使用者一直要求的那件事
+- **reason**: 這些 session 為什麼是同一個程序
+- **steps**: |
+  1. …
+- **invoker_hints**: 「回報 PM」、「跟 PM 說」
+- **sessions**: <project 目錄>/<session id 前 8 碼>, …
+- **source**: skill-miner 2026-11-10
+```
+
+**Status**：`pending` | `created` | `rejected` | `merged` | `duplicate`。舊格式條目（沒有 `kind`）當 `new` 處理。
 
 ## Workflow
 
-### Step 1: 讀取 Candidate Queue
+### 1. 讀 pending、查證
 
-讀取以下位置的 `candidate-queue.md`（優先順序）：
-1. `{cwd}/.claude/skills/improve/candidate-queue.md`（project-level）
-2. `~/.claude/skills/improve/candidate-queue.md`（user-level）
+對每筆 pending：
 
-取出所有 `status: pending` 的項目。
+1. 抽一兩個 `sessions` 回原 transcript 看（`~/.claude/projects/<project 目錄>/<id>*.jsonl`），
+   確認那幾個 session 真的在做 `task`，不是模型硬湊。湊的 → 建議 Reject。
+2. `kind: new`：在 `~/.agents/skills` 與 fstack `skills/*/*` 找名稱或用途相近的 skill。
+   找到了 → 改成建議 Merge（其實是 bypass 或 GAP），不建新的。
 
-若無 pending 項目，輸出「candidate-queue.md 目前無待處理候選」並結束。
+### 2. 展示 review 包
 
-### Step 2: 去重 + 合併
-
-對 pending 候選執行：
-
-1. **名稱碰撞檢查**：在當前 scope 的 skills 目錄下，grep 是否有同名 skill 已存在
-   - 若已存在 → 標記 `status: duplicate`，建議改為呼叫 `/improve` 增強既有 skill
-2. **相似候選合併**：若多個候選描述相同模式（名稱相似 or reason 高度重疊），合併為一個候選，`hit_count` 累加
-3. **低品質過濾**：`hit_count < 2` 的候選降優先級（顯示但標記為 low-confidence）
-
-### Step 3: 展示 Review 包
-
-對每個高品質候選（`hit_count >= 2` 或使用者明確要求處理），顯示：
+一筆一包，等使用者選：
 
 ```
-## Skill Candidate: {name}
+## {name}（{kind}，{hit_count} 個 session，{first_seen}–{last_seen}）
 
-**Hit count**: {hit_count}（首見 {first_seen}，最近 {last_seen}）
-**Reason**: {reason}
-**Steps**:
-{steps（逐行展開）}
-**Suggested trigger phrases**: {invoker_hints}
+Task：{task}
+Reason：{reason}
+Steps：{steps}
+使用者說法：{invoker_hints}
+查證：{第 1 步看到什麼}
 
----
-**建議的 SKILL.md description 草稿**：
-{根據 reason + steps 生成的 description 段落}
-
-**請選擇**：[A] Approve  [S] Skip  [R] Reject  [M] Merge to existing skill
+new      → [A] 建立  [M] 併入既有 skill  [R] Reject  [S] 下次再看
+bypassed → [T] 改 {existing_skill} 的觸發描述  [R] Reject（繞過是對的）  [S] 下次再看
 ```
 
-- `A (Approve)` → 進入 Step 4
-- `S (Skip)` → 跳過本候選，保留 pending 狀態
-- `R (Reject)` → 標記 `status: rejected`
-- `M (Merge)` → 詢問要合併到哪個既有 skill，提示使用者改用 `/improve`
+### 3. 執行
 
-### Step 4: 建立 Skill
+| 選擇 | 動作 | status |
+|---|---|---|
+| A 建立 | 見下方「建立」 | `created` |
+| T 改觸發 | 在 fstack 該 skill 的 `description` 補進 `invoker_hints` 裡使用者真的說的話，走同一套 PR 流程 | `merged` |
+| M 併入 | 指給使用者 `/improve`，或同 T 改那支 skill | `merged` |
+| R | 不動 skill | `rejected` |
+| 名稱撞到既有 skill | 不動 skill | `duplicate` |
+| S | 不動 | 保持 `pending` |
 
-呼叫 `/skill-creator` 建立 skill，或引導使用者提供以下資訊：
-- skill 名稱（kebab-case）
-- description（含觸發詞）
-- SKILL.md 主體（從 candidate 的 steps 展開）
-- allowed-tools（根據 steps 推斷）
+改 status：只改該條目的 `- **status**:` 那一行，其餘不動。queue 是 append-only。
 
-建立完成後：
-- 更新 `candidate-queue.md` 該項目 `status: created`
-- 輸出：`✅ {skill-name} 已建立 → {skill_path}`
+### 4. 建立（A）
 
-### Step 5: 收尾報告
+canonical 在 fstack，不在安裝版。
+
+1. fstack 開 worktree + branch（`feat/<name>-skill`），skill 放 `skills/<分類>/<name>/SKILL.md`，
+   分類照 `skills/` 現有目錄挑。
+2. 寫 SKILL.md：用 `writing-great-skills` 或 `skill-creator`。description 的觸發詞取自
+   `invoker_hints`（使用者的原話），步驟取自 `steps`，再用第 1 步看過的 transcript 補細節。
+3. 開 PR（`describe-pr`）。**合併前不安裝**：安裝版所有 worktree 共用，裝未合併的碼會弄紅 parity。
+4. 合併後安裝新 skill：
+   ```bash
+   npm exec --yes --package=skills -- skills add https://github.com/fredrick84823/fstack -s <name> -g
+   ```
+   `bin/sync-to-installed.sh` 只處理**已安裝**的 skill（DST 沒有 SKILL.md 會 exit 1），不適用新 skill。
+   之後改既有 skill（T／M）才用它；若它在產 base 時 exit 2，是 fstack#86（guard 命中被當成失敗），
+   照 issue 記錄、手動 `cp`，不要改 guard。
+
+### 5. 收尾
 
 ```
-## Extract Skill 執行摘要
-
-- 處理候選：{N} 個
-- 已建立：{list}
-- Rejected：{list}
-- Skipped（待下次）：{list}
-- Duplicate（建議 /improve）：{list}
+處理 {N} 筆：created {…} · merged {…} · rejected {…} · duplicate {…} · 保留 pending {…}
 ```
 
-## Notes
+## 規則
 
-- human review gate 永遠存在：不允許自動建立 skill，必須人工 Approve
-- 每次 `/extract-skill` 只推薦 `hit_count >= 2` 的高品質候選；低品質候選在報告末尾列出
-- Candidate queue 是 append-only，status 欄位記錄處理結果
+- 不自動建立、不自動改 skill：每筆都要使用者選。
+- 「既有 skill 不夠用」不是這條線：那是 GAP，走 `/improve`。
+- 30 天未叫用的 skill 清單（`memory/stale-skills.md`）只供參考，這支 skill 不刪 skill。
