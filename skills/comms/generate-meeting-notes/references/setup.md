@@ -25,7 +25,8 @@ cd "$SKILL_DIR" && uv run scripts/setup.py --with-audio # 再加上 Audio Source
       "series_name": "Data內會",
       "slack_channel": "C0XXXXXXXXX",
       "attendees": ["Alice", "Bob", "Carol", "PM-Name"],
-      "custom_prompt": "本次會議報告順序固定如下：Alice → Bob → Carol，皆向 PM-Name（PM）報告。"
+      "custom_prompt": "本次會議報告順序固定如下：Alice → Bob → Carol，皆向 PM-Name（PM）報告。",
+      "related_meetings": ["team專案會議"]
     }
   },
   "prompt_path": "~/.config/generate-meeting-notes/prompt.md",
@@ -42,6 +43,7 @@ cd "$SKILL_DIR" && uv run scripts/setup.py --with-audio # 再加上 Audio Source
 | `series_name` | Google Doc 名稱裡的系列名 |
 | `slack_channel` | 三態：欄位不存在／`null` = 還沒設定（記錄照產，DM 提醒補上）；`""` = 刻意不發通知；`"C0…"` = 發那個 channel。改用 `scripts/channel.py --meeting <key> --channel <id>` 寫回（會先備份設定檔） |
 | `slack_dm_user` | 你的 Slack Member ID；會議還沒設 channel 時 DM 提醒你。沒設就只印在 stdout |
+| `related_meetings` | 可選，其他 meetings key 的清單。同一批人分成兩個系列開會時填（例：週四 RD 會議 ↔ 週二 RD 專案會議）：歷史索引會一併收那些系列的近期場次，前次未結案才看得到在另一個系列結案的事。key 找不到時印警告並略過 |
 | `glossary_path` | 本機詞彙表，見 `glossary.md` |
 | `shared_glossary` | 可選，團隊共用詞彙表，見 `glossary.md` |
 

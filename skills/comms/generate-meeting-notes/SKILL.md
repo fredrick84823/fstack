@@ -13,7 +13,7 @@ disable-model-invocation: true
 
 - **source artifacts** —— 一個目錄裡的四個檔：`transcript.md`（本次會議的事實）、
   `extract.md`（議題／決策／行動／風險索引）、`meeting-context.md`（會議類型、與會者、
-  custom prompt、active glossary terms、來源與日期）、`history-index.md`（同系列近三場的
+  custom prompt、active glossary terms、來源與日期）、`history-index.md`（同系列近三場、加上 `related_meetings` 各系列近三場的
   heading 大綱、**未結案項目**與指標，日期嚴格早於本次；**是索引不是語料**，
   除未結案那幾條之外不含內容行）。
   所有 source 流程的產物都是這個，**不是正式稿**。目錄位置：`/tmp/meeting_sources/<meeting_key>_<YYYYMMDD>[_<meeting_instance>]`。
@@ -148,7 +148,10 @@ cd "$SKILL_DIR" && uv run scripts/history_index.py \
   --output-dir /tmp/meeting_sources/<meeting_key>_<YYYYMMDD>[_<meeting_instance>]
 ```
 
-`--date` 一定給**本次**日期 —— 索引只收嚴格早於它的場次。另有 `--sessions N`（預設 3）。
+`--date` 一定給**本次**日期 —— 索引只收嚴格早於它的場次。另有 `--sessions N`（預設 3，
+每個系列各取 N 場）與 `--max-age-weeks N`（預設 4；超過 N 週的場次只留大綱，未結案收成
+一行條數；`0` = 不設上限）。config 有 `related_meetings` 時，那些系列的場次也進索引，
+小標帶系列名（`RD專案會議 · 20260915`）。
 沒有更早的場次時照樣寫出索引檔並以 0 收場 —— 空索引是合法結果。
 
 完成後印出**交棒契約**（含 `RESULT_HISTORY_INDEX`），進流程 C。
@@ -227,7 +230,8 @@ A 與 B 都收在這裡。main agent 讀：
 預設不讀，整包讀進來就退回索引要解決的那個問題。`Doc:` 是給人開的，agent 開不了 URL。
 
 **索引裡的 `未結案` 要逐條走過，不是掃過。** 每一條都問一次「本次有沒有再提到」：
-有提到就寫進對應議題；**完全沒人提的，寫進 `## 前次未結案項目` 並標明本次未提**
+有提到（有進度或已完成）就寫進對應議題的 `#### 狀態`，**不重列進本次 `## 行動項目`**；
+**完全沒人提的，寫進 `## 前次未結案項目` 並標明本次未提**
 （版型見 `references/default-prompt.md` 第 4 節）。沒人提的那一條正是最容易消失的 ——
 它不會出現在本次逐字稿的任何一個字裡，沒有任何東西會提醒你它還懸著。
 **不得替它補進度或改狀態**：本次沒人提就是沒有新事實。

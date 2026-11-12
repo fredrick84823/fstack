@@ -1932,3 +1932,57 @@ def test_flow_b_index_holds_the_outline_not_this_meetings_sources(flow_b):
     assert "議題七：AI 課程與客戶現場支援" in text, "8/31 那場的大綱要在"
     assert "Speaker 1" not in text and "議題一：索引接上流程 B" not in text
 
+
+
+# --------------------------------------------------------------------------- related_meetings / max_age_weeks
+
+_OPEN_NOTE = "# 會議記錄\n\n### 議題一\n\n#### 狀態\n\n* `執行中` 某件待辦\n"
+
+
+def test_build_index_merges_related_series_by_date_with_series_label(tmp_path: Path):
+    """相關系列的場次要進索引、按日期穿插、小標帶系列名。
+
+    這條刪掉 → 週四會議留下的待辦在週二會議結案了，索引看不到，正式稿照樣把它
+    列成「本次未提及」（2026-10-08 RD 會議的實際事故）。
+    """
+    root = tmp_path / "archive"
+    _put(root, "20260910", _OPEN_NOTE)
+    _put(root, "20260915", _OPEN_NOTE, folder="週二_RD_專案會議", name=_note_name("RD專案會議", "20260915"))
+
+    text = hi.build_index(
+        tmp_path / "src", FOLDER, SERIES, "20260917", root=root,
+        related=[("週二_RD_專案會議", "RD專案會議")],
+    ).read_text(encoding="utf-8")
+
+    labels = [line[3:] for line in text.split("\n") if line.startswith("## ")]
+    assert labels == ["20260910", "RD專案會議 · 20260915"]
+
+
+def test_build_index_collapses_open_items_older_than_max_age(tmp_path: Path):
+    """超過年齡上限的場次：大綱留著，未結案收成一行條數。
+
+    這條刪掉 → 兩個月前的待辦一條條進索引，agent 把早已結案的事寫成「本次未提及」。
+    """
+    root = tmp_path / "archive"
+    _put(root, "20260813", _OPEN_NOTE)
+    _put(root, "20260910", _OPEN_NOTE)
+
+    text = hi.build_index(tmp_path / "src", FOLDER, SERIES, "20261008", root=root).read_text(
+        encoding="utf-8"
+    )
+    old, new = text.split("## 20260910")
+    assert "某件待辦" not in old and "議題一" in old, "舊場次只留大綱"
+    assert hi.STALE_ITEMS.format(count=1, weeks=hi.DEFAULT_MAX_AGE_WEEKS) in old
+    assert "某件待辦" in new, "近 4 週內的照列"
+
+    uncapped = hi.build_index(
+        tmp_path / "src", FOLDER, SERIES, "20261008", root=root, max_age_weeks=0
+    ).read_text(encoding="utf-8")
+    assert uncapped.count("某件待辦") == 2, "0 = 不設上限"
+
+
+def test_related_series_skips_unknown_keys(capsys):
+    meetings = {"rd專案會議": {"series_name": "RD專案會議", "folder_name": "週二_RD_專案會議"}}
+    got = hi.related_series(meetings, {"related_meetings": ["rd專案會議", "打錯字"]})
+    assert got == [("週二_RD_專案會議", "RD專案會議")]
+    assert "打錯字" in capsys.readouterr().out
