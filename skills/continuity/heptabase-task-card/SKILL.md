@@ -5,7 +5,7 @@ description: |
   當使用者說「建立任務卡片」「新增 sprint card」「create task card」「加一張卡到 sprint」，
   或要把計畫拆解成子任務時立即觸發。
   支援批次建立多張卡片，並在每張卡片的 `## Depends on` section 標記依賴關係，
-  讓 /start-day skill 可正確解析。
+  讓下游工具可正確解析。
 ---
 
 ## 任務卡片格式
@@ -79,7 +79,7 @@ description: |
 
 ## `## Depends on` 格式規範
 
-此 section 由 `/start-day` skill 的 `fetch_heptabase.py` 自動解析。每行一個依賴，內容為依賴卡片的完整標題。
+此 section 供下游工具自動解析。每行一個依賴，內容為依賴卡片的完整標題。
 
 **正確格式：**
 ```markdown

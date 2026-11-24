@@ -190,7 +190,6 @@ See [docs/skill-evolution-loop.md](docs/skill-evolution-loop.md),
 | [`heptabase-task-card`](skills/continuity/heptabase-task-card/SKILL.md) | 在 Heptabase 建立符合 Sprint whiteboard 標準格式的任務卡片 |
 | [`resume-handoff`](skills/continuity/resume-handoff/SKILL.md) | Resume work from a handoff document with context analysis and validation |
 | [`spawn`](skills/continuity/spawn/SKILL.md) | Hand this session's handoff doc to a fresh Claude in a new cmux surface |
-| [`start-day`](skills/continuity/start-day/SKILL.md) | 每日早晨任務看板：整合 gsheet / GitHub / Heptabase Sprint 三處任務狀態 |
 
 #### Understanding
 

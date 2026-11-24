@@ -11,4 +11,3 @@
 - **[create-handoff](./create-handoff/SKILL.md)**: Create comprehensive handoff documents for transferring work to another agent session
 - **[heptabase-task-card](./heptabase-task-card/SKILL.md)**: 在 Heptabase 建立符合 Sprint whiteboard 標準格式的任務卡片
 - **[resume-handoff](./resume-handoff/SKILL.md)**: Resume work from a handoff document with context analysis and validation
-- **[start-day](./start-day/SKILL.md)**: 每日早晨任務看板：整合 gsheet / GitHub / Heptabase Sprint 三處任務狀態
