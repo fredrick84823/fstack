@@ -1545,7 +1545,7 @@ def test_prof_20260812_keeps_numbered_h2_and_the_trailing_appendix():
     got = hi.outline((CORPUS / "prof-20260812.md").read_text(encoding="utf-8"))
     titles = [_unslash(t) for _, t in got]
 
-    assert titles[0] == "會議記錄：Tagtoo 知識庫架構與教授論文對焦"
+    assert titles[0] == "會議記錄：公司甲 知識庫架構與教授論文對焦"
     assert titles[1:3] == ["1. 核心要點", "2. 討論過程"]
     assert titles[-1] == "附註：與歷史會議的關聯"
     assert len([t for lvl, t in got if lvl == 3]) == 13, "十個議題 ＋ 收尾那三節"

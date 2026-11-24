@@ -138,7 +138,7 @@ def content_blocks(row: dict[str, Any]) -> list[Any]:
 
 # A skill is also in use when the agent works inside its directory without the Skill
 # tool — repo skills under .agents/skills are mostly driven by Read/Bash (audit
-# 2026-10-01: tagtoo-audience-creation ran a whole session and was never attributed).
+# 2026-10-01: a project-local skill ran a whole session and was never attributed).
 SKILL_PATH = re.compile(r"\.(?:agents|claude)/skills/([A-Za-z0-9][\w.-]*)/")
 COMMAND_NAME = re.compile(r"<command-name>/?([^<\s]+)</command-name>")
 

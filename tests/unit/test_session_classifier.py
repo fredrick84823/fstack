@@ -253,15 +253,15 @@ class SessionClassifierTest(unittest.TestCase):
             user("<command-name>/clear</command-name>"),
             user("<command-name>/generate-meeting-notes</command-name>"),
             user("glossary 的 F2 應該是 phase2"),
-            tool("Bash", {"command": "python3 .agents/skills/tagtoo-audience-creation/scripts/run.py"}),
+            tool("Bash", {"command": "python3 .agents/skills/acme-audience-creation/scripts/run.py"}),
             user("受眾名稱還是要符合業務需求"),
         ]
         # /clear 不是 skill；不在任何 skills 目錄就不算。
         self.assertEqual(module.skills_used(rows, home),
-                         ["generate-meeting-notes", "tagtoo-audience-creation"])
+                         ["generate-meeting-notes", "acme-audience-creation"])
         self.assertEqual(module.candidates(rows, home), [
             ("generate-meeting-notes", "glossary 的 F2 應該是 phase2"),
-            ("tagtoo-audience-creation", "受眾名稱還是要符合業務需求"),
+            ("acme-audience-creation", "受眾名稱還是要符合業務需求"),
         ])
 
     def test_the_excerpt_is_centred_on_the_candidate_and_shows_the_agents_side(self) -> None:
@@ -275,7 +275,7 @@ class SessionClassifierTest(unittest.TestCase):
         session = [("assistant", "說明我寫成英文了")] + [("user", "受眾說明要用繁體中文")] + [
             ("user", f"後續閒聊 {i} " + "x" * 500) for i in range(40)
         ]
-        excerpt = module.build_excerpt(["tagtoo-audience-creation"], session, "受眾說明要用繁體中文", limit=2000)
+        excerpt = module.build_excerpt(["acme-audience-creation"], session, "受眾說明要用繁體中文", limit=2000)
         self.assertIn("[assistant] 說明我寫成英文了", excerpt)
         self.assertIn("[user] 受眾說明要用繁體中文", excerpt)
         self.assertNotIn("後續閒聊 39", excerpt)
